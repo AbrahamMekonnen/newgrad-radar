@@ -724,7 +724,10 @@ def run_source_parallel(
         error_msg = f"{type(e).__name__}: {str(e)[:200]}"
         errors[source_name] = error_msg
         results[source_name] = []
-        reporter.add_error(source_name, e, is_critical=True)
+        # A single source failing (often a flaky/blocked external site) is a
+        # warning, not a run-fatal error: the pipeline still writes jobs from
+        # the other sources. Keeping it non-critical avoids a red CI run.
+        reporter.add_error(source_name, e, is_critical=False)
         print(f"  [WARN] {source_name} failed: {error_msg}")
 
         # Track error in metrics
