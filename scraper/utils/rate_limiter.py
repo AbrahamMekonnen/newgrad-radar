@@ -227,6 +227,20 @@ class DomainThrottler:
             if domain in self.domain_limiters:
                 del self.domain_limiters[domain]
 
+    def get_delay(self, url: str = "") -> float:
+        """Return the current delay for a URL's domain.
+
+        Compatibility shim: some source adapters call ``throttler.get_delay()``
+        expecting the per-limiter API. Delegates to the domain's limiter when a
+        URL is given, otherwise returns the default delay.
+        """
+        try:
+            if url:
+                return self._get_limiter(self._get_domain(url)).get_delay()
+        except Exception:
+            pass
+        return self.default_delay
+
     async def acquire(self, url: str) -> None:
         """Wait for rate limit before making request to URL."""
         domain = self._get_domain(url)

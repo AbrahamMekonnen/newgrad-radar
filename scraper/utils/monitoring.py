@@ -121,7 +121,7 @@ class MetricsCollector:
     def __init__(self, storage_path: Optional[str] = None):
         self.storage_path = Path(storage_path or os.environ.get(
             'SCRAPER_METRICS_PATH',
-            '/Users/amekonnen/Personal/newgrad-radar/scraper/data/metrics'
+            str(Path(__file__).resolve().parent.parent / 'data' / 'metrics')
         ))
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
@@ -439,7 +439,7 @@ class CostTracker:
     def __init__(self, storage_path: Optional[str] = None):
         self.storage_path = Path(storage_path or os.environ.get(
             'SCRAPER_COST_PATH',
-            '/Users/amekonnen/Personal/newgrad-radar/scraper/data/costs'
+            str(Path(__file__).resolve().parent.parent / 'data' / 'costs')
         ))
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
@@ -788,7 +788,7 @@ class MonitoringSystem:
     def __init__(self, storage_path: Optional[str] = None):
         base_path = storage_path or os.environ.get(
             'SCRAPER_MONITORING_PATH',
-            '/Users/amekonnen/Personal/newgrad-radar/scraper/data/monitoring'
+            str(Path(__file__).resolve().parent.parent / 'data' / 'monitoring')
         )
 
         self.metrics = MetricsCollector(f"{base_path}/metrics")
@@ -827,7 +827,7 @@ class MonitoringSystem:
 
     def save_dashboard(self, path: Optional[str] = None):
         """Save dashboard to JSON file."""
-        path = path or '/Users/amekonnen/Personal/newgrad-radar/scraper/data/monitoring/dashboard.json'
+        path = path or str(Path(__file__).resolve().parent.parent / 'data' / 'monitoring' / 'dashboard.json')
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
         with open(path, 'w') as f:

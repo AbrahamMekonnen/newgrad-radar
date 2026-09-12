@@ -57,3 +57,8 @@ auto-apply/profile.json
 # Cache directories (tiered cache L2 storage)
 .cache/
 auto-apply/.cache/
+
+# Scraper generated runtime data (metrics, costs, checkpoints)
+scraper/data/monitoring/
+scraper/.scraper_state/
+.scraper_state/

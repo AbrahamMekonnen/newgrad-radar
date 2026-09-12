@@ -108,7 +108,7 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
                     "tier": job["tier"],
                     "role_types": job.get("role_types") or [],
                     "source": job["source"],
-                    "posted_at": job.get("posted"),
+                    "posted": job.get("posted"),
                     "is_active": True,
                     # New multi-dimensional tag arrays
                     "discovery_sources": job.get("discovery_sources") or [],
@@ -117,8 +117,6 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
                     "badges": job.get("badges") or [],
                     # Experience level classification
                     "experience_level": job.get("experience_level"),
-                    "experience_confidence": job.get("experience_confidence", 0.0),
-                    "experience_matched_patterns": job.get("experience_matched_patterns") or [],
                 })
             client.table("jobs").insert(insert_data).execute()
             new_count = len(new_jobs)
@@ -158,8 +156,6 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
                 "apply_url": job.get("apply_url"),
                 # Update experience level if we have a new classification
                 "experience_level": job.get("experience_level"),
-                "experience_confidence": job.get("experience_confidence", 0.0),
-                "experience_matched_patterns": job.get("experience_matched_patterns") or [],
             }
 
             client.table("jobs").update(update_data).eq("id", job["id"]).execute()
@@ -271,7 +267,7 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
     try:
         # Step 1: Get all active jobs with their posted dates
         active_result = client.table("jobs").select(
-            "id, title, company_name, posted_at"
+            "id, title, company_name, posted"
         ).eq("is_active", True).execute()
 
         active_jobs = active_result.data
@@ -280,7 +276,7 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
         # Step 2: Deactivate jobs older than MAX_AGE_DAYS
         old_job_ids = []
         for job in active_jobs:
-            posted_at = job.get("posted_at")
+            posted_at = job.get("posted")
             if posted_at:
                 try:
                     if isinstance(posted_at, str):
@@ -321,7 +317,7 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
 
         # Sort remaining jobs by posted date (oldest first), excluding priority jobs
         def get_posted_datetime(job):
-            posted_at = job.get("posted_at")
+            posted_at = job.get("posted")
             if not posted_at:
                 # Jobs without a date are considered old
                 return datetime.min.replace(tzinfo=timezone.utc)

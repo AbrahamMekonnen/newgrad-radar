@@ -26,7 +26,7 @@ def cleanup_old_jobs(days: int = 30, dry_run: bool = False) -> dict:
     }
 
     # Count jobs to delete
-    count_result = client.table("jobs").select("id", count="exact").lt("posted_at", cutoff).execute()
+    count_result = client.table("jobs").select("id", count="exact").lt("posted", cutoff).execute()
     job_count = count_result.count or 0
 
     if dry_run:
@@ -39,7 +39,7 @@ def cleanup_old_jobs(days: int = 30, dry_run: bool = False) -> dict:
         return results
 
     # Get IDs of jobs to delete
-    old_jobs = client.table("jobs").select("id").lt("posted_at", cutoff).execute()
+    old_jobs = client.table("jobs").select("id").lt("posted", cutoff).execute()
     old_job_ids = [j["id"] for j in old_jobs.data]
 
     # Delete in batches to avoid timeouts

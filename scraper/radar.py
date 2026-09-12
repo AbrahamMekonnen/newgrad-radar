@@ -758,8 +758,8 @@ def fetch_api_sources() -> list[dict]:
         "arbeitnow": lambda: fetch_arbeitnow(remote_only=False, tech_only=True),
         "remoteok": lambda: fetch_remoteok(filter_entry_level=True),
         "adzuna": lambda: fetch_adzuna_simple("software engineer entry level"),
-        "usajobs": lambda: fetch_usajobs(keyword="software developer", grade_low=5, grade_high=9),
-        "hn_hiring": lambda: fetch_hn_hiring(include_remote=True),
+        "usajobs": lambda: fetch_usajobs(keywords="software developer"),
+        "hn_hiring": lambda: fetch_hn_hiring(),
     }
 
     # Run in parallel with ThreadPoolExecutor
@@ -882,7 +882,7 @@ def fetch_ats_sources() -> list[dict]:
     # Workday (Fortune 500 companies)
     print("  Fetching Workday boards...")
     try:
-        workday_jobs = fetch_workday_all(filter_entry_level=True, max_workers=5)
+        workday_jobs = fetch_workday_all()
         print(f"    Workday: {len(workday_jobs)} jobs")
         all_jobs.extend(workday_jobs)
     except Exception as e:
@@ -971,7 +971,7 @@ def fetch_career_fair_sources() -> list[dict]:
     """
     print("\n--- Fetching Career Fair Sponsors ---")
 
-    upcoming = get_upcoming_career_fairs(days_ahead=30)
+    upcoming = get_upcoming_career_fairs(days=30)
     if not upcoming:
         print("  No upcoming career fairs in next 30 days")
         return []
@@ -1334,6 +1334,10 @@ def main():
     # 2. Normalize and filter to target companies
     normalized = []
     for job in all_jobs:
+        # Skip malformed jobs missing required fields (some sources return
+        # partial records without a title/url).
+        if not job.get("title") or not job.get("url"):
+            continue
         company_slug = normalize_company(job.get("company", ""))
         if company_slug and company_slug in COMPANIES:
             normalized.append(normalize_job(job, company_slug))
