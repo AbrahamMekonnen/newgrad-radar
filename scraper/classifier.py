@@ -193,7 +193,7 @@ For each job, determine:
 2. role_types: list of applicable types from [swe, ml, backend, frontend, fullstack, infra, data, security, mobile]
 
 Return a JSON array with the same order as input. Each element should have:
-{"is_new_grad": true/false, "role_types": ["swe", ...]}
+{{"is_new_grad": true/false, "role_types": ["swe", ...]}}
 
 JOBS:
 {jobs}
@@ -219,7 +219,7 @@ def configure_genai() -> bool:
 def call_gemini(prompt: str) -> Optional[str]:
     """Call Gemini API and return response text."""
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
