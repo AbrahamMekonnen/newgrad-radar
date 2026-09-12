@@ -50,6 +50,9 @@ except ImportError:
     except ImportError:
         pass
 
+# Alias used throughout this module (kept in sync with INFRA_AVAILABLE)
+HAS_INFRASTRUCTURE = INFRA_AVAILABLE
+
 
 @dataclass
 class WorkdayConfig:

@@ -439,13 +439,25 @@ class ResponseCache:
             status_code = response.get('status_code', 200)
             headers = response.get('headers', {})
 
-        content_hash = hashlib.sha256(content).hexdigest()
+        # Content may be raw bytes (requests.Response) or already-parsed
+        # structured data (e.g. a JSON dict from a source adapter). Hash a
+        # bytes view of it, and only byte-compress raw bytes/str payloads.
+        if isinstance(content, (bytes, bytearray)):
+            content_bytes = bytes(content)
+        elif isinstance(content, str):
+            content_bytes = content.encode('utf-8')
+        else:
+            content_bytes = repr(content).encode('utf-8')
+
+        content_hash = hashlib.sha256(content_bytes).hexdigest()
         compressed = False
         compression_type = None
 
-        # Compress large responses
-        if self.compress and len(content) > self.compression_threshold:
-            content, compression_type = self._compress(content)
+        # Compress large responses (only for raw byte/str payloads)
+        if (self.compress
+                and isinstance(content, (bytes, bytearray, str))
+                and len(content_bytes) > self.compression_threshold):
+            content, compression_type = self._compress(content_bytes)
             compressed = True
 
         cached = CachedResponse(

@@ -831,7 +831,9 @@ def fetch_ats_sources() -> list[dict]:
 
     def fetch_ats_board(ats_type: str, slug: str, token: str):
         if ats_type == "greenhouse":
-            return greenhouse.fetch_greenhouse(token, slug)
+            # Skip per-job salary detail fetches for the bulk run (far faster;
+            # the UI derives salary display client-side).
+            return greenhouse.fetch_greenhouse(token, slug, fetch_salary=False)
         elif ats_type == "lever":
             jobs = lever.fetch_lever(token)
             for job in jobs:

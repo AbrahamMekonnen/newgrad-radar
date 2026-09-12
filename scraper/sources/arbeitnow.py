@@ -12,6 +12,7 @@ Uses production infrastructure from scraper_infra.py:
 Backward compatible: Falls back gracefully when infrastructure unavailable.
 """
 
+import json
 import requests
 import time
 from datetime import datetime
@@ -150,7 +151,6 @@ def _fetch_arbeitnow_page(url: str) -> Optional[dict]:
         if not response_text:
             return None
 
-        import json
         return json.loads(response_text)
 
     except requests.RequestException as e:

@@ -236,9 +236,9 @@ export default function HomePage() {
     return jobIds;
   }, [supabase]);
 
-  const fetchJobs = useCallback(async (reset = false, recruiterJobIds?: Set<string>) => {
+  const fetchJobs = useCallback(async (reset = false, recruiterJobIds?: Set<string>, pageOverride?: number) => {
     setLoading(true);
-    const currentPage = reset ? 0 : page;
+    const currentPage = reset ? 0 : (pageOverride ?? page);
 
     let query = supabase
       .from('jobs')
@@ -394,7 +394,10 @@ export default function HomePage() {
 
     setHasMore((data?.length || 0) === PAGE_SIZE);
     setLoading(false);
-  }, [page, search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevel, diversityTags, workModes, badges, selectedLocations, sortBy, supabase]);
+    // `page` is intentionally omitted from deps: Load More passes the target
+    // page via pageOverride, so fetchJobs must NOT be recreated on page change
+    // (that would refire the reset effect below and wipe appended results).
+  }, [search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevel, diversityTags, workModes, badges, selectedLocations, sortBy, supabase]);
 
   const fetchSavedJobs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -749,8 +752,11 @@ export default function HomePage() {
   };
 
   const handleLoadMore = () => {
-    setPage((p) => p + 1);
-    fetchJobs();
+    const nextPage = page + 1;
+    setPage(nextPage);
+    // Pass the next page explicitly — fetchJobs' closure still holds the old
+    // `page` value at this point (state updates are async).
+    fetchJobs(false, undefined, nextPage);
   };
 
   const handleAutoApply = async (jobId: string) => {

@@ -56,6 +56,27 @@ except ImportError:
     except ImportError:
         pass
 
+# Alias used throughout this module (kept in sync with INFRA_AVAILABLE)
+HAS_INFRASTRUCTURE = INFRA_AVAILABLE
+
+
+def wait_for_rate_limit(domain: str = "") -> None:
+    """Best-effort per-request pacing fallback (stealth session handles the
+    real throttling when infrastructure is available)."""
+    import time
+    time.sleep(0.4)
+
+
+def get_stealth_headers(url: str = "") -> dict:
+    """Return browser-like request headers (fallback used by _get_headers)."""
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+
 logger = logging.getLogger(__name__)
 
 # Initialize infrastructure components

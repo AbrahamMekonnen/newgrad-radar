@@ -11,6 +11,7 @@ Uses production infrastructure from scraper_infra.py:
 Backward compatible: Falls back gracefully when infrastructure unavailable.
 """
 
+import json
 import time
 import logging
 from datetime import datetime
@@ -183,7 +184,6 @@ def _make_request(url: str) -> Optional[list]:
         if not response_text:
             return None
 
-        import json
         data = json.loads(response_text)
         logger.debug("RemoteOK API request successful")
         return data
