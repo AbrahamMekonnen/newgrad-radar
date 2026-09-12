@@ -1,0 +1,17 @@
+{
+  "summary": {
+    "total_sources": 0,
+    "healthy": 0,
+    "warning": 0,
+    "critical": 0,
+    "overall_status": "healthy",
+    "total_jobs_scraped": 0,
+    "total_runs": 0,
+    "total_failures": 0,
+    "overall_success_rate": 0.0,
+    "last_updated": null
+  },
+  "sources": [],
+  "alerts": [],
+  "generated_at": null
+}

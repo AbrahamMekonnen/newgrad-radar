@@ -1,0 +1,138 @@
+{
+  "conference": {
+    "description": "Diversity and tech conferences (GHC, NSBE, SHPE, AfroTech, etc.)",
+    "days_before": 14,
+    "days_after": 7,
+    "actions": ["scrape_sponsors", "priority_scrape"],
+    "priority_boost": 2,
+    "notes": "Conference sponsors are actively recruiting. Scrape 2 weeks before for early applications."
+  },
+  "hackathon": {
+    "description": "Major university hackathons (HackMIT, TreeHacks, PennApps, etc.)",
+    "days_before": 14,
+    "days_after": 3,
+    "actions": ["scrape_sponsors"],
+    "priority_boost": 1,
+    "notes": "Hackathon sponsors target new grads. Shorter post-event window as hiring is immediate."
+  },
+  "demo_day": {
+    "description": "YC Demo Day and similar accelerator events",
+    "days_before": 7,
+    "days_after": 14,
+    "actions": ["refresh_yc_jobs"],
+    "priority_boost": 3,
+    "notes": "Post Demo Day is prime hiring time for YC companies with fresh funding."
+  },
+  "funding": {
+    "description": "Funding round announcements from news sources",
+    "days_after": 7,
+    "min_amount_millions": 5,
+    "priority_rounds": ["Series A", "Series B", "Series C", "Growth"],
+    "actions": ["priority_company_scrape"],
+    "priority_boost": 4,
+    "notes": "Recently funded companies expand aggressively. Growth stage (A-C) prioritized."
+  },
+  "event_sources": {
+    "conferences": [
+      {
+        "name": "Grace Hopper Celebration",
+        "typical_month": 10,
+        "url": "https://ghc.anitab.org",
+        "importance": "high"
+      },
+      {
+        "name": "NSBE National Convention",
+        "typical_month": 3,
+        "url": "https://convention.nsbe.org",
+        "importance": "high"
+      },
+      {
+        "name": "SHPE National Convention",
+        "typical_month": 11,
+        "url": "https://shpe.org/national-convention",
+        "importance": "high"
+      },
+      {
+        "name": "AfroTech Conference",
+        "typical_month": 11,
+        "url": "https://afrotech.com",
+        "importance": "high"
+      },
+      {
+        "name": "PyCon US",
+        "typical_month": 5,
+        "url": "https://pycon.org",
+        "importance": "medium"
+      },
+      {
+        "name": "KubeCon NA",
+        "typical_month": 11,
+        "url": "https://events.linuxfoundation.org",
+        "importance": "medium"
+      }
+    ],
+    "hackathons": [
+      {
+        "name": "HackMIT",
+        "typical_month": 9,
+        "url": "https://hackmit.org",
+        "importance": "high"
+      },
+      {
+        "name": "TreeHacks",
+        "typical_month": 2,
+        "url": "https://www.treehacks.com",
+        "importance": "high"
+      },
+      {
+        "name": "PennApps",
+        "typical_month": 9,
+        "url": "https://pennapps.com",
+        "importance": "high"
+      },
+      {
+        "name": "CalHacks",
+        "typical_month": 10,
+        "url": "https://www.calhacks.io",
+        "importance": "high"
+      }
+    ],
+    "demo_days": [
+      {
+        "name": "YC Winter Demo Day",
+        "typical_month": 4,
+        "url": "https://www.ycombinator.com"
+      },
+      {
+        "name": "YC Summer Demo Day",
+        "typical_month": 9,
+        "url": "https://www.ycombinator.com"
+      }
+    ]
+  },
+  "rss_feeds": {
+    "funding": [
+      {
+        "name": "TechCrunch Funding",
+        "url": "https://techcrunch.com/category/funding/feed/",
+        "check_frequency_hours": 6
+      },
+      {
+        "name": "VentureBeat Funding",
+        "url": "https://venturebeat.com/category/business/funding/feed/",
+        "check_frequency_hours": 12
+      },
+      {
+        "name": "Crunchbase News",
+        "url": "https://news.crunchbase.com/feed/",
+        "check_frequency_hours": 12
+      }
+    ]
+  },
+  "scheduler_integration": {
+    "check_interval_hours": 24,
+    "max_actions_per_run": 10,
+    "priority_scrape_boost_days": 7,
+    "notes": "Events add companies to priority queue for next N days of scraping."
+  }
+}

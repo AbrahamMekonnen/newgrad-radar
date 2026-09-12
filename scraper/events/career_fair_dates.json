@@ -1,0 +1,441 @@
+{
+  "university_career_fairs": [
+    {
+      "university": "MIT",
+      "name": "MIT Fall Career Fair",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-18",
+      "url": "https://career.mit.edu/fairs",
+      "registration_url": "https://studentemployment.mit.edu/",
+      "format": "in_person",
+      "focus": ["tech", "engineering", "finance"],
+      "expected_companies": 400,
+      "notes": "One of the largest university career fairs in the US"
+    },
+    {
+      "university": "MIT",
+      "name": "MIT Spring Career Fair",
+      "date_pattern": "February",
+      "typical_week": 2,
+      "estimated_date": "2027-02-12",
+      "url": "https://career.mit.edu/fairs",
+      "format": "in_person",
+      "focus": ["tech", "engineering", "finance"],
+      "expected_companies": 350
+    },
+    {
+      "university": "Stanford",
+      "name": "Stanford Fall Career Fair",
+      "date_pattern": "October",
+      "typical_week": 2,
+      "estimated_date": "2026-10-09",
+      "url": "https://beam.stanford.edu/career-fairs",
+      "format": "in_person",
+      "focus": ["tech", "startups", "engineering"],
+      "expected_companies": 300
+    },
+    {
+      "university": "Stanford",
+      "name": "Stanford Winter Career Fair",
+      "date_pattern": "January",
+      "typical_week": 3,
+      "estimated_date": "2027-01-22",
+      "url": "https://beam.stanford.edu/career-fairs",
+      "format": "in_person",
+      "focus": ["tech", "startups", "engineering"],
+      "expected_companies": 250
+    },
+    {
+      "university": "UC Berkeley",
+      "name": "Berkeley Engineering & Tech Career Fair",
+      "date_pattern": "September",
+      "typical_week": 2,
+      "estimated_date": "2026-09-11",
+      "url": "https://career.berkeley.edu/fairs",
+      "format": "in_person",
+      "focus": ["tech", "engineering"],
+      "expected_companies": 250
+    },
+    {
+      "university": "UC Berkeley",
+      "name": "Berkeley Spring Career Fair",
+      "date_pattern": "February",
+      "typical_week": 1,
+      "estimated_date": "2027-02-05",
+      "url": "https://career.berkeley.edu/fairs",
+      "format": "in_person",
+      "focus": ["tech", "engineering"],
+      "expected_companies": 200
+    },
+    {
+      "university": "Carnegie Mellon",
+      "name": "CMU Technical Opportunities Conference (TOC)",
+      "date_pattern": "September",
+      "typical_week": 2,
+      "estimated_date": "2026-09-10",
+      "url": "https://www.cmu.edu/career/",
+      "format": "in_person",
+      "focus": ["tech", "cs", "engineering", "robotics"],
+      "expected_companies": 300,
+      "notes": "CMU's flagship tech career fair"
+    },
+    {
+      "university": "Carnegie Mellon",
+      "name": "CMU Spring TOC",
+      "date_pattern": "February",
+      "typical_week": 2,
+      "estimated_date": "2027-02-11",
+      "url": "https://www.cmu.edu/career/",
+      "format": "in_person",
+      "focus": ["tech", "cs", "engineering"],
+      "expected_companies": 200
+    },
+    {
+      "university": "Georgia Tech",
+      "name": "Georgia Tech All-Majors Career Fair",
+      "date_pattern": "September",
+      "typical_week": 2,
+      "estimated_date": "2026-09-15",
+      "url": "https://career.gatech.edu/career-fairs",
+      "format": "in_person",
+      "focus": ["tech", "engineering", "all_majors"],
+      "expected_companies": 400
+    },
+    {
+      "university": "Georgia Tech",
+      "name": "Georgia Tech Spring Career Fair",
+      "date_pattern": "January",
+      "typical_week": 4,
+      "estimated_date": "2027-01-28",
+      "url": "https://career.gatech.edu/career-fairs",
+      "format": "in_person",
+      "focus": ["tech", "engineering"],
+      "expected_companies": 350
+    },
+    {
+      "university": "University of Michigan",
+      "name": "Michigan Engineering Career Fair",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-22",
+      "url": "https://career.engin.umich.edu/",
+      "format": "in_person",
+      "focus": ["engineering", "tech"],
+      "expected_companies": 300
+    },
+    {
+      "university": "University of Illinois Urbana-Champaign",
+      "name": "UIUC Engineering Career Fair",
+      "date_pattern": "September",
+      "typical_week": 2,
+      "estimated_date": "2026-09-08",
+      "url": "https://ecs.engineering.illinois.edu/career-fairs/",
+      "format": "in_person",
+      "focus": ["engineering", "cs", "tech"],
+      "expected_companies": 350
+    },
+    {
+      "university": "University of Texas at Austin",
+      "name": "UT Austin Engineering Expo",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-17",
+      "url": "https://www.engr.utexas.edu/students/career",
+      "format": "in_person",
+      "focus": ["engineering", "tech"],
+      "expected_companies": 250
+    },
+    {
+      "university": "Cornell",
+      "name": "Cornell Engineering Career Fair",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-16",
+      "url": "https://www.engineering.cornell.edu/students/career-services",
+      "format": "in_person",
+      "focus": ["engineering", "tech"],
+      "expected_companies": 200
+    },
+    {
+      "university": "Purdue",
+      "name": "Purdue Industrial Roundtable",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-22",
+      "url": "https://www.purdueindustrialroundtable.org/",
+      "format": "in_person",
+      "focus": ["engineering", "manufacturing", "tech"],
+      "expected_companies": 450,
+      "notes": "One of the largest student-run career fairs in the nation"
+    },
+    {
+      "university": "University of Washington",
+      "name": "UW Engineering Career Fair",
+      "date_pattern": "October",
+      "typical_week": 2,
+      "estimated_date": "2026-10-13",
+      "url": "https://careers.uw.edu/",
+      "format": "in_person",
+      "focus": ["engineering", "tech", "cs"],
+      "expected_companies": 200
+    },
+    {
+      "university": "UCLA",
+      "name": "UCLA Engineering and Tech Fair",
+      "date_pattern": "October",
+      "typical_week": 1,
+      "estimated_date": "2026-10-07",
+      "url": "https://career.ucla.edu/",
+      "format": "in_person",
+      "focus": ["engineering", "tech"],
+      "expected_companies": 180
+    },
+    {
+      "university": "Caltech",
+      "name": "Caltech Career Fair",
+      "date_pattern": "October",
+      "typical_week": 3,
+      "estimated_date": "2026-10-21",
+      "url": "https://career.caltech.edu/",
+      "format": "in_person",
+      "focus": ["tech", "research", "engineering"],
+      "expected_companies": 100,
+      "notes": "Smaller but highly targeted"
+    },
+    {
+      "university": "Princeton",
+      "name": "Princeton Engineering Career Fair",
+      "date_pattern": "September",
+      "typical_week": 4,
+      "estimated_date": "2026-09-25",
+      "url": "https://careerdevelopment.princeton.edu/",
+      "format": "in_person",
+      "focus": ["engineering", "tech", "finance"],
+      "expected_companies": 150
+    },
+    {
+      "university": "Harvey Mudd",
+      "name": "Harvey Mudd Career Fair",
+      "date_pattern": "September",
+      "typical_week": 3,
+      "estimated_date": "2026-09-18",
+      "url": "https://www.hmc.edu/career-services/",
+      "format": "in_person",
+      "focus": ["tech", "engineering", "startups"],
+      "expected_companies": 80,
+      "notes": "Small school, high-quality candidates"
+    }
+  ],
+  "virtual_platforms": [
+    {
+      "platform": "Handshake",
+      "name": "Handshake Virtual Career Fairs",
+      "url": "https://joinhandshake.com/",
+      "api_url": "https://app.joinhandshake.com/events",
+      "description": "Major virtual career fair platform used by most universities",
+      "event_types": ["virtual_career_fair", "info_session", "interview_day"],
+      "universities_count": 1400
+    },
+    {
+      "platform": "Symplicity",
+      "name": "Symplicity Virtual Events",
+      "url": "https://www.symplicity.com/",
+      "description": "Enterprise career services platform with virtual fair capabilities"
+    },
+    {
+      "platform": "Brazen",
+      "name": "Brazen Virtual Career Fairs",
+      "url": "https://www.brazen.com/",
+      "description": "Virtual career fair and hiring event platform"
+    },
+    {
+      "platform": "vFairs",
+      "name": "vFairs Virtual Career Events",
+      "url": "https://www.vfairs.com/",
+      "description": "Virtual events and career fairs platform"
+    },
+    {
+      "platform": "RippleMatch",
+      "name": "RippleMatch Virtual Recruiting",
+      "url": "https://ripplematch.com/",
+      "description": "AI-powered campus recruiting platform with virtual events"
+    }
+  ],
+  "major_tech_events": [
+    {
+      "name": "Grace Hopper Celebration Career Fair",
+      "date_pattern": "September/October",
+      "estimated_date": "2026-09-29",
+      "duration_days": 3,
+      "url": "https://ghc.anitab.org/",
+      "format": "hybrid",
+      "focus": ["women_in_tech", "diversity"],
+      "expected_companies": 500,
+      "notes": "Largest gathering of women technologists"
+    },
+    {
+      "name": "AfroTech Career Fair",
+      "date_pattern": "November",
+      "estimated_date": "2026-11-11",
+      "duration_days": 3,
+      "url": "https://afrotech.com/",
+      "format": "hybrid",
+      "focus": ["diversity", "tech"],
+      "expected_companies": 200
+    },
+    {
+      "name": "NSBE Annual Convention Career Fair",
+      "date_pattern": "March",
+      "estimated_date": "2027-03-18",
+      "duration_days": 5,
+      "url": "https://convention.nsbe.org/",
+      "format": "in_person",
+      "focus": ["diversity", "engineering"],
+      "expected_companies": 300
+    },
+    {
+      "name": "SHPE National Convention Career Fair",
+      "date_pattern": "November",
+      "estimated_date": "2026-11-04",
+      "duration_days": 4,
+      "url": "https://shpe.org/",
+      "format": "in_person",
+      "focus": ["diversity", "engineering", "hispanic"],
+      "expected_companies": 300
+    },
+    {
+      "name": "Tapia Celebration of Diversity in Computing",
+      "date_pattern": "September",
+      "estimated_date": "2026-09-16",
+      "duration_days": 3,
+      "url": "https://tapiaconference.cmd-it.org/",
+      "format": "hybrid",
+      "focus": ["diversity", "computing"],
+      "expected_companies": 100
+    },
+    {
+      "name": "Out in Tech U Career Fair",
+      "date_pattern": "February",
+      "estimated_date": "2027-02-20",
+      "url": "https://outintech.com/",
+      "format": "virtual",
+      "focus": ["lgbtq", "tech"],
+      "expected_companies": 50
+    }
+  ],
+  "common_sponsors": [
+    {
+      "company": "Google",
+      "careers_url": "https://careers.google.com",
+      "typical_positions": ["software_engineer", "sre", "product_manager"],
+      "new_grad_programs": ["STEP", "New Grad SWE"],
+      "attendance": ["MIT", "Stanford", "Berkeley", "CMU", "GHC", "AfroTech"]
+    },
+    {
+      "company": "Microsoft",
+      "careers_url": "https://careers.microsoft.com",
+      "typical_positions": ["software_engineer", "pm", "data_scientist"],
+      "new_grad_programs": ["New Grad SWE", "Explore"],
+      "attendance": ["MIT", "Stanford", "Berkeley", "CMU", "GHC", "NSBE"]
+    },
+    {
+      "company": "Amazon",
+      "careers_url": "https://amazon.jobs",
+      "typical_positions": ["sde", "tpm", "solutions_architect"],
+      "new_grad_programs": ["New Grad SDE"],
+      "attendance": ["most_major_fairs"]
+    },
+    {
+      "company": "Meta",
+      "careers_url": "https://metacareers.com",
+      "typical_positions": ["software_engineer", "ml_engineer", "research_scientist"],
+      "new_grad_programs": ["New Grad SWE"],
+      "attendance": ["MIT", "Stanford", "Berkeley", "CMU", "GHC"]
+    },
+    {
+      "company": "Apple",
+      "careers_url": "https://jobs.apple.com",
+      "typical_positions": ["software_engineer", "hardware_engineer", "ml_engineer"],
+      "new_grad_programs": ["New Grad SWE"],
+      "attendance": ["Stanford", "Berkeley", "CMU", "MIT"]
+    },
+    {
+      "company": "Netflix",
+      "careers_url": "https://jobs.netflix.com",
+      "typical_positions": ["software_engineer", "ml_engineer"],
+      "new_grad_programs": ["New Grad Engineering"],
+      "attendance": ["Stanford", "Berkeley", "GHC"]
+    },
+    {
+      "company": "Stripe",
+      "careers_url": "https://stripe.com/jobs",
+      "typical_positions": ["software_engineer", "infrastructure_engineer"],
+      "new_grad_programs": ["New Grad"],
+      "attendance": ["MIT", "Stanford", "Berkeley", "CMU"]
+    },
+    {
+      "company": "Jane Street",
+      "careers_url": "https://janestreet.com/join-jane-street/",
+      "typical_positions": ["quantitative_trader", "software_developer"],
+      "new_grad_programs": ["New Grad SWE"],
+      "attendance": ["MIT", "CMU", "Berkeley", "Princeton"]
+    },
+    {
+      "company": "Citadel",
+      "careers_url": "https://citadel.com/careers/",
+      "typical_positions": ["quantitative_researcher", "software_engineer"],
+      "new_grad_programs": ["New Grad"],
+      "attendance": ["MIT", "CMU", "Berkeley", "Princeton"]
+    },
+    {
+      "company": "Two Sigma",
+      "careers_url": "https://twosigma.com/careers/",
+      "typical_positions": ["quantitative_researcher", "software_engineer"],
+      "new_grad_programs": ["New Grad"],
+      "attendance": ["MIT", "CMU", "Berkeley", "Princeton"]
+    },
+    {
+      "company": "Databricks",
+      "careers_url": "https://databricks.com/company/careers",
+      "typical_positions": ["software_engineer", "solutions_architect"],
+      "new_grad_programs": ["New Grad SWE"],
+      "attendance": ["Stanford", "Berkeley", "CMU", "MIT"]
+    },
+    {
+      "company": "Snowflake",
+      "careers_url": "https://careers.snowflake.com",
+      "typical_positions": ["software_engineer", "cloud_engineer"],
+      "new_grad_programs": ["New Grad SWE"],
+      "attendance": ["Stanford", "Berkeley", "UW"]
+    },
+    {
+      "company": "Palantir",
+      "careers_url": "https://palantir.com/careers/",
+      "typical_positions": ["software_engineer", "forward_deployed_engineer"],
+      "new_grad_programs": ["New Grad Path"],
+      "attendance": ["MIT", "Stanford", "CMU"]
+    },
+    {
+      "company": "NVIDIA",
+      "careers_url": "https://nvidia.wd5.myworkdayjobs.com",
+      "typical_positions": ["software_engineer", "gpu_architect", "ml_engineer"],
+      "new_grad_programs": ["New College Grad"],
+      "attendance": ["Stanford", "Berkeley", "CMU", "MIT", "GT"]
+    },
+    {
+      "company": "OpenAI",
+      "careers_url": "https://openai.com/careers/",
+      "typical_positions": ["research_engineer", "software_engineer"],
+      "new_grad_programs": ["Research Residency"],
+      "attendance": ["Stanford", "MIT", "Berkeley", "CMU"]
+    },
+    {
+      "company": "Anthropic",
+      "careers_url": "https://anthropic.com/careers",
+      "typical_positions": ["research_engineer", "software_engineer"],
+      "new_grad_programs": ["New Grad"],
+      "attendance": ["Stanford", "MIT", "Berkeley"]
+    }
+  ]
+}

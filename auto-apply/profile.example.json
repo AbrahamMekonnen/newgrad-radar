@@ -1,0 +1,218 @@
+{
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "email": "jane.doe@example.com",
+  "phone": "+1-555-123-4567",
+  "location": "San Francisco, CA",
+  "resumePath": "./resume.pdf",
+  "coverLetterPath": "./cover-letter.pdf",
+
+  "linkedin": "https://linkedin.com/in/janedoe",
+  "github": "https://github.com/janedoe",
+  "website": "https://janedoe.dev",
+
+  "currentCompany": "University of California",
+  "yearsExperience": "0-1",
+  "startDate": "Immediately",
+  "salaryExpectation": "Negotiable",
+
+  "workAuth": "Yes",
+  "workAuthRequired": false,
+  "referralSource": "LinkedIn",
+
+  "education": {
+    "school": "University of California, Berkeley",
+    "degree": "Bachelor's",
+    "major": "Computer Science",
+    "graduationYear": "2024"
+  },
+
+  "address": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94102"
+  },
+
+  "eeo": {
+    "enabled": true,
+    "defaultBehavior": "decline",
+    "answers": {
+      "gender": "Decline to self-identify",
+      "race": "Decline to self-identify",
+      "hispanic": "Decline to self-identify",
+      "veteran": "I am not a protected veteran",
+      "disability": "I do not wish to answer",
+      "lgbtq": "Prefer not to answer"
+    }
+  },
+
+  "customAnswers": {
+    "Are you 18 years of age or older?": "Yes",
+    "Have you ever been employed by this company?": "No",
+    "Why are you interested in this role?": "I am passionate about building great software and believe my skills would be a great fit for this team.",
+    "What is your expected graduation date?": "May 2024"
+  },
+
+  "skills": {
+    "languages": [
+      {
+        "name": "Python",
+        "proficiency": 4,
+        "years": 3,
+        "professionalYears": 0.5,
+        "lastUsed": "2024-09",
+        "context": "Backend development, ML projects, automation scripts",
+        "projects": ["Built ML pipeline for thesis", "Internship API development"]
+      },
+      {
+        "name": "JavaScript",
+        "proficiency": 4,
+        "years": 2,
+        "professionalYears": 0.25,
+        "lastUsed": "2024-09",
+        "context": "Full-stack web development"
+      },
+      {
+        "name": "TypeScript",
+        "proficiency": 3,
+        "years": 1,
+        "professionalYears": 0,
+        "lastUsed": "2024-09",
+        "context": "Next.js applications, type-safe React"
+      },
+      {
+        "name": "Java",
+        "proficiency": 3,
+        "years": 2,
+        "professionalYears": 0,
+        "lastUsed": "2024-06",
+        "context": "Data structures coursework, Android development"
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "React",
+        "proficiency": 4,
+        "years": 2,
+        "lastUsed": "2024-09",
+        "context": "Frontend development for web applications"
+      },
+      {
+        "name": "Next.js",
+        "proficiency": 3,
+        "years": 1,
+        "lastUsed": "2024-09",
+        "context": "Full-stack web applications with SSR"
+      },
+      {
+        "name": "Node.js",
+        "proficiency": 3,
+        "years": 2,
+        "lastUsed": "2024-09",
+        "context": "Backend APIs and server-side development"
+      },
+      {
+        "name": "Django",
+        "proficiency": 2,
+        "years": 0.5,
+        "lastUsed": "2024-03",
+        "context": "REST API coursework project"
+      }
+    ],
+    "databases": [
+      {
+        "name": "PostgreSQL",
+        "proficiency": 3,
+        "years": 2,
+        "lastUsed": "2024-09",
+        "context": "Application databases, Supabase"
+      },
+      {
+        "name": "MongoDB",
+        "proficiency": 2,
+        "years": 0.5,
+        "lastUsed": "2024-01",
+        "context": "MERN stack projects"
+      },
+      {
+        "name": "Redis",
+        "proficiency": 2,
+        "years": 0.5,
+        "lastUsed": "2024-06",
+        "context": "Caching for internship project"
+      }
+    ],
+    "cloud": [
+      {
+        "name": "AWS",
+        "proficiency": 2,
+        "years": 1,
+        "lastUsed": "2024-06",
+        "context": "S3, Lambda, EC2 basics",
+        "services": ["S3", "Lambda", "EC2", "RDS"]
+      },
+      {
+        "name": "GCP",
+        "proficiency": 3,
+        "years": 1,
+        "lastUsed": "2024-09",
+        "context": "Cloud Run, BigQuery for internship",
+        "services": ["Cloud Run", "BigQuery", "Cloud Functions"]
+      },
+      {
+        "name": "Docker",
+        "proficiency": 3,
+        "years": 1,
+        "lastUsed": "2024-09",
+        "context": "Containerizing applications for deployment"
+      }
+    ],
+    "tools": [
+      {
+        "name": "Git",
+        "proficiency": 4,
+        "years": 4,
+        "context": "Daily use for all development work"
+      },
+      {
+        "name": "Linux",
+        "proficiency": 3,
+        "years": 3,
+        "context": "Development environment, server administration"
+      },
+      {
+        "name": "Figma",
+        "proficiency": 2,
+        "years": 1,
+        "context": "UI/UX design for personal projects"
+      }
+    ],
+    "ml": [
+      {
+        "name": "PyTorch",
+        "proficiency": 2,
+        "years": 1,
+        "lastUsed": "2024-05",
+        "context": "ML coursework and thesis project"
+      },
+      {
+        "name": "pandas",
+        "proficiency": 3,
+        "years": 2,
+        "lastUsed": "2024-09",
+        "context": "Data analysis and manipulation"
+      }
+    ]
+  },
+
+  "certifications": [
+    {
+      "name": "AWS Certified Cloud Practitioner",
+      "issuer": "Amazon Web Services",
+      "issueDate": "2024-03",
+      "expiryDate": "2027-03",
+      "credentialId": "ABC123XYZ"
+    }
+  ]
+}

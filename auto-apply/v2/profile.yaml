@@ -1,0 +1,109 @@
+# ===========================================
+# NewGrad Radar - Auto-Apply Profile
+# ===========================================
+# This profile is used by the AI to fill applications
+# and generate personalized answers to questions.
+
+# ----- Basic Info -----
+first_name: "Abraham"
+last_name: "Mekonnen"
+email: "YOUR_EMAIL_HERE"
+phone: "+1-555-123-4567"
+location: "San Francisco, CA"
+
+# ----- Online Presence -----
+linkedin: "https://linkedin.com/in/YOUR_LINKEDIN"
+github: "https://github.com/YOUR_GITHUB"
+website: ""  # Portfolio URL if any
+
+# ----- Resume -----
+resume_path: "/Users/amekonnen/Downloads/Abraham_mekonnen_Resume.pdf"
+
+# ----- Education -----
+education:
+  school: "University of California, Berkeley"
+  degree: "Bachelor of Science"
+  major: "Computer Science"
+  graduation_year: "2024"
+  gpa: ""  # Optional
+
+# ----- Work Authorization -----
+work_authorization: "Yes, I am authorized to work in the US"
+requires_sponsorship: false
+willing_to_relocate: true
+willing_to_work_in_person: true
+earliest_start_date: "Immediately"
+
+# ----- Experience -----
+years_of_experience: "0-1"
+current_company: ""  # Leave blank if student/new grad
+
+# ===========================================
+# IMPORTANT: This section powers the AI's
+# personalized answers to "Why" questions
+# ===========================================
+
+# What genuinely excites you about tech/software?
+interests:
+  - "Building products that solve real problems for users"
+  - "AI/ML and its potential to augment human capabilities"
+  - "Clean, maintainable code and good system design"
+  - "Working on challenging technical problems"
+  - "Collaborative engineering culture"
+
+# What are you looking for in your next role?
+goals:
+  - "Learn from experienced engineers and grow rapidly"
+  - "Work on products used by millions of people"
+  - "Contribute to meaningful, impactful projects"
+  - "Join a team that values code quality and engineering excellence"
+
+# Your technical strengths (for matching to job requirements)
+strengths:
+  - "Full-stack development (React, Node.js, Python)"
+  - "Strong CS fundamentals (data structures, algorithms)"
+  - "Quick learner, adaptable to new technologies"
+  - "Experience with cloud platforms (AWS, GCP)"
+
+# Past projects/experiences to reference in answers
+highlights:
+  - "Built a job tracking app using Next.js and Supabase"
+  - "Internship experience at [Company] working on [Project]"
+  - "Led a team project that [Achievement]"
+  - "Open source contributions to [Project]"
+
+# ===========================================
+# Company-specific notes (optional)
+# Add notes for specific companies you're targeting
+# ===========================================
+company_notes:
+  anthropic:
+    why: "Deeply interested in AI safety and building beneficial AI. Anthropic's mission to create reliable, interpretable AI aligns with my belief that responsible AI development is critical."
+    connection: "Have been following Anthropic's research on constitutional AI and interpretability."
+
+  google:
+    why: "Want to work on products that impact billions of users. Excited about Google's engineering culture and scale."
+    connection: ""
+
+  openai:
+    why: "Passionate about pushing the boundaries of AI capabilities while ensuring safety."
+    connection: ""
+
+# ===========================================
+# EEO (Equal Employment Opportunity)
+# These are optional demographic questions
+# ===========================================
+eeo:
+  gender: "Decline to self-identify"
+  race: "Decline to self-identify"
+  veteran_status: "I am not a protected veteran"
+  disability_status: "I do not wish to answer"
+
+# ===========================================
+# Standard answers to common questions
+# ===========================================
+standard_answers:
+  are_you_18: "Yes"
+  previously_employed_here: "No"
+  how_did_you_hear: "LinkedIn"
+  salary_expectations: "Open to discussion based on the role and total compensation"

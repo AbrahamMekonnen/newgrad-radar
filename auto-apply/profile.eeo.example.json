@@ -1,0 +1,145 @@
+{
+  "$schema": "eeo-profile-v1",
+  "$comment": "Separate file for EEO data - can be gitignored for privacy",
+  "lastModified": "2026-09-10T00:00:00Z",
+
+  "config": {
+    "enabled": true,
+    "defaultBehavior": "decline",
+    "logActivity": false
+  },
+
+  "answers": {
+    "gender": {
+      "value": "decline",
+      "validOptions": [
+        "male",
+        "female",
+        "non-binary",
+        "self-describe",
+        "decline"
+      ],
+      "customText": null
+    },
+
+    "race": {
+      "value": "decline",
+      "validOptions": [
+        "american-indian-alaska-native",
+        "asian",
+        "black-african-american",
+        "native-hawaiian-pacific-islander",
+        "white",
+        "two-or-more",
+        "decline"
+      ]
+    },
+
+    "hispanic": {
+      "value": "decline",
+      "validOptions": ["yes", "no", "decline"],
+      "note": "Often asked separately from race"
+    },
+
+    "veteran": {
+      "value": "no",
+      "validOptions": [
+        "no",
+        "yes-protected",
+        "yes-not-specified",
+        "decline"
+      ],
+      "classifications": [],
+      "classificationOptions": [
+        "disabled-veteran",
+        "recently-separated",
+        "active-duty-wartime",
+        "armed-forces-service-medal"
+      ]
+    },
+
+    "disability": {
+      "value": "decline",
+      "validOptions": ["yes", "no", "decline"]
+    },
+
+    "lgbtq": {
+      "value": null,
+      "enabled": false,
+      "validOptions": [
+        "heterosexual",
+        "gay",
+        "lesbian",
+        "bisexual",
+        "queer",
+        "self-describe",
+        "decline"
+      ],
+      "note": "Not EEOC-required, collected by some companies voluntarily"
+    }
+  },
+
+  "atsValueMappings": {
+    "gender": {
+      "decline": {
+        "greenhouse": "Decline to self-identify",
+        "lever": "I do not wish to answer",
+        "workday": "Prefer not to say",
+        "ashby": "Decline",
+        "default": "Decline to self-identify"
+      },
+      "male": {
+        "greenhouse": "Male",
+        "lever": "Male",
+        "workday": "Male",
+        "ashby": "Man",
+        "default": "Male"
+      },
+      "female": {
+        "greenhouse": "Female",
+        "lever": "Female",
+        "workday": "Female",
+        "ashby": "Woman",
+        "default": "Female"
+      },
+      "non-binary": {
+        "greenhouse": "Non-binary",
+        "lever": "Non-binary",
+        "workday": "Non-binary",
+        "ashby": "Non-binary",
+        "default": "Non-binary"
+      }
+    },
+    "veteran": {
+      "no": {
+        "greenhouse": "I am not a protected veteran",
+        "lever": "No",
+        "workday": "I am not a protected veteran",
+        "default": "I am not a protected veteran"
+      },
+      "yes-protected": {
+        "greenhouse": "I identify as one or more of the classifications of protected veteran",
+        "lever": "Yes",
+        "workday": "I identify as one or more of the classifications of protected veteran",
+        "default": "Yes"
+      },
+      "decline": {
+        "greenhouse": "I am a protected veteran, but choose not to self-identify the classifications",
+        "lever": "Prefer not to answer",
+        "workday": "Prefer not to say",
+        "default": "Prefer not to answer"
+      }
+    },
+    "disability": {
+      "yes": {
+        "default": "Yes, I have a disability, or have had one in the past"
+      },
+      "no": {
+        "default": "No, I do not have a disability"
+      },
+      "decline": {
+        "default": "I do not wish to answer"
+      }
+    }
+  }
+}

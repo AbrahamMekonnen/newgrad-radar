@@ -1,0 +1,29 @@
+{
+  "name": "newgrad-radar-auto-apply",
+  "version": "1.0.0",
+  "description": "Auto-apply scripts for NewGrad Radar - fills job applications on various ATS platforms",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "apply": "node index.js",
+    "test": "node --test __tests__/*.test.js",
+    "test:watch": "node --test --watch __tests__/*.test.js"
+  },
+  "keywords": [
+    "job-application",
+    "automation",
+    "greenhouse",
+    "lever",
+    "ashby",
+    "jobvite"
+  ],
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "commander": "^11.1.0",
+    "lru-cache": "^11.5.2",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

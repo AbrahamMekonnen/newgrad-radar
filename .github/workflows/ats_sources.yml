@@ -1,0 +1,444 @@
+name: Daily ATS Sources
+
+on:
+  schedule:
+    # Daily at 7am Pacific (14:00 UTC)
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+    inputs:
+      ats:
+        description: "Specific ATS to run (all, greenhouse, lever, ashby, workday, smartrecruiters, icims, jobvite)"
+        default: "all"
+        required: false
+      dry_run:
+        description: "Run without writing to database"
+        type: boolean
+        default: false
+
+jobs:
+  # Primary ATS platforms - run in parallel
+  scrape-primary-ats:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ats:
+          - name: greenhouse
+            type: greenhouse
+          - name: lever
+            type: lever
+          - name: ashby
+            type: ashby
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Check if should run
+        id: check
+        run: |
+          INPUT_ATS="${{ github.event.inputs.ats || 'all' }}"
+          MATRIX_ATS="${{ matrix.ats.name }}"
+          if [[ "$INPUT_ATS" == "all" || "$INPUT_ATS" == "$MATRIX_ATS" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+        working-directory: .
+
+      - name: Checkout
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        if: steps.check.outputs.should_run == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Fetch ${{ matrix.ats.name }} jobs
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from sources import ${{ matrix.ats.name }} as ats_module
+          from db import upsert_jobs
+          from classifier import classify_jobs, detect_role_types
+          from companies import COMPANIES
+          import hashlib
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          def generate_job_id(company_slug, title, url):
+              id_string = f'{company_slug}|{title}|{url}'
+              return hashlib.md5(id_string.encode()).hexdigest()[:12]
+
+          def normalize_location(loc):
+              if not loc:
+                  return 'Remote'
+              if isinstance(loc, list):
+                  return ', '.join(loc[:3]) if loc else 'Remote'
+              return str(loc).strip() or 'Remote'
+
+          def normalize_job(raw, company_slug):
+              company_info = COMPANIES[company_slug]
+              location = raw.get('location') or raw.get('locations', [])
+              job_id = generate_job_id(company_slug, raw['title'], raw['url'])
+              return {
+                  'id': job_id,
+                  'company_slug': company_slug,
+                  'company_name': company_info['name'],
+                  'title': raw['title'],
+                  'location': normalize_location(location),
+                  'url': raw['url'],
+                  'tier': company_info['tier'],
+                  'role_types': detect_role_types(raw['title']),
+                  'source': raw.get('source', '${{ matrix.ats.name }}'),
+                  'posted': raw.get('posted'),
+              }
+
+          # Get companies using this ATS
+          ats_type = '${{ matrix.ats.type }}'
+          ats_companies = {
+              slug: info for slug, info in COMPANIES.items()
+              if info.get('ats_type') == ats_type and info.get('ats_token')
+          }
+
+          print(f'Found {len(ats_companies)} companies using {ats_type}')
+
+          all_jobs = []
+          for slug, info in ats_companies.items():
+              token = info['ats_token']
+              try:
+                  if ats_type == 'greenhouse':
+                      jobs = ats_module.fetch_greenhouse(token, slug)
+                  elif ats_type == 'lever':
+                      jobs = ats_module.fetch_lever(token)
+                      for job in jobs:
+                          job['company'] = slug
+                  elif ats_type == 'ashby':
+                      jobs = ats_module.fetch_ashby(token, slug)
+                  else:
+                      jobs = []
+
+                  if jobs:
+                      print(f'  {slug}: {len(jobs)} jobs')
+                      all_jobs.extend(jobs)
+              except Exception as e:
+                  print(f'  {slug}: Error - {e}')
+
+          print(f'Total raw jobs: {len(all_jobs)}')
+
+          # Normalize
+          normalized = []
+          for job in all_jobs:
+              company_slug = job.get('company')
+              if company_slug and company_slug in COMPANIES:
+                  normalized.append(normalize_job(job, company_slug))
+
+          print(f'Normalized: {len(normalized)}')
+
+          # Dedupe
+          seen = {}
+          for job in normalized:
+              if job['id'] not in seen:
+                  seen[job['id']] = job
+          deduped = list(seen.values())
+          print(f'After dedup: {len(deduped)}')
+
+          # Classify and upsert
+          if deduped:
+              print('Classifying jobs...')
+              classified = classify_jobs(deduped)
+              print(f'After classification: {len(classified)} new grad positions')
+
+              if not dry_run:
+                  print('Upserting to database...')
+                  new_count, updated_count = upsert_jobs(classified, False)
+                  print(f'New jobs: {new_count}, Updated: {updated_count}')
+              else:
+                  print('[DRY RUN] Would upsert jobs')
+                  for job in classified[:5]:
+                      print(f'  - {job[\"title\"]} at {job[\"company_name\"]}')
+
+          print('Done!')
+          "
+
+      - name: Job Summary
+        if: steps.check.outputs.should_run == 'true' && always()
+        run: |
+          echo "## ${{ matrix.ats.name }} ATS Jobs" >> $GITHUB_STEP_SUMMARY
+
+  # Workday (separate job - requires special handling)
+  scrape-workday:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.ats == 'all' || github.event.inputs.ats == 'workday' || github.event.inputs.ats == ''
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch Workday jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from sources.workday import fetch_workday_all, WORKDAY_COMPANIES
+          from db import upsert_jobs
+          from classifier import classify_jobs, detect_role_types
+          from companies import COMPANIES
+          import hashlib
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          def generate_job_id(company_slug, title, url):
+              id_string = f'{company_slug}|{title}|{url}'
+              return hashlib.md5(id_string.encode()).hexdigest()[:12]
+
+          def normalize_location(loc):
+              if not loc:
+                  return 'Remote'
+              if isinstance(loc, list):
+                  return ', '.join(loc[:3]) if loc else 'Remote'
+              return str(loc).strip() or 'Remote'
+
+          def normalize_job(raw, company_slug):
+              company_info = COMPANIES.get(company_slug, {})
+              if not company_info:
+                  return None
+              location = raw.get('location') or raw.get('locations', [])
+              job_id = generate_job_id(company_slug, raw['title'], raw['url'])
+              return {
+                  'id': job_id,
+                  'company_slug': company_slug,
+                  'company_name': company_info['name'],
+                  'title': raw['title'],
+                  'location': normalize_location(location),
+                  'url': raw['url'],
+                  'tier': company_info.get('tier', 3),
+                  'role_types': detect_role_types(raw['title']),
+                  'source': 'workday',
+                  'posted': raw.get('posted'),
+              }
+
+          print(f'Workday companies configured: {len(WORKDAY_COMPANIES)}')
+          print('Fetching Workday jobs...')
+
+          try:
+              all_jobs = fetch_workday_all()
+              print(f'Total raw jobs: {len(all_jobs)}')
+          except Exception as e:
+              print(f'Error: {e}')
+              sys.exit(1)
+
+          # Normalize
+          normalized = []
+          for job in all_jobs:
+              company_slug = job.get('company', '').lower().replace(' ', '-')
+              norm_job = normalize_job(job, company_slug)
+              if norm_job:
+                  normalized.append(norm_job)
+
+          print(f'Normalized: {len(normalized)}')
+
+          # Dedupe
+          seen = {}
+          for job in normalized:
+              if job['id'] not in seen:
+                  seen[job['id']] = job
+          deduped = list(seen.values())
+          print(f'After dedup: {len(deduped)}')
+
+          # Classify and upsert
+          if deduped:
+              print('Classifying jobs...')
+              classified = classify_jobs(deduped)
+              print(f'After classification: {len(classified)} new grad positions')
+
+              if not dry_run:
+                  print('Upserting to database...')
+                  new_count, updated_count = upsert_jobs(classified, False)
+                  print(f'New jobs: {new_count}, Updated: {updated_count}')
+              else:
+                  print('[DRY RUN] Would upsert jobs')
+                  for job in classified[:5]:
+                      print(f'  - {job[\"title\"]} at {job[\"company_name\"]}')
+
+          print('Done!')
+          "
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## Workday Jobs" >> $GITHUB_STEP_SUMMARY
+
+  # Other ATS platforms (SmartRecruiters, iCIMS, Jobvite, etc.)
+  scrape-other-ats:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.ats == 'all' || github.event.inputs.ats == 'smartrecruiters' || github.event.inputs.ats == 'icims' || github.event.inputs.ats == 'jobvite' || github.event.inputs.ats == ''
+    strategy:
+      fail-fast: false
+      matrix:
+        ats:
+          - name: smartrecruiters
+            function: fetch_smartrecruiters
+          - name: icims
+            function: fetch_icims
+          - name: jobvite
+            function: fetch_jobvite
+          - name: bamboohr
+            function: fetch_bamboohr
+          - name: breezyhr
+            function: fetch_breezyhr
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch ${{ matrix.ats.name }} jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from sources.other_ats import ${{ matrix.ats.function }}
+          from db import upsert_jobs
+          from classifier import classify_jobs, detect_role_types
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          import hashlib
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          def normalize_company(raw_company):
+              if not raw_company:
+                  return None
+              raw_lower = raw_company.lower().strip()
+              if raw_lower in COMPANIES:
+                  return raw_lower
+              if raw_lower in COMPANY_NAME_TO_SLUG:
+                  return COMPANY_NAME_TO_SLUG[raw_lower]
+              return None
+
+          def generate_job_id(company_slug, title, url):
+              id_string = f'{company_slug}|{title}|{url}'
+              return hashlib.md5(id_string.encode()).hexdigest()[:12]
+
+          def normalize_job(raw, company_slug):
+              company_info = COMPANIES[company_slug]
+              location = raw.get('location', 'Remote')
+              if isinstance(location, list):
+                  location = ', '.join(location[:3]) if location else 'Remote'
+              job_id = generate_job_id(company_slug, raw['title'], raw['url'])
+              return {
+                  'id': job_id,
+                  'company_slug': company_slug,
+                  'company_name': company_info['name'],
+                  'title': raw['title'],
+                  'location': location or 'Remote',
+                  'url': raw['url'],
+                  'tier': company_info['tier'],
+                  'role_types': detect_role_types(raw['title']),
+                  'source': '${{ matrix.ats.name }}',
+                  'posted': raw.get('posted'),
+              }
+
+          print('Fetching ${{ matrix.ats.name }} jobs...')
+          try:
+              all_jobs = ${{ matrix.ats.function }}()
+              print(f'Total raw jobs: {len(all_jobs)}')
+          except Exception as e:
+              print(f'Error: {e}')
+              all_jobs = []
+
+          # Normalize and filter
+          normalized = []
+          for job in all_jobs:
+              company_slug = normalize_company(job.get('company', ''))
+              if company_slug and company_slug in COMPANIES:
+                  normalized.append(normalize_job(job, company_slug))
+
+          print(f'After filtering: {len(normalized)}')
+
+          # Dedupe
+          seen = {}
+          for job in normalized:
+              if job['id'] not in seen:
+                  seen[job['id']] = job
+          deduped = list(seen.values())
+
+          # Classify and upsert
+          if deduped:
+              print('Classifying...')
+              classified = classify_jobs(deduped)
+              print(f'New grad positions: {len(classified)}')
+
+              if not dry_run and classified:
+                  new_count, updated_count = upsert_jobs(classified, False)
+                  print(f'New: {new_count}, Updated: {updated_count}')
+              elif classified:
+                  print('[DRY RUN] Would upsert')
+
+          print('Done!')
+          "
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## ${{ matrix.ats.name }} Jobs" >> $GITHUB_STEP_SUMMARY

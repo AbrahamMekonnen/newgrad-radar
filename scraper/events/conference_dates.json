@@ -1,0 +1,257 @@
+{
+  "conferences": [
+    {
+      "name": "Grace Hopper Celebration (GHC)",
+      "url": "https://ghc.anitab.org",
+      "typical_month": 10,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://ghc.anitab.org/attend/sponsor-list/",
+      "careers_url": "https://ghc.anitab.org/attend/career-expo/",
+      "category": "diversity",
+      "focus": "women_in_tech",
+      "description": "Largest gathering of women technologists"
+    },
+    {
+      "name": "AfroTech",
+      "url": "https://afrotech.com",
+      "typical_month": 11,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://afrotech.com/sponsors",
+      "careers_url": "https://afrotech.com/career-fair",
+      "category": "diversity",
+      "focus": "black_in_tech",
+      "description": "Tech conference for Black professionals"
+    },
+    {
+      "name": "NSBE Annual Convention",
+      "url": "https://convention.nsbe.org",
+      "typical_month": 3,
+      "typical_duration_days": 5,
+      "sponsor_page_url": "https://convention.nsbe.org/sponsors/",
+      "careers_url": "https://career.nsbe.org/jobs",
+      "category": "diversity",
+      "focus": "black_engineers",
+      "description": "National Society of Black Engineers annual convention"
+    },
+    {
+      "name": "SHPE National Convention",
+      "url": "https://shpe.org/engage/events/national-convention/",
+      "typical_month": 11,
+      "typical_duration_days": 5,
+      "sponsor_page_url": "https://shpe.org/engage/events/national-convention/sponsors/",
+      "careers_url": "https://jobs.shpe.org/jobs",
+      "category": "diversity",
+      "focus": "hispanic_engineers",
+      "description": "Society of Hispanic Professional Engineers national convention"
+    },
+    {
+      "name": "PyCon US",
+      "url": "https://us.pycon.org",
+      "typical_month": 5,
+      "typical_duration_days": 5,
+      "sponsor_page_url": "https://us.pycon.org/sponsors/",
+      "careers_url": "https://us.pycon.org/job-fair/",
+      "category": "language",
+      "focus": "python",
+      "description": "Largest annual gathering of Python community"
+    },
+    {
+      "name": "KubeCon North America",
+      "url": "https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/",
+      "typical_month": 11,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/sponsor/",
+      "careers_url": null,
+      "category": "infrastructure",
+      "focus": "cloud_native",
+      "description": "Cloud Native Computing Foundation flagship conference"
+    },
+    {
+      "name": "KubeCon Europe",
+      "url": "https://events.linuxfoundation.org/kubecon-cloudnativecon-europe/",
+      "typical_month": 3,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://events.linuxfoundation.org/kubecon-cloudnativecon-europe/sponsor/",
+      "careers_url": null,
+      "category": "infrastructure",
+      "focus": "cloud_native",
+      "description": "Cloud Native Computing Foundation European conference"
+    },
+    {
+      "name": "NeurIPS",
+      "url": "https://neurips.cc",
+      "typical_month": 12,
+      "typical_duration_days": 6,
+      "sponsor_page_url": "https://neurips.cc/Sponsors",
+      "careers_url": null,
+      "category": "research",
+      "focus": "machine_learning",
+      "description": "Conference on Neural Information Processing Systems"
+    },
+    {
+      "name": "ICML",
+      "url": "https://icml.cc",
+      "typical_month": 7,
+      "typical_duration_days": 5,
+      "sponsor_page_url": "https://icml.cc/Sponsors",
+      "careers_url": null,
+      "category": "research",
+      "focus": "machine_learning",
+      "description": "International Conference on Machine Learning"
+    },
+    {
+      "name": "Google I/O",
+      "url": "https://io.google",
+      "typical_month": 5,
+      "typical_duration_days": 2,
+      "sponsor_page_url": null,
+      "careers_url": "https://careers.google.com",
+      "category": "industry",
+      "focus": "google_ecosystem",
+      "description": "Google's annual developer conference"
+    },
+    {
+      "name": "AWS re:Invent",
+      "url": "https://reinvent.awsevents.com",
+      "typical_month": 11,
+      "typical_duration_days": 5,
+      "sponsor_page_url": "https://reinvent.awsevents.com/sponsors/",
+      "careers_url": "https://www.amazon.jobs/en/teams/aws",
+      "category": "industry",
+      "focus": "cloud",
+      "description": "Amazon Web Services annual learning conference"
+    },
+    {
+      "name": "Microsoft Build",
+      "url": "https://build.microsoft.com",
+      "typical_month": 5,
+      "typical_duration_days": 3,
+      "sponsor_page_url": null,
+      "careers_url": "https://careers.microsoft.com",
+      "category": "industry",
+      "focus": "microsoft_ecosystem",
+      "description": "Microsoft's annual developer conference"
+    },
+    {
+      "name": "Apple WWDC",
+      "url": "https://developer.apple.com/wwdc/",
+      "typical_month": 6,
+      "typical_duration_days": 5,
+      "sponsor_page_url": null,
+      "careers_url": "https://jobs.apple.com",
+      "category": "industry",
+      "focus": "apple_ecosystem",
+      "description": "Apple Worldwide Developers Conference"
+    },
+    {
+      "name": "React Conf",
+      "url": "https://conf.react.dev",
+      "typical_month": 5,
+      "typical_duration_days": 2,
+      "sponsor_page_url": "https://conf.react.dev/sponsors",
+      "careers_url": null,
+      "category": "language",
+      "focus": "react",
+      "description": "Official React conference"
+    },
+    {
+      "name": "Strange Loop",
+      "url": "https://www.thestrangeloop.com",
+      "typical_month": 9,
+      "typical_duration_days": 3,
+      "sponsor_page_url": "https://www.thestrangeloop.com/sponsors.html",
+      "careers_url": null,
+      "category": "general",
+      "focus": "software_engineering",
+      "description": "Multi-disciplinary software development conference"
+    },
+    {
+      "name": "QCon",
+      "url": "https://qconsf.com",
+      "typical_month": 10,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://qconsf.com/sponsors",
+      "careers_url": null,
+      "category": "general",
+      "focus": "software_architecture",
+      "description": "Software development conference for senior engineers"
+    },
+    {
+      "name": "GitHub Universe",
+      "url": "https://githubuniverse.com",
+      "typical_month": 11,
+      "typical_duration_days": 2,
+      "sponsor_page_url": "https://githubuniverse.com/sponsors/",
+      "careers_url": "https://github.com/about/careers",
+      "category": "industry",
+      "focus": "developer_tools",
+      "description": "GitHub's annual developer conference"
+    },
+    {
+      "name": "DockerCon",
+      "url": "https://www.docker.com/dockercon/",
+      "typical_month": 5,
+      "typical_duration_days": 2,
+      "sponsor_page_url": "https://www.docker.com/dockercon/sponsors/",
+      "careers_url": null,
+      "category": "infrastructure",
+      "focus": "containers",
+      "description": "Docker's annual developer conference"
+    },
+    {
+      "name": "RustConf",
+      "url": "https://rustconf.com",
+      "typical_month": 9,
+      "typical_duration_days": 3,
+      "sponsor_page_url": "https://rustconf.com/sponsors/",
+      "careers_url": null,
+      "category": "language",
+      "focus": "rust",
+      "description": "Annual Rust programming language conference"
+    },
+    {
+      "name": "GopherCon",
+      "url": "https://www.gophercon.com",
+      "typical_month": 9,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://www.gophercon.com/sponsors",
+      "careers_url": null,
+      "category": "language",
+      "focus": "golang",
+      "description": "Largest Go programming language conference"
+    },
+    {
+      "name": "Lesbians Who Tech Summit",
+      "url": "https://lesbianswhotech.org/sanfrancisco/",
+      "typical_month": 3,
+      "typical_duration_days": 3,
+      "sponsor_page_url": "https://lesbianswhotech.org/sanfrancisco/#sponsors",
+      "careers_url": null,
+      "category": "diversity",
+      "focus": "lgbtq_in_tech",
+      "description": "Largest LGBTQ technology community event"
+    },
+    {
+      "name": "Tapia Conference",
+      "url": "https://tapiaconference.cmd-it.org",
+      "typical_month": 9,
+      "typical_duration_days": 4,
+      "sponsor_page_url": "https://tapiaconference.cmd-it.org/sponsors/",
+      "careers_url": null,
+      "category": "diversity",
+      "focus": "underrepresented_in_computing",
+      "description": "Celebration of diversity in computing"
+    },
+    {
+      "name": "Out in Tech",
+      "url": "https://outintech.com",
+      "typical_month": 6,
+      "typical_duration_days": 1,
+      "sponsor_page_url": "https://outintech.com/partners/",
+      "careers_url": null,
+      "category": "diversity",
+      "focus": "lgbtq_in_tech",
+      "description": "LGBTQ+ tech community events"
+    }
+  ]
+}

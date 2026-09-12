@@ -1,0 +1,59 @@
+name: Database Cleanup
+
+on:
+  schedule:
+    # Run daily at 4 AM UTC
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview without deleting'
+        required: false
+        default: 'false'
+        type: boolean
+      days:
+        description: 'Delete jobs older than N days'
+        required: false
+        default: '30'
+        type: string
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install supabase python-dotenv
+
+      - name: Run cleanup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        working-directory: scraper
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python cleanup.py --dry-run --days ${{ github.event.inputs.days || '30' }}
+          else
+            python cleanup.py --days ${{ github.event.inputs.days || '30' }}
+          fi
+
+      - name: Show storage stats
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        working-directory: scraper
+        run: python cleanup.py --stats
+
+      - name: Cleanup inactive jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        working-directory: scraper
+        run: python cleanup.py --inactive --days 14

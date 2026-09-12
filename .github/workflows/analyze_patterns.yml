@@ -1,0 +1,105 @@
+name: Analyze Hiring Patterns
+
+# Historical hiring pattern analysis - runs daily after the main scraper
+#
+# This workflow:
+# - Aggregates job lifecycle events into monthly patterns
+# - Calculates company hiring statistics and velocity
+# - Generates predictions for the next 6 months
+# - Verifies past predictions against actual data
+#
+# Required Secrets:
+#   SUPABASE_URL          - Supabase project URL
+#   SUPABASE_SERVICE_KEY  - Supabase service role key (not anon key)
+#
+# Related Workflows:
+#   - scrape.yml          - Main scraper that triggers lifecycle events
+#   - cleanup.yml         - Database cleanup (runs before this)
+
+on:
+  schedule:
+    # Daily at 9am Pacific (16:00 UTC) - 2 hours after main scraper
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview without writing to database"
+        type: boolean
+        default: false
+      monthly_only:
+        description: "Only run monthly aggregation"
+        type: boolean
+        default: false
+      predictions_only:
+        description: "Only generate predictions"
+        type: boolean
+        default: false
+      stats_only:
+        description: "Only show current statistics"
+        type: boolean
+        default: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd scraper
+          pip install -r requirements.txt
+
+      - name: Run pattern analysis
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd scraper
+          ARGS=""
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [[ "${{ inputs.monthly_only }}" == "true" ]]; then
+            ARGS="$ARGS --monthly-only"
+          fi
+          if [[ "${{ inputs.predictions_only }}" == "true" ]]; then
+            ARGS="$ARGS --predictions-only"
+          fi
+          if [[ "${{ inputs.stats_only }}" == "true" ]]; then
+            ARGS="$ARGS --stats"
+          fi
+          python analyze_patterns.py $ARGS
+
+      - name: Show statistics
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd scraper
+          python analyze_patterns.py --stats
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Hiring Patterns Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Analysis completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### What this workflow does:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Monthly Aggregation** - Groups job events by company/month" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Company Stats** - Calculates hiring velocity and patterns" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Predictions** - Forecasts next 6 months of hiring activity" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Verification** - Checks accuracy of past predictions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View results at: https://jmrbyubrrpxxvotsljms.supabase.co" >> $GITHUB_STEP_SUMMARY

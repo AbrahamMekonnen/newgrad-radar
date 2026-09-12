@@ -1,0 +1,202 @@
+name: Daily API Sources
+
+on:
+  schedule:
+    # Daily at 6am Pacific (13:00 UTC) - before main scrape
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Specific source to run (all, adzuna, remoteok, usajobs, arbeitnow, hn)"
+        default: "all"
+        required: false
+      dry_run:
+        description: "Run without writing to database"
+        type: boolean
+        default: false
+
+jobs:
+  scrape-api-sources:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        source:
+          - name: adzuna
+            module: adzuna
+            function: fetch_adzuna
+            requires_key: true
+          - name: remoteok
+            module: remoteok
+            function: fetch_remoteok
+            requires_key: false
+          - name: usajobs
+            module: usajobs
+            function: fetch_usajobs
+            requires_key: true
+          - name: arbeitnow
+            module: arbeitnow
+            function: fetch_arbeitnow
+            requires_key: false
+          - name: hn
+            module: hn_hiring
+            function: fetch_hn_hiring
+            requires_key: false
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Check if should run
+        id: check
+        run: |
+          INPUT_SOURCE="${{ github.event.inputs.source || 'all' }}"
+          MATRIX_SOURCE="${{ matrix.source.name }}"
+          if [[ "$INPUT_SOURCE" == "all" || "$INPUT_SOURCE" == "$MATRIX_SOURCE" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+        working-directory: .
+
+      - name: Checkout
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        if: steps.check.outputs.should_run == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Fetch ${{ matrix.source.name }} jobs
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
+          USAJOBS_EMAIL: ${{ secrets.USAJOBS_EMAIL }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from sources.${{ matrix.source.module }} import ${{ matrix.source.function }}
+          from db import upsert_jobs
+          from classifier import classify_jobs, detect_role_types
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG
+          import hashlib
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          def normalize_company(raw_company):
+              if not raw_company:
+                  return None
+              raw_lower = raw_company.lower().strip()
+              if raw_lower in COMPANIES:
+                  return raw_lower
+              if raw_lower in COMPANY_NAME_TO_SLUG:
+                  return COMPANY_NAME_TO_SLUG[raw_lower]
+              if raw_lower in COMPANY_TOKEN_TO_SLUG:
+                  return COMPANY_TOKEN_TO_SLUG[raw_lower]
+              variations = [
+                  raw_lower.replace(' ', '-'),
+                  raw_lower.replace('.', ''),
+                  raw_lower.replace('.', '-'),
+                  raw_lower.split()[0] if ' ' in raw_lower else None,
+              ]
+              for var in variations:
+                  if var and var in COMPANIES:
+                      return var
+                  if var and var in COMPANY_NAME_TO_SLUG:
+                      return COMPANY_NAME_TO_SLUG[var]
+              return None
+
+          def generate_job_id(company_slug, title, url):
+              id_string = f'{company_slug}|{title}|{url}'
+              return hashlib.md5(id_string.encode()).hexdigest()[:12]
+
+          def normalize_job(raw, company_slug):
+              company_info = COMPANIES[company_slug]
+              location = raw.get('location') or raw.get('locations', [])
+              if isinstance(location, list):
+                  location = ', '.join(location[:3]) if location else 'Remote'
+              job_id = generate_job_id(company_slug, raw['title'], raw['url'])
+              return {
+                  'id': job_id,
+                  'company_slug': company_slug,
+                  'company_name': company_info['name'],
+                  'title': raw['title'],
+                  'location': location or 'Remote',
+                  'url': raw['url'],
+                  'tier': company_info['tier'],
+                  'role_types': detect_role_types(raw['title']),
+                  'source': raw.get('source', '${{ matrix.source.name }}'),
+                  'posted': raw.get('posted'),
+              }
+
+          # Fetch jobs
+          print('Fetching ${{ matrix.source.name }} jobs...')
+          try:
+              all_jobs = ${{ matrix.source.function }}()
+              print(f'Total raw jobs: {len(all_jobs)}')
+          except Exception as e:
+              print(f'Error fetching jobs: {e}')
+              sys.exit(1)
+
+          # Normalize and filter
+          normalized = []
+          for job in all_jobs:
+              company_slug = normalize_company(job.get('company', ''))
+              if company_slug and company_slug in COMPANIES:
+                  normalized.append(normalize_job(job, company_slug))
+
+          print(f'After filtering to target companies: {len(normalized)}')
+
+          # Dedupe
+          seen = {}
+          for job in normalized:
+              if job['id'] not in seen:
+                  seen[job['id']] = job
+          deduped = list(seen.values())
+          print(f'After dedup: {len(deduped)}')
+
+          # Classify
+          if deduped:
+              print('Classifying jobs...')
+              classified = classify_jobs(deduped)
+              print(f'After classification: {len(classified)} new grad positions')
+
+              # Upsert
+              if not dry_run:
+                  print('Upserting to database...')
+                  new_count, updated_count = upsert_jobs(classified, False)
+                  print(f'New jobs: {new_count}, Updated: {updated_count}')
+              else:
+                  print('[DRY RUN] Would upsert jobs')
+                  for job in classified[:5]:
+                      print(f'  - {job[\"title\"]} at {job[\"company_name\"]}')
+          else:
+              print('No jobs to process')
+
+          print('Done!')
+          "
+
+      - name: Job Summary
+        if: steps.check.outputs.should_run == 'true' && always()
+        run: |
+          echo "## ${{ matrix.source.name }} Jobs" >> $GITHUB_STEP_SUMMARY
+          echo "Source: ${{ matrix.source.module }}.${{ matrix.source.function }}" >> $GITHUB_STEP_SUMMARY

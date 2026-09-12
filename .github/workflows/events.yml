@@ -1,0 +1,459 @@
+name: Event-Triggered Scraping
+
+on:
+  schedule:
+    # Check for upcoming events twice weekly (Tue/Fri at 8am Pacific)
+    - cron: "0 15 * * 2,5"
+  workflow_dispatch:
+    inputs:
+      days_ahead:
+        description: "Look ahead N days for upcoming events"
+        default: "14"
+        required: false
+      event_type:
+        description: "Event type filter (all, conference, hackathon, demo_day, career_fair)"
+        default: "all"
+        required: false
+      dry_run:
+        description: "Run without writing to database"
+        type: boolean
+        default: false
+
+jobs:
+  # Check for upcoming events and trigger priority scraping
+  check-events:
+    runs-on: ubuntu-latest
+    outputs:
+      has_events: ${{ steps.check.outputs.has_events }}
+      event_count: ${{ steps.check.outputs.event_count }}
+      event_types: ${{ steps.check.outputs.event_types }}
+      events_json: ${{ steps.check.outputs.events_json }}
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check for upcoming events
+        id: check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          python -c "
+          import sys
+          import json
+          sys.path.insert(0, '.')
+
+          from events import check_for_event_triggers
+
+          days_ahead = int('${{ inputs.days_ahead }}' or '14')
+          event_filter = '${{ inputs.event_type }}' or 'all'
+
+          print(f'Checking for events in next {days_ahead} days...')
+          print(f'Event type filter: {event_filter}')
+
+          triggers = check_for_event_triggers(days_ahead=days_ahead)
+
+          has_events = triggers.get('has_triggers', False)
+          event_count = triggers.get('event_count', 0)
+          event_types = triggers.get('event_types', [])
+
+          # Filter by event type if specified
+          if event_filter != 'all' and event_types:
+              event_types = [t for t in event_types if event_filter in t.lower()]
+              has_events = len(event_types) > 0
+
+          print(f'Has events: {has_events}')
+          print(f'Event count: {event_count}')
+          print(f'Event types: {event_types}')
+
+          # Write outputs
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'has_events={str(has_events).lower()}\\n')
+              f.write(f'event_count={event_count}\\n')
+              f.write(f'event_types={json.dumps(event_types)}\\n')
+              f.write(f'events_json={json.dumps(triggers)}\\n')
+          "
+
+      - name: Summary
+        run: |
+          echo "## Event Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Has Upcoming Events:** ${{ steps.check.outputs.has_events }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Event Count:** ${{ steps.check.outputs.event_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Event Types:** ${{ steps.check.outputs.event_types }}" >> $GITHUB_STEP_SUMMARY
+
+  # Scrape conference sponsor jobs
+  conference-sponsors:
+    needs: check-events
+    if: needs.check-events.outputs.has_events == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch conference sponsor jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from sources.conferences import fetch_all_conference_jobs
+          from db import upsert_jobs
+          from classifier import classify_jobs, detect_role_types
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          import hashlib
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          def normalize_company(raw_company):
+              if not raw_company:
+                  return None
+              raw_lower = raw_company.lower().strip()
+              if raw_lower in COMPANIES:
+                  return raw_lower
+              if raw_lower in COMPANY_NAME_TO_SLUG:
+                  return COMPANY_NAME_TO_SLUG[raw_lower]
+              variations = [raw_lower.replace(' ', '-'), raw_lower.replace('.', '')]
+              for var in variations:
+                  if var and var in COMPANIES:
+                      return var
+              return None
+
+          def generate_job_id(company_slug, title, url):
+              id_string = f'{company_slug}|{title}|{url}'
+              return hashlib.md5(id_string.encode()).hexdigest()[:12]
+
+          def normalize_job(raw, company_slug):
+              company_info = COMPANIES[company_slug]
+              location = raw.get('location', 'Remote')
+              job_id = generate_job_id(company_slug, raw['title'], raw['url'])
+              return {
+                  'id': job_id,
+                  'company_slug': company_slug,
+                  'company_name': company_info['name'],
+                  'title': raw['title'],
+                  'location': location or 'Remote',
+                  'url': raw['url'],
+                  'tier': company_info['tier'],
+                  'role_types': detect_role_types(raw['title']),
+                  'source': raw.get('source', 'conference'),
+                  'posted': raw.get('posted'),
+              }
+
+          print('Fetching conference sponsor job listings...')
+          print('  - Grace Hopper (GHC)')
+          print('  - NSBE')
+          print('  - SHPE')
+          print('  - AfroTech')
+
+          try:
+              all_jobs = fetch_all_conference_jobs()
+              print(f'Total raw jobs: {len(all_jobs)}')
+          except Exception as e:
+              print(f'Error: {e}')
+              all_jobs = []
+
+          # Normalize and filter
+          normalized = []
+          for job in all_jobs:
+              company_slug = normalize_company(job.get('company', ''))
+              if company_slug and company_slug in COMPANIES:
+                  normalized.append(normalize_job(job, company_slug))
+
+          print(f'After filtering: {len(normalized)}')
+
+          # Dedupe
+          seen = {}
+          for job in normalized:
+              if job['id'] not in seen:
+                  seen[job['id']] = job
+          deduped = list(seen.values())
+
+          # Classify and upsert
+          if deduped:
+              print('Classifying...')
+              classified = classify_jobs(deduped)
+              print(f'New grad positions: {len(classified)}')
+
+              if not dry_run and classified:
+                  new_count, updated_count = upsert_jobs(classified, False)
+                  print(f'New: {new_count}, Updated: {updated_count}')
+              elif classified:
+                  print('[DRY RUN] Would upsert')
+                  for job in classified[:10]:
+                      print(f'  - {job[\"title\"]} at {job[\"company_name\"]}')
+
+          print('Done!')
+          "
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Conference Sponsor Jobs" >> $GITHUB_STEP_SUMMARY
+          echo "Priority scraping triggered by upcoming conference events" >> $GITHUB_STEP_SUMMARY
+
+  # Run full event alert system
+  event-alerts:
+    needs: check-events
+    if: needs.check-events.outputs.has_events == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run event alert system
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from events import EventAlertSystem
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          days_ahead = int('${{ inputs.days_ahead }}' or '14')
+
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          print(f'Running event alert system (looking {days_ahead} days ahead)...')
+
+          system = EventAlertSystem(dry_run=dry_run)
+          summary = system.run(days_ahead=days_ahead)
+
+          print('\\n' + '='*50)
+          print('EVENT ALERT SUMMARY')
+          print('='*50)
+          print(f'Events detected: {summary.get(\"events_detected\", 0)}')
+          print(f'Actions triggered: {summary.get(\"actions_triggered\", 0)}')
+
+          if summary.get('results'):
+              print('\\nResults:')
+              for result in summary['results'][:10]:
+                  print(f'  - {result}')
+
+          print('\\nDone!')
+          "
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Event Alert System" >> $GITHUB_STEP_SUMMARY
+          echo "Processed upcoming events and triggered priority scraping" >> $GITHUB_STEP_SUMMARY
+
+  # YC Demo Day tracking (separate timing)
+  yc-demo-day:
+    runs-on: ubuntu-latest
+    # Only runs in March and September (Demo Day months)
+    if: github.event.inputs.event_type == 'demo_day' || github.event_name == 'workflow_dispatch'
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check YC Demo Day status
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from events import get_recent_yc_batch, get_upcoming_demo_day, get_hiring_yc_companies
+          from datetime import datetime
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          month = datetime.now().month
+          print(f'Current month: {month}')
+
+          # Demo days are typically in March and September
+          is_demo_season = month in [2, 3, 8, 9]  # Feb-Mar, Aug-Sep
+          print(f'Is demo day season: {is_demo_season}')
+
+          if is_demo_season or '${{ github.event_name }}' == 'workflow_dispatch':
+              print('\\nTracking YC Demo Day companies...')
+              try:
+                  # Check for upcoming demo day
+                  demo_day = get_upcoming_demo_day()
+                  if demo_day:
+                      print(f'Next Demo Day: {demo_day}')
+
+                  # Get recent batch companies
+                  companies = get_recent_yc_batch()
+                  print(f'Found {len(companies)} companies in recent YC batch')
+
+                  # Get hiring YC companies
+                  hiring = get_hiring_yc_companies()
+                  print(f'YC companies actively hiring: {len(hiring)}')
+
+                  # Show sample
+                  for company in companies[:10]:
+                      name = company.name if hasattr(company, 'name') else str(company)
+                      print(f'  - {name}')
+
+                  if len(companies) > 10:
+                      print(f'  ... and {len(companies) - 10} more')
+              except Exception as e:
+                  print(f'Error tracking YC: {e}')
+          else:
+              print('Not demo day season, skipping YC tracking')
+
+          print('\\nDone!')
+          "
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## YC Demo Day Tracker" >> $GITHUB_STEP_SUMMARY
+          echo "Monitors Y Combinator batches around Demo Day (March/September)" >> $GITHUB_STEP_SUMMARY
+
+  # Career Fair scraping
+  career-fairs:
+    needs: check-events
+    if: needs.check-events.outputs.has_events == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: scraper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch career fair company jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+
+          from events import get_upcoming_career_fairs, get_career_fair_companies
+          from db import upsert_jobs
+          from classifier import classify_jobs
+          from companies import COMPANIES
+          import json
+
+          dry_run = '${{ inputs.dry_run }}' == 'true'
+          days_ahead = int('${{ inputs.days_ahead }}' or '14')
+
+          if dry_run:
+              print('=== DRY RUN MODE ===')
+
+          print(f'Checking career fairs in next {days_ahead} days...')
+
+          try:
+              fairs = get_upcoming_career_fairs(days_ahead=days_ahead)
+              print(f'Found {len(fairs)} upcoming career fairs')
+
+              for fair in fairs:
+                  print(f'\\n  Fair: {fair.get(\"name\", \"Unknown\")}')
+                  print(f'  Date: {fair.get(\"date\", \"TBD\")}')
+
+                  companies = get_career_fair_companies(fair.get('name', ''))
+                  target_companies = [c for c in companies if c.lower() in COMPANIES]
+                  print(f'  Target company attendees: {len(target_companies)}')
+
+                  for company in target_companies[:5]:
+                      print(f'    - {company}')
+                  if len(target_companies) > 5:
+                      print(f'    ... and {len(target_companies) - 5} more')
+
+          except Exception as e:
+              print(f'Error: {e}')
+
+          print('\\nDone!')
+          "
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Career Fair Companies" >> $GITHUB_STEP_SUMMARY
+          echo "Priority scraping for companies attending upcoming career fairs" >> $GITHUB_STEP_SUMMARY
