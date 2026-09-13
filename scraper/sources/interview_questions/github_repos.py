@@ -721,7 +721,7 @@ def clear_cache():
 
 # How many questions to keep per company (per source). The 6-month CSVs have
 # hundreds of rows for big companies; we want deep, role-specific banks.
-COMPANY_WISE_CAP = 250
+COMPANY_WISE_CAP = 2000  # effectively uncapped for the 6-month window
 
 
 def _build_cw_question(company_name, title, difficulty, link, rank, total, extra_tags=None):
