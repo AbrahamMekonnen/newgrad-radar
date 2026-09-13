@@ -805,6 +805,88 @@ def parse_company_wise_leetcode(top_n_per_company: int = 40) -> List[InterviewQu
     return questions
 
 
+def parse_company_wise_liquidslr(top_n_per_company: int = 30) -> List[InterviewQuestion]:
+    """Parse liquidslr/leetcode-company-wise-problems.
+
+    Per-company folders with finer recency buckets ("1. Thirty Days.csv",
+    "2. Three Months.csv", "3. Six Months.csv", ...) and a Topics column.
+    We grab the whole file tree in ONE git-tree API call, then fetch the most
+    recent bucket per company from raw.githubusercontent (no API rate limit).
+    """
+    import csv as _csv
+    import io as _io
+
+    owner, repo, branch = "liquidslr", "leetcode-company-wise-problems", "main"
+    questions: List[InterviewQuestion] = []
+
+    tree_url = f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    resp = _make_request(tree_url)
+    if not resp or resp.status_code != 200:
+        logger.warning("[liquidslr] could not fetch repo tree")
+        return questions
+    try:
+        paths = [t["path"] for t in resp.json().get("tree", []) if t["type"] == "blob" and t["path"].endswith(".csv")]
+    except Exception as e:
+        logger.error(f"[liquidslr] tree parse error: {e}")
+        return questions
+
+    # Prefer the most recent window available per company folder
+    window_rank = {"1. Thirty Days.csv": 0, "2. Three Months.csv": 1,
+                   "3. Six Months.csv": 2, "4. More Than Six Months.csv": 3, "5. All.csv": 4}
+    best: dict[str, tuple[str, int]] = {}
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) != 2:
+            continue
+        company, fname = parts
+        rank = window_rank.get(fname, 9)
+        if company not in best or rank < best[company][1]:
+            best[company] = (p, rank)
+
+    print(f"  [liquidslr] {len(best)} companies")
+    days_by_rank = {0: 30, 1: 90, 2: 180, 3: 365, 4: 540, 9: 365}
+
+    for company, (path, rank) in best.items():
+        content = fetch_file_content(owner, repo, branch, path)
+        if not content:
+            continue
+        approx_date = (datetime.now() - timedelta(days=days_by_rank.get(rank, 365))).strftime("%Y-%m-%d")
+        rows = []
+        try:
+            for row in _csv.DictReader(_io.StringIO(content)):
+                title = (row.get("Title") or "").strip()
+                if not title:
+                    continue
+                try:
+                    freq = float(row.get("Frequency") or 0)
+                except (ValueError, TypeError):
+                    freq = 0.0
+                rows.append((freq, row, title))
+        except Exception:
+            continue
+        rows.sort(key=lambda x: x[0], reverse=True)
+        for freq, row, title in rows[:top_n_per_company]:
+            diff = (row.get("Difficulty") or "unknown").strip().lower()
+            topics = [t.strip() for t in (row.get("Topics") or "").split(",") if t.strip()]
+            questions.append(InterviewQuestion(
+                id=generate_question_id(f"{company}|{title}", "liquidslr"),
+                company=company,
+                position="Software Engineer",
+                question_type="technical_coding",
+                difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
+                question_text=f"{title} — asked at {company} (LeetCode).",
+                source="github_company-wise-liquidslr",
+                source_url=(row.get("Link") or "").strip() or None,
+                interview_date=approx_date,
+                tags=(["leetcode", "coding"] + topics)[:8],
+                upvotes=int(freq * 100),
+                answer_hint=None,
+            ))
+
+    print(f"  [liquidslr] parsed {len(questions)} questions")
+    return questions
+
+
 def scrape_github_repos(resume: bool = True) -> List[InterviewQuestion]:
     """Main entry point: scrape all configured GitHub repos for interview questions.
 
@@ -881,10 +963,17 @@ def scrape_github_repos(resume: bool = True) -> List[InterviewQuestion]:
 
     # Company-wise LeetCode questions (recent, per-company, high volume)
     try:
-        print("\nProcessing company-wise LeetCode repo...")
+        print("\nProcessing company-wise LeetCode repo (krishnadey30)...")
         all_questions.extend(parse_company_wise_leetcode())
     except Exception as e:
         logger.error(f"Error processing company-wise repo: {e}")
+
+    # Second company-wise repo: finer recency windows + topic tags
+    try:
+        print("\nProcessing company-wise LeetCode repo (liquidslr)...")
+        all_questions.extend(parse_company_wise_liquidslr())
+    except Exception as e:
+        logger.error(f"Error processing liquidslr repo: {e}")
 
     # Deduplicate
     unique_questions = deduplicate_questions(all_questions)
