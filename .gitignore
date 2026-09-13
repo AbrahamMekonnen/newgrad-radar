@@ -65,3 +65,4 @@ scraper/.scraper_state/
 
 # Telegram discovered-channel cache (regenerated each run)
 scraper/sources/interview_questions/.telegram_channels.json
+scraper/sources/interview_questions/.telegram_entities.json

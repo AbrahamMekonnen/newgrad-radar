@@ -620,6 +620,48 @@ def _save_channel_cache(usernames: List[str]) -> None:
         logger.debug(f"Could not persist channel cache: {e}")
 
 
+# Richer cache holding id + access_hash so warm runs can build InputPeerChannel
+# directly and skip the (slow) discovery stage without any ResolveUsername call.
+_ENTITY_CACHE_FILE = os.path.join(
+    os.path.dirname(__file__), ".telegram_entities.json"
+)
+
+
+def _save_entity_cache(entities: List[Any]) -> None:
+    try:
+        import json, time
+        rows = []
+        for e in entities:
+            ah = getattr(e, "access_hash", None)
+            eid = getattr(e, "id", None)
+            if ah is None or eid is None:
+                continue
+            rows.append({
+                "id": eid,
+                "access_hash": ah,
+                "username": getattr(e, "username", None),
+                "title": getattr(e, "title", None),
+                "participants": getattr(e, "participants_count", 0) or 0,
+            })
+        with open(_ENTITY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"saved_at": time.time(), "channels": rows}, f)
+        logger.info(f"Entity cache now holds {len(rows)} channels (with access_hash)")
+    except Exception as e:
+        logger.debug(f"Could not persist entity cache: {e}")
+
+
+def _load_entity_cache(max_age_hours: float = 12) -> List[Dict[str, Any]]:
+    try:
+        import json, time
+        with open(_ENTITY_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if time.time() - data.get("saved_at", 0) > max_age_hours * 3600:
+            return []  # stale — force fresh discovery
+        return data.get("channels", []) or []
+    except Exception:
+        return []
+
+
 def _is_public_channel(chat: Any) -> bool:
     """A broadcast channel or megagroup with a public username (readable
     without joining)."""
@@ -750,6 +792,7 @@ async def discover_channels(
     entities.sort(key=lambda c: getattr(c, "participants_count", 0) or 0, reverse=True)
     entities = entities[:max_channels]
     _save_channel_cache([c.username for c in entities if getattr(c, "username", None)])
+    _save_entity_cache(entities)  # persist id+access_hash for fast warm runs
     logger.info(f"Discovered {len(entities)} public channels (search + recommendations)")
     return entities
 
@@ -822,155 +865,133 @@ async def fetch_telegram_messages(
                 return []
 
         from telethon.errors import FloodWaitError
+        from telethon.tl.types import InputPeerChannel
 
-        # Build the target list. Each entry is (username, entity_or_None):
-        #   - seed usernames + cached usernames -> (name, None), resolved lazily
-        #   - discovered entities -> (username, entity), used WITHOUT a resolve
-        # Entities are preferred because resolving usernames is what triggers
-        # multi-hour flood bans; discovery hands us access_hash directly.
+        # Build the target list. Each entry is (label, peer, trusted):
+        #   - seed usernames        -> (name, None, False)  resolved lazily
+        #   - warm entity cache     -> (name, InputPeerChannel, True)  no resolve
+        #   - freshly discovered    -> (name, entity, True)  no resolve
+        # peers built from access_hash need no ResolveUsername call — bulk
+        # resolves are what trigger 12–24h flood bans.
         targets: List[Any] = []
         seen_ch: set = set()
 
-        def _queue(username: Optional[str], entity: Any) -> None:
-            if not username:
+        def _queue(label: Optional[str], peer: Any, trusted: bool) -> None:
+            if not label:
                 return
-            key = username.lower()
+            key = label.lower()
             if key in seen_ch:
                 return
             seen_ch.add(key)
-            targets.append((username, entity))
+            targets.append((label, peer, trusted))
 
         for name in channels:  # explicit seeds first
-            _queue(name, None)
-        # NOTE: we intentionally do NOT seed from the username cache here —
-        # reading a cached username requires a ResolveUsername call, and doing
-        # that in bulk is exactly what triggers 12–24h flood bans. Discovery
-        # returns live entities (with access_hash) every run instead, which
-        # need no resolve. The cache is kept only as an observability record.
+            _queue(name, None, False)
 
         if discover:
-            try:
-                discovered = await discover_channels(client, max_channels=max_channels)
-            except Exception as e:
-                logger.warning(f"Channel discovery failed: {e}")
-                discovered = []
-            for ent in discovered:
-                _queue(getattr(ent, "username", None), ent)
+            warm = _load_entity_cache(max_age_hours=12)
+            if warm:
+                # Reuse recently-discovered channels — skips the ~6 min search
+                # + recommendations stage entirely on warm runs.
+                logger.info(f"Using {len(warm)} channels from warm entity cache (skipping discovery)")
+                for row in warm:
+                    ah = row.get("access_hash")
+                    if ah is None:
+                        continue
+                    peer = InputPeerChannel(channel_id=row["id"], access_hash=ah)
+                    _queue(row.get("username") or str(row["id"]), peer, True)
+            else:
+                try:
+                    discovered = await discover_channels(client, max_channels=max_channels)
+                except Exception as e:
+                    logger.warning(f"Channel discovery failed: {e}")
+                    discovered = []
+                for ent in discovered:
+                    _queue(getattr(ent, "username", None), ent, True)
 
         targets = targets[:max_channels]
-        logger.info(f"Monitoring {len(targets)} channels total (seed + cache + discovered)")
+        logger.info(f"Monitoring {len(targets)} channels total")
 
         _loop_start = asyncio.get_event_loop().time()
-        _fetched_channels = 0
 
-        for channel_name, entity in targets:
-            # Respect the per-run time budget so Telegram doesn't starve the
-            # other scrapers in a shared CI job; incremental scraping means the
-            # channels we skip this run get covered on the next one.
-            if time_budget_seconds is not None and \
-                    (asyncio.get_event_loop().time() - _loop_start) > time_budget_seconds:
-                logger.info(
-                    f"Time budget {time_budget_seconds}s reached after "
-                    f"{_fetched_channels} channels — stopping (rest next run)"
-                )
-                break
-            _fetched_channels += 1
+        async def _fetch_one(label: str, peer: Any, trusted: bool) -> List[Dict[str, Any]]:
+            """Fetch one channel's recent messages. Returns msg dicts (may be [])."""
+            out: List[Dict[str, Any]] = []
             try:
-                # Apply rate limiting before API call
-                if _rate_limiter:
-                    delay = _rate_limiter.get_delay()
-                    if delay > 0:
-                        await asyncio.sleep(delay)
-
-                start_time = asyncio.get_event_loop().time()
-                if entity is not None:
-                    channel = entity  # no resolve needed (flood-safe)
+                if peer is not None:
+                    channel = peer  # entity or InputPeerChannel — no resolve
                 else:
                     try:
-                        channel = await client.get_entity(channel_name)
+                        channel = await client.get_entity(label)
                     except FloodWaitError as e:
-                        wait = getattr(e, "seconds", 0)
-                        logger.warning(f"Resolve flood wait {wait}s for @{channel_name} — skipping")
-                        continue
-
-                if not isinstance(channel, Channel):
-                    logger.warning(f"@{channel_name} is not a channel, skipping")
-                    if _rate_limiter:
-                        _rate_limiter.record_success(0.1)
-                    continue
+                        logger.warning(f"Resolve flood wait {e.seconds}s for @{label} — skipping")
+                        return out
+                    if not isinstance(channel, Channel):
+                        return out
 
                 count = 0
-                skipped = 0
-
-                async for message in client.iter_messages(
-                    channel,
-                    limit=max_messages_per_channel,
-                ):
+                async for message in client.iter_messages(channel, limit=max_messages_per_channel):
                     if not isinstance(message, Message):
                         continue
-
-                    # Skip old messages
                     if message.date.replace(tzinfo=None) < cutoff_date:
                         break
-
-                    # Skip non-text messages
-                    if not message.text:
+                    if not message.text or len(message.text) < 30:
                         continue
-
-                    # Skip very short messages
-                    if len(message.text) < 30:
-                        continue
-
-                    # Create unique message ID
-                    msg_key = f"{channel_name}:{message.id}"
-
-                    # Skip if already processed (incremental scraping)
+                    msg_key = f"{label}:{message.id}"
                     if _incremental and _incremental.has_seen(msg_key):
-                        skipped += 1
                         continue
-
                     msg_data = {
                         "text": message.text,
                         "date": message.date.isoformat(),
-                        "channel": channel_name,
-                        "channel_title": getattr(channel, "title", channel_name),
+                        "channel": label,
+                        "channel_title": getattr(channel, "title", label),
                         "message_id": message.id,
                         "views": getattr(message, "views", 0) or 0,
                         "forwards": getattr(message, "forwards", 0) or 0,
                     }
-
-                    # Archive immediately (ephemeral content!) — best-effort,
-                    # never let an archiver quirk drop the message.
                     if _archiver:
                         try:
-                            _archiver.archive({
-                                'source': f'telegram:{channel_name}',
-                                'content': message.text,
-                                'metadata': msg_data
-                            })
+                            _archiver.archive({'source': f'telegram:{label}',
+                                               'content': message.text, 'metadata': msg_data})
                         except Exception:
                             pass
-
-                    messages.append(msg_data)
-
-                    # Mark as seen for incremental scraping
+                    out.append(msg_data)
                     if _incremental:
                         _incremental.mark_seen(msg_key)
-
                     count += 1
-
-                # Record rate limiter metrics
-                elapsed = asyncio.get_event_loop().time() - start_time
-                if _rate_limiter:
-                    _rate_limiter.record_success(elapsed)
-
-                logger.info(f"Fetched {count} new messages from @{channel_name} (skipped {skipped} seen)")
-
+                if count:
+                    logger.info(f"Fetched {count} new messages from @{label}")
+            except FloodWaitError as e:
+                if e.seconds <= 20:
+                    await asyncio.sleep(e.seconds + 1)
+                else:
+                    logger.warning(f"History flood wait {e.seconds}s for @{label} — skipping")
             except Exception as e:
-                logger.error(f"Error fetching @{channel_name}: {e}")
-                if _rate_limiter:
-                    _rate_limiter.record_failure()
-                continue
+                logger.debug(f"Error fetching @{label}: {e}")
+            return out
+
+        # Fetch channels concurrently in bounded batches. Concurrency turns a
+        # ~20 min sequential crawl into a few minutes; the time budget is
+        # checked between batches so overrun is at most one batch.
+        concurrency = 6
+        i = 0
+        stopped = False
+        while i < len(targets):
+            if time_budget_seconds is not None and \
+                    (asyncio.get_event_loop().time() - _loop_start) > time_budget_seconds:
+                logger.info(f"Time budget {time_budget_seconds}s reached after {i} channels "
+                            f"— stopping (rest next run)")
+                stopped = True
+                break
+            batch = targets[i:i + concurrency]
+            i += concurrency
+            results = await asyncio.gather(
+                *[_fetch_one(lbl, peer, trusted) for lbl, peer, trusted in batch]
+            )
+            for r in results:
+                messages.extend(r)
+        if not stopped:
+            logger.info(f"Fetched all {i} channels within budget")
 
     # Save incremental state
     if _incremental:
