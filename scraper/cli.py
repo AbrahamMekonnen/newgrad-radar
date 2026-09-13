@@ -18,6 +18,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+# Force UTF-8 stdout/stderr so the ✓/✗/emoji status output doesn't crash on
+# Windows consoles (cp1252). No-op where already UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Load .env file
 def load_env():
     """Load environment variables from .env file."""
@@ -189,6 +197,8 @@ def cmd_run_all(args):
     ))
 
     print_stats(stats)
+    if stats.scrapers_failed:
+        sys.exit(1)
 
 
 def cmd_run(args):
@@ -218,6 +228,8 @@ def cmd_run(args):
     ))
 
     print_stats(stats)
+    if stats.scrapers_failed:
+        sys.exit(1)
 
 
 def print_stats(stats):

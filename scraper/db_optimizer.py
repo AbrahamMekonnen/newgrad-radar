@@ -435,21 +435,21 @@ class InterviewQuestionDB:
 
         try:
             with self.pool.get_client() as client:
-                result = client.table('interview_questions').select(
-                    'content_hash'
-                ).not_.is_('content_hash', 'null').execute()
-
-                self._hash_cache = {
-                    row['content_hash']
-                    for row in result.data
-                    if row.get('content_hash')
-                }
+                offset = 0
+                while True:
+                    result = client.table('interview_questions').select(
+                        'company_name,question_text,source_name,id'
+                    ).order('id').range(offset, offset + 999).execute()
+                    self._hash_cache.update(self._generate_hash(row) for row in result.data)
+                    if len(result.data) < 1000:
+                        break
+                    offset += 1000
                 self._hash_cache_loaded = True
                 logger.info(f"Loaded {len(self._hash_cache)} content hashes")
 
         except Exception as e:
             logger.warning(f"Could not load hash cache: {e}")
-            self._hash_cache = set()
+            raise
 
     def deduplicate(self, questions: list[dict]) -> list[dict]:
         """Remove duplicate questions.
@@ -490,11 +490,11 @@ class InterviewQuestionDB:
         """
         now = datetime.now(timezone.utc).isoformat()
 
-        return {
+        prepared = {
             'company_name': q.get('company_name', 'Unknown')[:255],
             'company_slug': q.get('company_slug'),
             'position': q.get('position', q.get('role'))[:255] if q.get('position') or q.get('role') else None,
-            'position_level': q.get('position_level', 'new_grad'),
+            'position_level': q.get('position_level'),
             'team': q.get('team'),
 
             'question_type': q.get('question_type', 'other'),
@@ -529,6 +529,19 @@ class InterviewQuestionDB:
             'created_at': now,
             'updated_at': now,
         }
+        # Core schema shared with the web app. Enrichment columns require
+        # optional migrations and must not break basic question ingestion.
+        columns = {
+            'company_name', 'company_slug', 'position', 'position_level',
+            'question_type', 'question_text', 'question_title', 'difficulty',
+            'interview_round', 'interview_date', 'source_name', 'source_url',
+            'scraped_at', 'is_verified', 'upvotes', 'is_duplicate', 'created_at',
+        }
+        aliases = {'coding': 'technical_coding', 'technical': 'technical_conceptual',
+                   'conceptual': 'technical_conceptual', 'general': 'other'}
+        prepared['question_type'] = aliases.get(prepared['question_type'], prepared['question_type'])
+        return {key: value for key, value in prepared.items() if key in columns}
+
 
     def batch_insert(
         self,
@@ -568,10 +581,11 @@ class InterviewQuestionDB:
 
         result = inserter.insert(prepared)
 
+        if result.inserted != len(prepared):
+            raise RuntimeError(f'Question persistence incomplete: {result.inserted}/{len(prepared)} inserted; {result.errors}')
+
         # Update hash cache with newly inserted
-        for q in prepared:
-            if q.get('content_hash'):
-                self._hash_cache.add(q['content_hash'])
+        self._hash_cache.update(self._generate_hash(q) for q in questions)
 
         return result
 

@@ -563,6 +563,36 @@ class InterviewQuestionOrchestrator:
         except Exception as e:
             logger.error(f"Failed to update timestamp for {scraper.name}: {e}")
 
+    @staticmethod
+    def _normalize_question(question) -> dict:
+        """Adapt scraper models and dictionaries to the persistence contract."""
+        if not isinstance(question, dict):
+            from dataclasses import is_dataclass
+            if callable(getattr(question, 'to_dict', None)):
+                question = question.to_dict()
+            elif is_dataclass(question):
+                question = asdict(question)
+            else:
+                raise TypeError(f'Unsupported question record: {type(question).__name__}')
+        if not isinstance(question, dict):
+            raise TypeError('Question serialization must return a dictionary')
+        q = dict(question)
+        text = q.get('question_text')
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError('Question text must be a non-empty string')
+        q['question_text'] = text.strip()
+        q['company_name'] = q.get('company_name') or q.get('company') or 'Unknown'
+        q['source_name'] = q.get('source_name') or q.get('source') or 'unknown'
+        q['source'] = q['source_name']
+        q['company_normalized'] = q.get('company_normalized') or q['company_name']
+        q['role_normalized'] = q.get('role_normalized') or q.get('position') or q.get('role') or ''
+        q['tags'] = q.get('tags') or q.get('topics') or []
+        for key in ('question_type', 'difficulty'):
+            value = q.get(key)
+            if isinstance(value, Enum):
+                q[key] = value.value
+        return q
+
     def _generate_question_hash(self, question: dict) -> str:
         """Generate a unique hash for deduplication."""
         key_parts = [
@@ -586,7 +616,8 @@ class InterviewQuestionOrchestrator:
         duplicates = 0
 
         async with self._lock:
-            for q in questions:
+            for question in questions:
+                q = self._normalize_question(question)
                 q_hash = self._generate_question_hash(q)
                 if q_hash not in self._seen_hashes:
                     self._seen_hashes.add(q_hash)
@@ -625,17 +656,41 @@ class InterviewQuestionOrchestrator:
         try:
             # Import the module dynamically
             import importlib
+            import inspect
             module = importlib.import_module(scraper.module_path)
             scrape_func = getattr(module, scraper.function_name)
+
+            # Scraper functions have heterogeneous signatures — pass only the
+            # kwargs each one actually declares (or everything if it takes
+            # **kwargs). Avoids "unexpected keyword argument 'start_date'".
+            candidate_kwargs = {
+                'start_date': start_date,
+                'end_date': self.end_date,
+                'months_back': getattr(self, 'months_back', None),
+            }
+            candidate_kwargs = {k: v for k, v in candidate_kwargs.items() if v is not None}
+            try:
+                sig = inspect.signature(scrape_func)
+                accepts_var_kw = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in sig.parameters.values()
+                )
+                if accepts_var_kw:
+                    call_kwargs = candidate_kwargs
+                else:
+                    call_kwargs = {
+                        k: v for k, v in candidate_kwargs.items()
+                        if k in sig.parameters
+                    }
+            except (ValueError, TypeError):
+                call_kwargs = {}
 
             # Call the scraper function with retry
             for attempt in range(scraper.max_retries):
                 try:
                     result = await asyncio.wait_for(
                         asyncio.to_thread(
-                            scrape_func,
-                            start_date=start_date,
-                            end_date=self.end_date,
+                            lambda: scrape_func(**call_kwargs),
                         ),
                         timeout=scraper.timeout,
                     )
@@ -849,7 +904,7 @@ class InterviewQuestionOrchestrator:
 
         except Exception as e:
             logger.exception(f"Failed to save questions: {e}")
-            return 0, 0
+            raise
 
     async def run(self) -> OrchestratorStats:
         """Run all scrapers in parallel and return statistics."""

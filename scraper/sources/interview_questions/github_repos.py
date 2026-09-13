@@ -374,7 +374,9 @@ def extract_companies(text: str) -> list[str]:
     for pattern in COMPANY_PATTERNS:
         matches = re.findall(pattern, text, re.IGNORECASE)
         companies.extend(matches)
-    return list(set(companies))
+    # Preserve extraction order across Python processes; a set makes the
+    # selected company (and therefore the deduplication hash) unstable.
+    return list(dict.fromkeys(companies))
 
 
 def extract_topics(text: str) -> list[str]:

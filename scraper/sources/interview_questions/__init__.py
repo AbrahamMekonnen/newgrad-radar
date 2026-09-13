@@ -41,31 +41,56 @@ class Difficulty(str, Enum):
         return self.value
 
 
-@dataclass
 class InterviewQuestion:
-    """Represents a single interview question."""
-    id: str
-    company: str
-    position: str
-    question_type: str  # Use string to allow flexibility (enum value or raw string)
-    difficulty: str  # Use string to allow flexibility
-    question_text: str
-    source: str
-    source_url: str
-    posted_date: Optional[str] = None
-    tags: Optional[List[str]] = None
-    interview_date: Optional[str] = None
-    role: Optional[str] = None
-    context: Optional[str] = None
-    upvotes: Optional[int] = None
-    round_info: Optional[str] = None
+    """Represents a single interview question.
 
-    def __post_init__(self):
-        if self.tags is None:
-            self.tags = []
+    Uses a tolerant __init__ (rather than a strict dataclass) because the
+    various scraper modules construct questions with heterogeneous field
+    sets — e.g. `topics` (alias for tags), `answer_hint`, no `position`.
+    Unknown keys are preserved in `extra` instead of raising TypeError.
+    """
+
+    _KNOWN = {
+        "id", "company", "position", "question_type", "difficulty",
+        "question_text", "source", "source_url", "posted_date", "tags",
+        "interview_date", "role", "context", "upvotes", "round_info",
+        "answer_hint", "scraped_at",
+    }
+
+    def __init__(self, **kwargs):
+        # Alias: several scrapers use `topics` for what we store as `tags`
+        if "topics" in kwargs and "tags" not in kwargs:
+            kwargs["tags"] = kwargs.pop("topics")
+        # Coerce enum values to their string form
+        for k in ("question_type", "difficulty"):
+            v = kwargs.get(k)
+            if v is not None and not isinstance(v, str):
+                kwargs[k] = getattr(v, "value", str(v))
+
+        self.id = kwargs.get("id")
+        self.company = kwargs.get("company")
+        self.position = kwargs.get("position") or kwargs.get("role") or "General"
+        self.question_type = kwargs.get("question_type") or "general"
+        self.difficulty = kwargs.get("difficulty") or "unknown"
+        self.question_text = kwargs.get("question_text") or ""
+        self.source = kwargs.get("source") or ""
+        self.source_url = kwargs.get("source_url")
+        self.posted_date = kwargs.get("posted_date")
+        self.tags = kwargs.get("tags") or []
+        self.interview_date = kwargs.get("interview_date")
+        self.role = kwargs.get("role")
+        self.context = kwargs.get("context")
+        self.upvotes = kwargs.get("upvotes")
+        self.round_info = kwargs.get("round_info")
+        self.answer_hint = kwargs.get("answer_hint")
+        self.scraped_at = kwargs.get("scraped_at")
+        # Preserve anything else without failing
+        self.extra = {k: v for k, v in kwargs.items() if k not in self._KNOWN}
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = {k: v for k, v in self.__dict__.items() if k != "extra"}
+        d.update(getattr(self, "extra", {}) or {})
+        return d
 
 
 # Import scraper functions - use lazy imports to avoid circular dependencies
