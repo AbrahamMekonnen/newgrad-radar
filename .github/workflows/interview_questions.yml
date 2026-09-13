@@ -16,7 +16,7 @@ on:
       months:
         description: "Months of history to fetch"
         type: string
-        default: "12"
+        default: "6"
 
 jobs:
   scrape-interviews:
@@ -75,7 +75,7 @@ jobs:
         run: |
           cd scraper
           MONTHS="${{ inputs.months }}"
-          MONTHS="${MONTHS:-12}"
+          MONTHS="${MONTHS:-6}"
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
             python cli.py run-all --months "$MONTHS" --dry-run
           else

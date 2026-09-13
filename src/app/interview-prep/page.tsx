@@ -49,13 +49,12 @@ const ROLES = [
   { value: 'infra', label: 'Infrastructure' },
 ];
 
+// We only scrape ~6 months of recent history, so longer windows (year, all
+// time) would return the identical set. Keep only windows that differentiate.
 const DATE_RANGES = [
   { value: 1, label: 'Last Month' },
   { value: 3, label: 'Last 3 Months' },
   { value: 6, label: 'Last 6 Months' },
-  { value: 12, label: 'Last Year' },
-  { value: 24, label: 'Last 2 Years' },
-  { value: 600, label: 'All Time' },
 ];
 
 const DIFFICULTY_COLORS: Record<string, string> = {

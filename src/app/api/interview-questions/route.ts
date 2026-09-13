@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     const company_slug = searchParams.get('company_slug') || undefined;
     const position = searchParams.get('position') || undefined;
     const question_type = searchParams.get('question_type') as QuestionType | undefined;
-    const months_back = parseInt(searchParams.get('months_back') || '24', 10);
+    const months_back = parseInt(searchParams.get('months_back') || '6', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const search = searchParams.get('search') || undefined;
