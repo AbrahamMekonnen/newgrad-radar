@@ -244,6 +244,10 @@ class InterviewQuestionOrchestrator:
             module_path='sources.reddit_interviews',
             function_name='scrape_reddit',
             priority=1,
+            # Disabled: Reddit's Nov-2025 API policy requires per-app
+            # pre-approval, so every run just 401s and wastes calls. Flip back
+            # to True if/when an approved Reddit app + credentials are in place.
+            enabled=False,
         ),
 
         # Tier 2: Structured sites (reliable, need parsing)
