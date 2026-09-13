@@ -570,6 +570,40 @@ def extract_badges(raw: dict, company_slug: str, company_info: dict) -> list[str
     return badges
 
 
+def is_generic_careers_url(url: str) -> bool:
+    """True if the URL is a generic careers landing page rather than a specific
+    job posting. Used to drop synthetic "Software Engineering at X" sponsor
+    entries whose links go to a company's careers homepage, not the actual job.
+    """
+    import re
+    u = (url or "").strip().rstrip("/")
+    if not u:
+        return True
+    m = re.match(r"https?://([^/]+)(/.*)?$", u)
+    if not m:
+        return True
+    domain = m.group(1).lower()
+    path = m.group(2) or ""
+    lower = u.lower()
+    # Specific-posting markers -> NOT generic
+    if any(k in lower for k in (
+        "grnh.se/", "/jobs/", "/job/", "/postings/", "/apply", "/o/",
+        "gh_jid=", "jobid=", "/careers/job", "/en-us/job",
+    )):
+        return False
+    if re.search(r"\d{4,}", path):
+        return False
+    if len(path.strip("/")) >= 18:
+        return False
+    if path == "":
+        return True
+    if re.search(r"^/careers?/?$|^/jobs?/?$|^/en/?$|^/work-with-us/?$|^/company/careers/?$", path):
+        return True
+    if "myworkdayjobs.com" in domain and not re.search(r"\d", path):
+        return True
+    return False
+
+
 def normalize_job(raw: dict, company_slug: str) -> dict:
     """Convert raw job to normalized format.
 
@@ -1342,6 +1376,10 @@ def main():
         # Skip malformed jobs missing required fields (some sources return
         # partial records without a title/url).
         if not job.get("title") or not job.get("url"):
+            continue
+        # Skip synthetic entries whose link is a generic careers homepage
+        # rather than a specific job posting (bad "Apply" links).
+        if is_generic_careers_url(job.get("url", "")):
             continue
         company_slug = normalize_company(job.get("company", ""))
         if company_slug and company_slug in COMPANIES:

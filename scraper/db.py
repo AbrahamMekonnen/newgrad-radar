@@ -25,9 +25,9 @@ def detect_ats_type(url: str, source: str = "") -> Optional[str]:
     is a generic careers page with no recognizable ATS."""
     u = (url or "").lower()
     patterns = [
-        ("greenhouse", ["greenhouse.io", "boards.greenhouse", "job-boards.greenhouse"]),
+        ("greenhouse", ["greenhouse.io", "boards.greenhouse", "job-boards.greenhouse", "grnh.se", "gh_jid="]),
         ("lever", ["lever.co", "jobs.lever"]),
-        ("ashby", ["ashbyhq.com", "jobs.ashby"]),
+        ("ashby", ["ashbyhq.com", "jobs.ashby", "ashby_jid="]),
         ("workday", ["myworkdayjobs.com", ".wd1.", ".wd2.", ".wd3.", ".wd5."]),
         ("smartrecruiters", ["smartrecruiters.com"]),
         ("jobvite", ["jobvite.com"]),
