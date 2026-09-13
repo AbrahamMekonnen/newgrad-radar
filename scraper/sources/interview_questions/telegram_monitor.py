@@ -226,35 +226,93 @@ DEFAULT_CHANNELS = [
 # Keyword queries used to DISCOVER live public channels/groups via Telegram's
 # global search (contacts.Search). Public hardcoded usernames rot fast, but
 # people constantly create new channels that dump company interview questions,
-# OAs, and placement experiences — search finds the ones that are alive right
-# now. Kept broad and multi-lingual/multi-region to maximize coverage.
-SEARCH_QUERIES = [
-    # Core interview-prep
-    "leetcode", "leetcode discuss", "coding interview", "interview questions",
-    "interview experience", "interview prep", "tech interview", "faang",
-    "faang interview", "online assessment", "oa questions", "coding round",
-    "system design interview", "dsa", "dsa sheet", "competitive programming",
-    "software engineer interview", "sde interview", "sde sheet",
-    "backend interview", "frontend interview", "machine learning interview",
-    "data science interview", "coding questions", "hackerrank", "codesignal",
-    # Company-specific (people name channels after the company)
-    "amazon interview", "amazon oa", "google interview", "microsoft interview",
-    "meta interview", "apple interview", "netflix interview", "uber interview",
-    "goldman sachs interview", "jane street", "citadel interview",
-    "nvidia interview", "salesforce interview", "adobe interview",
-    "bloomberg interview", "atlassian interview", "stripe interview",
-    "tiktok interview", "bytedance interview", "oracle interview",
-    # India / placements (huge volume here)
-    "placement", "placement preparation", "off campus", "off campus drive",
-    "on campus placement", "coding ninjas", "gfg", "geeksforgeeks",
-    "interviewbit", "placement material", "sde placement", "campus placement",
-    "tcs interview", "infosys interview", "wipro interview", "flipkart interview",
-    "product based companies", "service based companies", "dream placement",
-    # Region-specific / other languages
-    "собеседование программист", "алгоритмы собеседование", "leetcode ru",
-    "面试题", "算法面试", "求职", "codeforces", "acm icpc",
-    "entrevista programacion", "entretien technique", "vorstellungsgespräch",
-]
+# OAs, and placement experiences — search finds the ones alive right now.
+# Built programmatically so coverage spans many languages, countries and
+# companies — Telegram search matches channel titles/usernames, so native-
+# script terms surface non-English channels English terms never would.
+
+
+def _build_search_queries() -> List[str]:
+    english = [
+        # Core interview-prep
+        "leetcode", "leetcode discuss", "leetcode solutions", "coding interview",
+        "interview questions", "interview experience", "interview preparation",
+        "interview prep", "tech interview", "faang", "faang interview",
+        "faang preparation", "online assessment", "oa questions", "coding round",
+        "system design interview", "system design", "dsa", "dsa sheet",
+        "dsa questions", "competitive programming", "software engineer interview",
+        "sde interview", "sde sheet", "sde preparation", "backend interview",
+        "frontend interview", "fullstack interview", "machine learning interview",
+        "ml interview", "data science interview", "data engineer interview",
+        "coding questions", "coding problems", "hackerrank", "codesignal",
+        "hackerearth", "codechef", "interview cake", "cracking the coding interview",
+        "behavioral interview", "hr interview", "aptitude", "mock interview",
+        "referrals", "off campus", "off campus drive", "on campus placement",
+        "placement", "placement preparation", "placement material", "campus placement",
+        "product based companies", "service based companies", "dream placement",
+        "job openings", "tech jobs", "fresher jobs", "internship", "new grad",
+        "quant interview", "quant finance interview", "trading interview",
+        "devops interview", "sql interview", "python interview", "java interview",
+        "javascript interview", "golang interview", "android interview",
+        "ios interview", "cloud interview", "aws interview", "kubernetes interview",
+    ]
+    # People name channels after the target company.
+    companies = [
+        "amazon", "google", "microsoft", "meta", "apple", "netflix", "uber",
+        "goldman sachs", "jane street", "citadel", "nvidia", "salesforce",
+        "adobe", "bloomberg", "atlassian", "stripe", "tiktok", "bytedance",
+        "oracle", "linkedin", "paypal", "walmart", "visa", "mastercard",
+        "jpmorgan", "morgan stanley", "deloitte", "accenture", "tcs", "infosys",
+        "wipro", "cognizant", "capgemini", "flipkart", "swiggy", "zomato",
+        "paytm", "razorpay", "phonepe", "samsung", "intel", "qualcomm", "cisco",
+        "vmware", "sap", "ibm", "dell", "servicenow", "databricks", "snowflake",
+        "palantir", "doordash", "airbnb", "coinbase", "robinhood",
+    ]
+    company_qs = [f"{c} interview" for c in companies] + [f"{c} oa" for c in companies[:20]]
+    # country/region + placement/jobs — surfaces regional community channels.
+    countries = [
+        "india", "usa", "uk", "canada", "germany", "russia", "ukraine", "china",
+        "japan", "korea", "brazil", "indonesia", "vietnam", "turkey", "egypt",
+        "nigeria", "pakistan", "bangladesh", "poland", "spain", "france",
+        "israel", "singapore", "philippines", "mexico", "argentina", "italy",
+    ]
+    country_qs = []
+    for c in countries:
+        country_qs += [f"{c} placement", f"{c} it jobs", f"{c} coding jobs",
+                       f"{c} tech interview"]
+    # Native-script / transliterated terms per major language.
+    multilingual = [
+        # Russian / Ukrainian
+        "собеседование", "собеседование программист", "алгоритмы собеседование",
+        "вопросы на собеседовании", "подготовка к собеседованию", "литкод",
+        "співбесіда", "айті вакансії",
+        # Chinese (simplified/traditional)
+        "面试题", "算法面试", "求职", "刷题", "面经", "力扣", "字节跳动面试",
+        "程序员面试", "校招", "内推",
+        # Hindi / Indian languages
+        "नौकरी", "प्लेसमेंट", "साक्षात्कार",
+        # Spanish / Portuguese
+        "entrevista programacion", "entrevista tecnica", "preparacion entrevista",
+        "entrevista de emprego ti", "vagas programador", "entrevista tecnica ti",
+        # Arabic
+        "مقابلة عمل برمجة", "أسئلة مقابلة", "وظائف برمجة",
+        # Indonesian / Vietnamese / Turkish / Korean / Japanese / French / German
+        "lowongan programmer", "persiapan interview", "phong van lap trinh",
+        "tuyen dung it", "yazılım mülakat", "mülakat soruları",
+        "개발자 면접", "코딩테스트", "コーディング面接", "エンジニア転職",
+        "entretien technique", "offres emploi developpeur",
+        "vorstellungsgespräch programmierer", "bewerbung informatik",
+    ]
+    seen = set()
+    out = []
+    for q in english + company_qs + country_qs + multilingual:
+        if q not in seen:
+            seen.add(q)
+            out.append(q)
+    return out
+
+
+SEARCH_QUERIES = _build_search_queries()
 
 # Company detection patterns (100+ companies)
 KNOWN_COMPANIES = [
@@ -534,58 +592,166 @@ def extract_topics(text: str) -> List[str]:
     return topics
 
 
+# Persisted set of discovered channel usernames. Grows across runs so the
+# monitored universe keeps expanding instead of restarting from scratch.
+_CHANNEL_CACHE_FILE = os.path.join(
+    os.path.dirname(__file__), ".telegram_channels.json"
+)
+
+
+def _load_channel_cache() -> List[str]:
+    try:
+        import json
+        with open(_CHANNEL_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return list(data) if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_channel_cache(usernames: List[str]) -> None:
+    try:
+        import json
+        merged = sorted(set(_load_channel_cache()) | set(usernames))
+        with open(_CHANNEL_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(merged, f)
+        logger.info(f"Channel cache now holds {len(merged)} usernames")
+    except Exception as e:
+        logger.debug(f"Could not persist channel cache: {e}")
+
+
+def _is_public_channel(chat: Any) -> bool:
+    """A broadcast channel or megagroup with a public username (readable
+    without joining)."""
+    if not getattr(chat, "username", None):
+        return False
+    return bool(getattr(chat, "broadcast", False) or getattr(chat, "megagroup", False))
+
+
+# Tokens that mark a channel as interview/coding/placement-relevant. Telegram's
+# "similar channels" recommendations drift fast (a jobs channel is "similar" to
+# crypto, English-learning, news...), so every discovered channel must match at
+# least one of these in its username or title or it is dropped.
+_RELEVANCE_TOKENS = (
+    "interview", "leetcode", "leet code", "coding", "coding", "dsa", "sde",
+    "faang", "maang", "algorithm", "algo", "competitive", "hackerrank",
+    "codeforces", "codechef", "codingninja", "coding ninja", "interviewbit",
+    "geeksforgeeks", "gfg", "placement", "campus", "aptitude", "cracking",
+    "system design", "systemdesign", "oa ", "online assessment", "coding test",
+    "codetest", "programmer", "programming", "developer", "software engineer",
+    "swe", "cs prep", "tech prep", "career prep", "off campus", "offcampus",
+    "recruit", "questpre", "exam2026", "exam 2026",
+    # multilingual interview/coding markers
+    "собеседован", "литкод", "алгоритм", "面试", "面经", "刷题", "力扣", "校招",
+    "코딩", "면접", "コーディング", "エンジニア", "mülakat", "entrevista",
+    "programador", "programacion", "मॉक", "साक्षात्कार", "प्लेसमेंट",
+)
+
+
+def _is_relevant_channel(chat: Any) -> bool:
+    hay = (
+        (getattr(chat, "username", "") or "") + " " + (getattr(chat, "title", "") or "")
+    ).lower()
+    return any(tok in hay for tok in _RELEVANCE_TOKENS)
+
+
 async def discover_channels(
     client: Any,
     queries: Optional[List[str]] = None,
-    per_query_limit: int = 40,
-    max_channels: int = 250,
-) -> List[str]:
-    """Discover live public channels/groups by searching Telegram globally.
+    per_query_limit: int = 50,
+    max_channels: int = 2500,
+    use_recommendations: bool = True,
+) -> List[Any]:
+    """Discover live public channels/groups and return telethon ENTITIES.
 
-    Uses contacts.Search per keyword and collects public entities that have a
-    username (only those are joinable/readable without an invite). Returns a
-    deduped list of usernames, capped at ``max_channels``.
+    Two-stage expansion:
+      1. contacts.Search across every keyword in ``queries``.
+      2. channels.GetChannelRecommendations ("similar channels") seeded from
+         what stage 1 found — this snowballs into far more channels than
+         search alone surfaces.
+
+    Returns entity objects (which carry access_hash), so callers can read
+    history WITHOUT a per-username ResolveUsername call — resolves are the
+    operation that triggers 12–24h Telegram flood bans.
     """
     try:
         from telethon.tl.functions.contacts import SearchRequest
+        from telethon.errors import FloodWaitError
     except ImportError:
         return []
+    try:
+        from telethon.tl.functions.channels import GetChannelRecommendationsRequest
+        _have_recs = True
+    except ImportError:
+        _have_recs = False
 
     if queries is None:
         queries = SEARCH_QUERIES
 
-    found: Dict[str, int] = {}  # username -> participants/subscribers (for ranking)
-    for q in queries:
+    found: Dict[Any, Any] = {}  # channel_id -> entity (deduped)
+
+    def _add(chat: Any) -> None:
+        if _is_public_channel(chat) and _is_relevant_channel(chat):
+            found.setdefault(getattr(chat, "id", None), chat)
+
+    # Stage 1: keyword search.
+    for i, q in enumerate(queries):
         if len(found) >= max_channels:
             break
         try:
-            if _rate_limiter:
-                delay = _rate_limiter.get_delay()
-                if delay > 0:
-                    await asyncio.sleep(delay)
             res = await client(SearchRequest(q=q, limit=per_query_limit))
+            for chat in getattr(res, "chats", []) or []:
+                _add(chat)
+        except FloodWaitError as e:
+            wait = getattr(e, "seconds", 0)
+            if wait <= 20:
+                await asyncio.sleep(wait + 1)
+            else:
+                logger.warning(f"Search flood wait {wait}s — stopping search stage")
+                break
         except Exception as e:
-            logger.warning(f"Telegram search failed for '{q}': {e}")
-            await asyncio.sleep(1.0)
-            continue
+            logger.debug(f"search '{q}' failed: {e}")
+        if i % 25 == 0:
+            logger.info(f"  search progress: {i}/{len(queries)} queries, {len(found)} channels")
+        await asyncio.sleep(0.3)
 
-        for chat in getattr(res, "chats", []) or []:
-            username = getattr(chat, "username", None)
-            # broadcast channel or megagroup with a public username
-            if not username:
-                continue
-            if not (getattr(chat, "broadcast", False) or getattr(chat, "megagroup", False)):
-                continue
-            uname = username.lower()
-            if uname not in found:
-                found[uname] = getattr(chat, "participants_count", 0) or 0
-        logger.info(f"  search '{q}': {len(found)} unique channels so far")
+    logger.info(f"Search stage found {len(found)} channels")
 
+    # Stage 2: recommendations snowball (breadth-first over what we have).
+    if use_recommendations and _have_recs and found:
+        seeds = list(found.values())
+        idx = 0
+        while idx < len(seeds) and len(found) < max_channels:
+            seed = seeds[idx]
+            idx += 1
+            try:
+                rec = await client(GetChannelRecommendationsRequest(channel=seed))
+                for chat in getattr(rec, "chats", []) or []:
+                    before = len(found)
+                    _add(chat)
+                    # newly found channels become seeds too (bounded by cap)
+                    if len(found) > before and len(seeds) < max_channels:
+                        seeds.append(chat)
+            except FloodWaitError as e:
+                wait = getattr(e, "seconds", 0)
+                if wait <= 20:
+                    await asyncio.sleep(wait + 1)
+                else:
+                    logger.warning(f"Recommendations flood wait {wait}s — stopping")
+                    break
+            except Exception as e:
+                logger.debug(f"recommendations failed: {e}")
+            if idx % 50 == 0:
+                logger.info(f"  recommendations: expanded to {len(found)} channels")
+            await asyncio.sleep(0.2)
+
+    entities = list(found.values())
     # Prefer larger communities first (more content, more likely active).
-    ranked = sorted(found.items(), key=lambda kv: kv[1], reverse=True)
-    usernames = [u for u, _ in ranked][:max_channels]
-    logger.info(f"Discovered {len(usernames)} public channels via search")
-    return usernames
+    entities.sort(key=lambda c: getattr(c, "participants_count", 0) or 0, reverse=True)
+    entities = entities[:max_channels]
+    _save_channel_cache([c.username for c in entities if getattr(c, "username", None)])
+    logger.info(f"Discovered {len(entities)} public channels (search + recommendations)")
+    return entities
 
 
 async def fetch_telegram_messages(
@@ -593,7 +759,8 @@ async def fetch_telegram_messages(
     months_back: int = 5,
     max_messages_per_channel: int = 100,
     discover: bool = True,
-    max_channels: int = 250,
+    max_channels: int = 2000,
+    time_budget_seconds: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Fetch messages from Telegram channels using telethon.
@@ -654,28 +821,61 @@ async def fetch_telegram_messages(
                 logger.error("Set TELEGRAM_PHONE for first-time authentication")
                 return []
 
-        # Discover live channels via global search and merge with the seed
-        # list (seeds first so known-good channels are always covered).
+        from telethon.errors import FloodWaitError
+
+        # Build the target list. Each entry is (username, entity_or_None):
+        #   - seed usernames + cached usernames -> (name, None), resolved lazily
+        #   - discovered entities -> (username, entity), used WITHOUT a resolve
+        # Entities are preferred because resolving usernames is what triggers
+        # multi-hour flood bans; discovery hands us access_hash directly.
+        targets: List[Any] = []
+        seen_ch: set = set()
+
+        def _queue(username: Optional[str], entity: Any) -> None:
+            if not username:
+                return
+            key = username.lower()
+            if key in seen_ch:
+                return
+            seen_ch.add(key)
+            targets.append((username, entity))
+
+        for name in channels:  # explicit seeds first
+            _queue(name, None)
+        # NOTE: we intentionally do NOT seed from the username cache here —
+        # reading a cached username requires a ResolveUsername call, and doing
+        # that in bulk is exactly what triggers 12–24h flood bans. Discovery
+        # returns live entities (with access_hash) every run instead, which
+        # need no resolve. The cache is kept only as an observability record.
+
         if discover:
             try:
                 discovered = await discover_channels(client, max_channels=max_channels)
             except Exception as e:
                 logger.warning(f"Channel discovery failed: {e}")
                 discovered = []
-            seen_ch = set()
-            merged = []
-            for c in list(channels) + discovered:
-                cl = c.lower()
-                if cl not in seen_ch:
-                    seen_ch.add(cl)
-                    merged.append(c)
-            channels = merged[:max_channels]
-            logger.info(f"Monitoring {len(channels)} channels total (seed + discovered)")
+            for ent in discovered:
+                _queue(getattr(ent, "username", None), ent)
 
-        for channel_name in channels:
+        targets = targets[:max_channels]
+        logger.info(f"Monitoring {len(targets)} channels total (seed + cache + discovered)")
+
+        _loop_start = asyncio.get_event_loop().time()
+        _fetched_channels = 0
+
+        for channel_name, entity in targets:
+            # Respect the per-run time budget so Telegram doesn't starve the
+            # other scrapers in a shared CI job; incremental scraping means the
+            # channels we skip this run get covered on the next one.
+            if time_budget_seconds is not None and \
+                    (asyncio.get_event_loop().time() - _loop_start) > time_budget_seconds:
+                logger.info(
+                    f"Time budget {time_budget_seconds}s reached after "
+                    f"{_fetched_channels} channels — stopping (rest next run)"
+                )
+                break
+            _fetched_channels += 1
             try:
-                logger.info(f"Fetching from @{channel_name}")
-
                 # Apply rate limiting before API call
                 if _rate_limiter:
                     delay = _rate_limiter.get_delay()
@@ -683,7 +883,15 @@ async def fetch_telegram_messages(
                         await asyncio.sleep(delay)
 
                 start_time = asyncio.get_event_loop().time()
-                channel = await client.get_entity(channel_name)
+                if entity is not None:
+                    channel = entity  # no resolve needed (flood-safe)
+                else:
+                    try:
+                        channel = await client.get_entity(channel_name)
+                    except FloodWaitError as e:
+                        wait = getattr(e, "seconds", 0)
+                        logger.warning(f"Resolve flood wait {wait}s for @{channel_name} — skipping")
+                        continue
 
                 if not isinstance(channel, Channel):
                     logger.warning(f"@{channel_name} is not a channel, skipping")
@@ -843,7 +1051,8 @@ def scrape_telegram(
     max_messages_per_channel: int = 100,
     channels: Optional[List[str]] = None,
     discover: bool = True,
-    max_channels: int = 250,
+    max_channels: int = 2000,
+    time_budget_seconds: Optional[float] = 1500,
 ) -> List[Dict[str, Any]]:
     """
     Scrape interview questions from Telegram channels.
@@ -891,6 +1100,7 @@ def scrape_telegram(
                 max_messages_per_channel=max_messages_per_channel,
                 discover=discover,
                 max_channels=max_channels,
+                time_budget_seconds=time_budget_seconds,
             )
         )
     except Exception as e:
