@@ -32,8 +32,10 @@ def get_cache(ttl: int = 21600, cache_dir: str = ".scraper_cache"):
     if _cache is None:
         try:
             from .cache import ResponseCache
-            _cache = ResponseCache(ttl=ttl, cache_dir=cache_dir)
-        except ImportError:
+            # ResponseCache takes (base_dir, shard_count); ttl is applied
+            # per-entry on set(), not in the constructor.
+            _cache = ResponseCache()
+        except (ImportError, Exception):
             _cache = _FallbackCache()
     return _cache
 
@@ -174,10 +176,17 @@ def cached_request(url: str, fetch_fn, ttl: int = 21600) -> Optional[str]:
     """
     cache = get_cache(ttl=ttl)
 
-    # Check cache first
+    # Check cache first. ResponseCache.get() returns a CachedResponse object,
+    # so unwrap it to the text/body the callers expect.
     cached = cache.get(url)
     if cached:
-        return cached
+        content = getattr(cached, "content", cached)
+        if isinstance(content, (bytes, bytearray)):
+            try:
+                content = content.decode("utf-8", "ignore")
+            except Exception:
+                pass
+        return content
 
     # Fetch and cache
     try:

@@ -286,6 +286,34 @@ def is_likely_new_grad(title: str) -> bool:
     return True
 
 
+# Keywords that mark a posting as a software / engineering / technical role.
+# Used to keep the board tech-focused while allowing ALL experience levels
+# (users filter by experience level in the UI).
+_TECH_ROLE_KEYWORDS = [
+    "engineer", "engineering", "developer", "software", "swe", "programmer",
+    "sde", "data scientist", "machine learning", "ml engineer", " ai ",
+    "ai/ml", "deep learning", "research scientist", "research engineer",
+    "devops", "sre", "site reliability", "security engineer", "appsec",
+    "infosec", "cybersecurity", "infrastructure", "platform", "backend",
+    "back-end", "frontend", "front-end", "full stack", "fullstack",
+    "full-stack", "mobile", "ios", "android", "cloud", "systems",
+    "architect", "qa engineer", "test engineer", "sdet", "robotics",
+    "firmware", "embedded", "computer vision", "nlp", "data engineer",
+    "analytics engineer", "web developer", "ui engineer",
+]
+
+
+def is_technical_role(title: str) -> bool:
+    """True if the title looks like a software/engineering/technical role.
+
+    Keeps the board SWE-focused (filters out sales, recruiting, finance,
+    marketing, etc.) without restricting by experience level."""
+    if not title:
+        return False
+    t = title.lower()
+    return any(kw in t for kw in _TECH_ROLE_KEYWORDS)
+
+
 def classify_jobs(jobs: list[dict]) -> list[dict]:
     """Classify jobs using Gemini AI or heuristics fallback.
 
@@ -336,24 +364,28 @@ def _classify_with_gemini(jobs: list[dict]) -> list[dict]:
 
                 classifications = json.loads(response)
 
-                # Filter and update jobs based on classification
+                # Keep ALL technical roles across every experience level; the
+                # UI lets users filter by experience level themselves.
                 for idx, job in enumerate(batch):
-                    if idx < len(classifications) and classifications[idx].get("is_new_grad"):
-                        # Update role types if provided
+                    if not is_technical_role(job["title"]):
+                        continue
+
+                    # Update role types if the model provided any
+                    if idx < len(classifications):
                         ai_roles = classifications[idx].get("role_types", [])
                         if ai_roles:
                             job["role_types"] = ai_roles
 
-                        # Add experience level detection
-                        exp_result = detect_experience_level(
-                            job["title"],
-                            job.get("description", ""),
-                        )
-                        job["experience_level"] = exp_result["experience_level"]
-                        job["experience_confidence"] = exp_result["confidence"]
-                        job["experience_matched_patterns"] = exp_result["matched_patterns"]
+                    # Tag experience level (used by the UI filter)
+                    exp_result = detect_experience_level(
+                        job["title"],
+                        job.get("description", ""),
+                    )
+                    job["experience_level"] = exp_result["experience_level"]
+                    job["experience_confidence"] = exp_result["confidence"]
+                    job["experience_matched_patterns"] = exp_result["matched_patterns"]
 
-                        result.append(job)
+                    result.append(job)
 
             except (json.JSONDecodeError, IndexError) as e:
                 print(f"Error parsing Gemini response: {e}")
@@ -367,24 +399,29 @@ def _classify_with_gemini(jobs: list[dict]) -> list[dict]:
 
 
 def _classify_with_heuristics(jobs: list[dict]) -> list[dict]:
-    """Classify jobs using title-based heuristics."""
+    """Tag jobs by role + experience level using title-based heuristics.
+
+    Keeps ALL technical roles across every experience level (new grad through
+    principal); the UI lets users filter by experience level themselves."""
     result = []
 
     for job in jobs:
-        if is_likely_new_grad(job["title"]):
-            # Use existing role_types or detect from title
-            if not job.get("role_types"):
-                job["role_types"] = detect_role_types(job["title"])
+        if not is_technical_role(job["title"]):
+            continue  # skip non-technical roles (sales, recruiting, etc.)
 
-            # Add experience level detection
-            exp_result = detect_experience_level(
-                job["title"],
-                job.get("description", ""),
-            )
-            job["experience_level"] = exp_result["experience_level"]
-            job["experience_confidence"] = exp_result["confidence"]
-            job["experience_matched_patterns"] = exp_result["matched_patterns"]
+        # Use existing role_types or detect from title
+        if not job.get("role_types"):
+            job["role_types"] = detect_role_types(job["title"])
 
-            result.append(job)
+        # Tag experience level (used by the UI filter)
+        exp_result = detect_experience_level(
+            job["title"],
+            job.get("description", ""),
+        )
+        job["experience_level"] = exp_result["experience_level"]
+        job["experience_confidence"] = exp_result["confidence"]
+        job["experience_matched_patterns"] = exp_result["matched_patterns"]
+
+        result.append(job)
 
     return result

@@ -54,6 +54,22 @@ except ImportError:
 HAS_INFRASTRUCTURE = INFRA_AVAILABLE
 
 
+def wait_for_rate_limit(domain: str = "") -> None:
+    """Best-effort per-request pacing fallback."""
+    time.sleep(0.4)
+
+
+def get_stealth_headers(url: str = "") -> dict:
+    """Return browser-like request headers (fallback)."""
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Content-Type": "application/json",
+    }
+
+
 @dataclass
 class WorkdayConfig:
     """Configuration for a Workday company instance."""
@@ -217,14 +233,14 @@ class WorkdayScraper:
         """Check if circuit breaker allows request."""
         if not self.circuit_registry:
             return True
-        circuit = self.circuit_registry.get_or_create(self._get_circuit_key(config))
+        circuit = self.circuit_registry.get(self._get_circuit_key(config))
         return circuit.allow_request()
 
     def _record_circuit_result(self, config: WorkdayConfig, success: bool) -> None:
         """Record result to circuit breaker."""
         if not self.circuit_registry:
             return
-        circuit = self.circuit_registry.get_or_create(self._get_circuit_key(config))
+        circuit = self.circuit_registry.get(self._get_circuit_key(config))
         if success:
             circuit.record_success()
         else:

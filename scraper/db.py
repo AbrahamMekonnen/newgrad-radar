@@ -10,7 +10,7 @@ from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 
 # Job rotation constants
-MAX_ACTIVE_JOBS = 500  # Maximum number of active jobs to keep
+MAX_ACTIVE_JOBS = 8000  # Maximum number of active jobs to keep (all experience levels)
 PRIORITY_DAYS = 7  # Jobs newer than this are protected from rotation
 MAX_AGE_DAYS = 30  # Jobs older than this are always deactivated
 
@@ -73,95 +73,80 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
 
     client = get_client()
 
-    # Get existing jobs with their array columns for merging
+    # Get existing jobs with their array columns for merging.
+    # PostgREST caps a single response at 1000 rows, so paginate to get ALL
+    # existing ids — otherwise unseen rows get treated as new and the insert
+    # fails on duplicate primary keys.
+    existing_data = {}
     try:
-        existing = client.table("jobs").select(
-            "id, discovery_sources, diversity_tags, work_modes, badges"
-        ).execute()
-        existing_data = {row["id"]: row for row in existing.data}
+        page_size = 1000
+        offset = 0
+        while True:
+            resp = client.table("jobs").select(
+                "id, discovery_sources, diversity_tags, work_modes, badges"
+            ).range(offset, offset + page_size - 1).execute()
+            rows = resp.data or []
+            for row in rows:
+                existing_data[row["id"]] = row
+            if len(rows) < page_size:
+                break
+            offset += page_size
         existing_ids = set(existing_data.keys())
     except Exception as e:
         print(f"Error fetching existing jobs: {e}")
         existing_ids = set()
         existing_data = {}
 
-    new_jobs = [j for j in jobs if j["id"] not in existing_ids]
-    update_jobs = [j for j in jobs if j["id"] in existing_ids]
-
     new_count = 0
     updated_count = 0
 
-    # Insert new jobs
-    if new_jobs:
-        try:
-            # Prepare job data for insert
-            insert_data = []
-            for job in new_jobs:
-                insert_data.append({
-                    "id": job["id"],
-                    "company_slug": job["company_slug"],
-                    "company_name": job["company_name"],
-                    "title": job["title"],
-                    "location": job["location"],
-                    "url": job["url"],
-                    "apply_url": job.get("apply_url"),  # Direct application URL
-                    "tier": job["tier"],
-                    "role_types": job.get("role_types") or [],
-                    "source": job["source"],
-                    "posted": job.get("posted"),
-                    "is_active": True,
-                    # New multi-dimensional tag arrays
-                    "discovery_sources": job.get("discovery_sources") or [],
-                    "diversity_tags": job.get("diversity_tags") or [],
-                    "work_modes": job.get("work_modes") or [],
-                    "badges": job.get("badges") or [],
-                    # Experience level classification
-                    "experience_level": job.get("experience_level"),
-                })
-            client.table("jobs").insert(insert_data).execute()
-            new_count = len(new_jobs)
-        except Exception as e:
-            print(f"Error inserting jobs: {e}")
-
-    # Update existing jobs (mark as still active + merge arrays)
-    for job in update_jobs:
-        try:
-            existing_job = existing_data.get(job["id"], {})
-
-            # Merge arrays: combine existing with new, removing duplicates
-            merged_discovery = merge_arrays(
-                existing_job.get("discovery_sources"),
-                job.get("discovery_sources")
-            )
-            merged_diversity = merge_arrays(
-                existing_job.get("diversity_tags"),
-                job.get("diversity_tags")
-            )
-            merged_work_modes = merge_arrays(
-                existing_job.get("work_modes"),
-                job.get("work_modes")
-            )
-            merged_badges = merge_arrays(
-                existing_job.get("badges"),
-                job.get("badges")
-            )
-
-            update_data = {
-                "is_active": True,
-                "discovery_sources": merged_discovery,
-                "diversity_tags": merged_diversity,
-                "work_modes": merged_work_modes,
-                "badges": merged_badges,
-                # Update apply_url if available
-                "apply_url": job.get("apply_url"),
-                # Update experience level if we have a new classification
-                "experience_level": job.get("experience_level"),
-            }
-
-            client.table("jobs").update(update_data).eq("id", job["id"]).execute()
+    # Build one record per job. Existing jobs get their array fields merged
+    # with what we already have; everything is written via a single chunked
+    # upsert (insert-or-update on the primary key) — far faster than a
+    # per-row update loop and correct even with thousands of jobs.
+    records = []
+    for job in jobs:
+        existing_job = existing_data.get(job["id"])
+        if existing_job is not None:
+            discovery = merge_arrays(existing_job.get("discovery_sources"), job.get("discovery_sources"))
+            diversity = merge_arrays(existing_job.get("diversity_tags"), job.get("diversity_tags"))
+            work_modes = merge_arrays(existing_job.get("work_modes"), job.get("work_modes"))
+            badges = merge_arrays(existing_job.get("badges"), job.get("badges"))
             updated_count += 1
-        except Exception as e:
-            print(f"Error updating job {job['id']}: {e}")
+        else:
+            discovery = job.get("discovery_sources") or []
+            diversity = job.get("diversity_tags") or []
+            work_modes = job.get("work_modes") or []
+            badges = job.get("badges") or []
+            new_count += 1
+
+        records.append({
+            "id": job["id"],
+            "company_slug": job["company_slug"],
+            "company_name": job["company_name"],
+            "title": job["title"],
+            "location": job["location"],
+            "url": job["url"],
+            "apply_url": job.get("apply_url"),
+            "tier": job["tier"],
+            "role_types": job.get("role_types") or [],
+            "source": job["source"],
+            "posted": job.get("posted"),
+            "is_active": True,
+            "discovery_sources": discovery,
+            "diversity_tags": diversity,
+            "work_modes": work_modes,
+            "badges": badges,
+            "experience_level": job.get("experience_level"),
+        })
+
+    CHUNK = 500
+    for i in range(0, len(records), CHUNK):
+        chunk = records[i:i + CHUNK]
+        try:
+            client.table("jobs").upsert(chunk, on_conflict="id").execute()
+        except Exception as ce:
+            print(f"Error upserting jobs chunk {i // CHUNK}: {ce}")
 
     return new_count, updated_count
 
