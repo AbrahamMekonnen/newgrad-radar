@@ -367,30 +367,45 @@ _reddit_token_cache = {"token": None, "expires_at": 0.0}
 
 
 def _get_reddit_token() -> Optional[str]:
-    """Return an app-only OAuth bearer token, or None if creds aren't set."""
+    """Return an app-only OAuth bearer token, or None if creds aren't set.
+
+    Tries, in order, the two app-only grants that need NO account password:
+    - installed_client (for an "installed app" type)
+    - client_credentials (for a confidential "web app" type)
+    A "script" app cannot do app-only auth (it needs the password grant), so
+    for a no-password setup create an "installed app" at /prefs/apps.
+    """
     import os
     cid = os.environ.get("REDDIT_CLIENT_ID")
-    csecret = os.environ.get("REDDIT_CLIENT_SECRET")
-    if not cid or not csecret or requests is None:
+    csecret = os.environ.get("REDDIT_CLIENT_SECRET") or ""
+    if not cid or requests is None:
         return None
     if _reddit_token_cache["token"] and _reddit_token_cache["expires_at"] > time.time() + 60:
         return _reddit_token_cache["token"]
-    try:
-        resp = requests.post(
-            "https://www.reddit.com/api/v1/access_token",
-            auth=(cid, csecret),
-            data={"grant_type": "client_credentials", "scope": "read"},
-            headers={"User-Agent": USER_AGENT},
-            timeout=REQUEST_TIMEOUT,
-        )
+    device_id = os.environ.get("REDDIT_DEVICE_ID", "newgrad_radar_device_0001")
+    grants = [
+        {"grant_type": "https://oauth.reddit.com/grants/installed_client",
+         "device_id": device_id},
+        {"grant_type": "client_credentials", "scope": "read"},
+    ]
+    for data in grants:
+        try:
+            resp = requests.post(
+                "https://www.reddit.com/api/v1/access_token",
+                auth=(cid, csecret),
+                data=data,
+                headers={"User-Agent": USER_AGENT},
+                timeout=REQUEST_TIMEOUT,
+            )
+        except Exception as e:
+            print(f"Reddit OAuth error: {e}")
+            continue
         if resp.status_code == 200:
             j = resp.json()
             _reddit_token_cache["token"] = j.get("access_token")
             _reddit_token_cache["expires_at"] = time.time() + int(j.get("expires_in", 3600))
             return _reddit_token_cache["token"]
-        print(f"Reddit OAuth failed: HTTP {resp.status_code}")
-    except Exception as e:
-        print(f"Reddit OAuth error: {e}")
+    print("Reddit OAuth failed (all app-only grants) — is this an 'installed app'?")
     return None
 
 
