@@ -39,6 +39,24 @@ jobs:
           cd scraper
           pip install -r requirements-scrape.txt
 
+      # Persist the scraper cache across runs. CI runners are ephemeral, so
+      # without this every run would be a COLD Telegram discovery (hundreds of
+      # search/recommendation calls) — which is what trips Telegram's flood
+      # ban. The rolling key (run_id + restore-keys prefix) keeps a mutable
+      # cache: it restores the most recent one and saves a fresh copy each run.
+      # This keeps the warm entity cache (skip discovery within its TTL) and
+      # the incremental seen-state (skip already-processed messages) alive.
+      - name: Restore scraper cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            scraper/.cache
+            scraper/sources/interview_questions/.telegram_entities.json
+            scraper/sources/interview_questions/.telegram_channels.json
+          key: scraper-cache-${{ github.run_id }}
+          restore-keys: |
+            scraper-cache-
+
       - name: Run interview question scrapers
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -47,6 +65,12 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          # Telegram (Telethon) — these were set in GitHub but never passed
+          # to the process, so Telegram silently ran with no credentials.
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_PHONE: ${{ secrets.TELEGRAM_PHONE }}
+          TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
           PYTHONUTF8: "1"
         run: |
           cd scraper

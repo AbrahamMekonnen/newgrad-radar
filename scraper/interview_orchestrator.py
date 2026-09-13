@@ -413,7 +413,11 @@ class InterviewQuestionOrchestrator:
                       function_name='scrape_youtube', priority=6),
         ScraperConfig(name='telegram', source='telegram', scraper_type='python',
                       module_path='sources.interview_questions.telegram_monitor',
-                      function_name='scrape_telegram', priority=6),
+                      function_name='scrape_telegram', priority=6,
+                      # run every 6h CI cycle (not the 'daily' default); the
+                      # persisted CI cache keeps discovery warm so this is
+                      # cheap and flood-safe.
+                      schedule='hourly'),
         ScraperConfig(name='bootcamp_leaked', source='bootcamp', scraper_type='python',
                       module_path='sources.interview_questions.bootcamp_leaked',
                       function_name='scrape_bootcamp_leaked', priority=6),

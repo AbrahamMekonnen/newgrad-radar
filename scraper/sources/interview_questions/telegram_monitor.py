@@ -914,7 +914,9 @@ async def fetch_telegram_messages(
             _queue(name, None, False)
 
         if discover:
-            warm = _load_entity_cache(max_age_hours=12)
+            # 20h TTL: with the CI cache persisted across 6-hourly runs, this
+            # means only ~1 cold discovery per day; the other runs reuse it.
+            warm = _load_entity_cache(max_age_hours=20)
             if warm:
                 # Reuse recently-discovered channels — skips the ~6 min search
                 # + recommendations stage entirely on warm runs.
