@@ -538,8 +538,19 @@ class InterviewQuestionDB:
             'scraped_at', 'is_verified', 'upvotes', 'is_duplicate', 'created_at',
         }
         aliases = {'coding': 'technical_coding', 'technical': 'technical_conceptual',
-                   'conceptual': 'technical_conceptual', 'general': 'other'}
-        prepared['question_type'] = aliases.get(prepared['question_type'], prepared['question_type'])
+                   'conceptual': 'technical_conceptual', 'general': 'other',
+                   'online_assessment': 'oa', 'assessment': 'oa',
+                   'algorithm': 'technical_coding', 'algorithms': 'technical_coding',
+                   'design': 'system_design', 'puzzle': 'brain_teaser',
+                   'hr': 'behavioral', 'phone_screen': 'other', 'unknown': 'other'}
+        qt = aliases.get(prepared.get('question_type'), prepared.get('question_type'))
+        # Any value not in the DB enum would abort the whole batch — coerce to 'other'.
+        valid_types = {'technical_coding', 'technical_conceptual', 'system_design',
+                       'behavioral', 'case_study', 'take_home', 'oa', 'brain_teaser', 'other'}
+        prepared['question_type'] = qt if qt in valid_types else 'other'
+        # difficulty is also an enum (easy/medium/hard/unknown) — coerce safely.
+        diff = str(prepared.get('difficulty', 'unknown')).lower()
+        prepared['difficulty'] = diff if diff in {'easy', 'medium', 'hard', 'unknown'} else 'unknown'
         return {key: value for key, value in prepared.items() if key in columns}
 
 
