@@ -407,7 +407,7 @@ class InterviewQuestionOrchestrator:
                       function_name='scrape_atcoder', priority=6),
         ScraperConfig(name='codeforces', source='codeforces', scraper_type='python',
                       module_path='sources.interview_questions.codeforces',
-                      function_name='scrape_blog_content', priority=6),
+                      function_name='scrape_codeforces', priority=6),
         ScraperConfig(name='youtube', source='youtube', scraper_type='python',
                       module_path='sources.interview_questions.youtube',
                       function_name='scrape_youtube', priority=6),

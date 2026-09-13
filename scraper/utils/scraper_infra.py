@@ -21,14 +21,18 @@ _rate_limiter = None
 _validation_pipeline = None
 
 
-def get_cache(ttl: int = 21600, cache_dir: str = ".scraper_cache"):
+def get_cache(ttl: int = 21600, cache_dir: str = ".scraper_cache", **_kwargs):
     """Get or create ResponseCache singleton.
 
-    Args:
-        ttl: Cache TTL in seconds (default 6 hours)
-        cache_dir: Directory for cache storage
+    Extra kwargs (e.g. ttl_hours) from various callers are accepted and
+    ignored for backward compatibility.
     """
     global _cache
+    if "ttl_hours" in _kwargs and _kwargs.get("ttl_hours"):
+        try:
+            ttl = int(_kwargs["ttl_hours"]) * 3600
+        except (ValueError, TypeError):
+            pass
     if _cache is None:
         try:
             from .cache import ResponseCache

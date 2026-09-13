@@ -63,6 +63,11 @@ except ImportError:
 _checkpoint = None
 
 
+def wait_for_rate_limit(domain: str = "") -> None:
+    """Best-effort per-request pacing fallback."""
+    time.sleep(0.5)
+
+
 def _get_checkpoint():
     global _checkpoint
     if _checkpoint is None and HAS_INFRASTRUCTURE:
@@ -314,7 +319,7 @@ def translate_german(text: str) -> str:
         return text
 
     # Try unified translation infrastructure first
-    if HAS_INFRA:
+    if HAS_INFRASTRUCTURE:
         try:
             translated = translate_single(text, target_lang="en")
             if translated and translated != text:
@@ -656,7 +661,7 @@ def scrape_kununu(
 
         # Rate limiting via infrastructure or fallback
         if i < len(companies) - 1:
-            if HAS_INFRA:
+            if HAS_INFRASTRUCTURE:
                 wait_for_rate_limit("kununu.com")
             else:
                 time.sleep(RATE_LIMIT_DELAY)
@@ -694,7 +699,7 @@ def scrape_kununu_search(query: str, months: int = 5) -> List[Dict[str, Any]]:
     questions = []
 
     # Use stealth headers from infrastructure
-    if HAS_INFRA:
+    if HAS_INFRASTRUCTURE:
         headers = get_stealth_headers(search_url)
         headers["Accept-Language"] = "de-DE,de;q=0.9,en;q=0.8"
     else:
@@ -705,12 +710,12 @@ def scrape_kununu_search(query: str, months: int = 5) -> List[Dict[str, Any]]:
 
     try:
         # Apply rate limiting
-        if HAS_INFRA:
+        if HAS_INFRASTRUCTURE:
             wait_for_rate_limit("kununu.com")
 
         # Get regional proxy
         proxies = None
-        if HAS_INFRA:
+        if HAS_INFRASTRUCTURE:
             proxies = get_proxy_for_url(search_url)
 
         response = requests.get(
@@ -735,7 +740,7 @@ def scrape_kununu_search(query: str, months: int = 5) -> List[Dict[str, Any]]:
                 q = scrape_kununu_company(slug, name, months)
                 questions.extend(q)
                 # Rate limiting handled by infrastructure or fallback
-                if HAS_INFRA:
+                if HAS_INFRASTRUCTURE:
                     wait_for_rate_limit("kununu.com")
                 else:
                     time.sleep(RATE_LIMIT_DELAY)

@@ -704,8 +704,8 @@ _default_throttler: Optional[DomainThrottler] = None
 _default_circuit: Optional[CircuitBreakerRegistry] = None
 
 
-def get_throttler() -> DomainThrottler:
-    """Get global domain throttler."""
+def get_throttler(*_args, **_kwargs) -> DomainThrottler:
+    """Get global domain throttler. Accepts/ignores a domain arg some callers pass."""
     global _default_throttler
     if _default_throttler is None:
         _default_throttler = DomainThrottler()

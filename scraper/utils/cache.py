@@ -771,8 +771,12 @@ _default_cache: Optional[ResponseCache] = None
 _default_hash_cache: Optional[ContentHashCache] = None
 
 
-def get_cache() -> ResponseCache:
-    """Get the default response cache instance"""
+def get_cache(*_args, **_kwargs) -> ResponseCache:
+    """Get the default response cache instance.
+
+    Accepts and ignores positional/keyword args (e.g. a scope name,
+    ttl_hours) that various callers pass, for backward compatibility.
+    """
     global _default_cache
     if _default_cache is None:
         _default_cache = ResponseCache()

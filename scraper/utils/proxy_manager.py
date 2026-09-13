@@ -303,7 +303,9 @@ class GeoProxySelector:
         "habr.com",
     }
 
-    def __init__(self, proxy_pool: 'ProxyPool'):
+    def __init__(self, proxy_pool: 'ProxyPool' = None):
+        # proxy_pool is optional — callers that only need region detection
+        # (not an actual proxy) construct GeoProxySelector() with no args.
         self.proxy_pool = proxy_pool
 
     def get_region_for_url(self, url: str) -> GeoRegion:
