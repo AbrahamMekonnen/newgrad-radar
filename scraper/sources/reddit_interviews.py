@@ -358,6 +358,42 @@ def _get_response_cache() -> Optional['ResponseCache']:
     return _cache
 
 
+# --- Reddit OAuth (optional but recommended) ---
+# Reddit's public .json endpoints now return HTML; the authenticated
+# oauth.reddit.com API still returns JSON. A free "script" app at
+# https://www.reddit.com/prefs/apps gives a client id/secret; no user login is
+# needed for read-only client_credentials.
+_reddit_token_cache = {"token": None, "expires_at": 0.0}
+
+
+def _get_reddit_token() -> Optional[str]:
+    """Return an app-only OAuth bearer token, or None if creds aren't set."""
+    import os
+    cid = os.environ.get("REDDIT_CLIENT_ID")
+    csecret = os.environ.get("REDDIT_CLIENT_SECRET")
+    if not cid or not csecret or requests is None:
+        return None
+    if _reddit_token_cache["token"] and _reddit_token_cache["expires_at"] > time.time() + 60:
+        return _reddit_token_cache["token"]
+    try:
+        resp = requests.post(
+            "https://www.reddit.com/api/v1/access_token",
+            auth=(cid, csecret),
+            data={"grant_type": "client_credentials", "scope": "read"},
+            headers={"User-Agent": USER_AGENT},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            j = resp.json()
+            _reddit_token_cache["token"] = j.get("access_token")
+            _reddit_token_cache["expires_at"] = time.time() + int(j.get("expires_in", 3600))
+            return _reddit_token_cache["token"]
+        print(f"Reddit OAuth failed: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"Reddit OAuth error: {e}")
+    return None
+
+
 def _make_reddit_request(url: str, params: dict = None) -> dict | None:
     """Make HTTP request with infrastructure support.
 
@@ -409,6 +445,13 @@ def _make_reddit_request(url: str, params: dict = None) -> dict | None:
         }
     # Always use our Reddit-specific User-Agent
     headers["User-Agent"] = USER_AGENT
+
+    # Prefer the authenticated API when credentials are configured — the public
+    # .json endpoints now return HTML, but oauth.reddit.com still returns JSON.
+    token = _get_reddit_token()
+    if token:
+        url = url.replace("https://www.reddit.com", "https://oauth.reddit.com")
+        headers["Authorization"] = f"Bearer {token}"
 
     # Make request
     start_time = time.time()
