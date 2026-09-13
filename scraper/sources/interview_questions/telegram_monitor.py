@@ -703,6 +703,7 @@ async def discover_channels(
     per_query_limit: int = 50,
     max_channels: int = 2500,
     use_recommendations: bool = True,
+    max_recommendation_calls: int = 250,
 ) -> List[Any]:
     """Discover live public channels/groups and return telethon ENTITIES.
 
@@ -760,12 +761,18 @@ async def discover_channels(
     logger.info(f"Search stage found {len(found)} channels")
 
     # Stage 2: recommendations snowball (breadth-first over what we have).
+    # Hard-capped: each call is cheap individually but making thousands in one
+    # run trips Telegram's anti-abuse flood limit (a ~12h ban on Search too).
+    # A few hundred calls already surfaces 700-800 relevant channels, and the
+    # warm entity cache means discovery runs at most once per 12h anyway.
     if use_recommendations and _have_recs and found:
         seeds = list(found.values())
         idx = 0
-        while idx < len(seeds) and len(found) < max_channels:
+        calls = 0
+        while idx < len(seeds) and len(found) < max_channels and calls < max_recommendation_calls:
             seed = seeds[idx]
             idx += 1
+            calls += 1
             try:
                 rec = await client(GetChannelRecommendationsRequest(channel=seed))
                 for chat in getattr(rec, "chats", []) or []:
@@ -784,8 +791,8 @@ async def discover_channels(
             except Exception as e:
                 logger.debug(f"recommendations failed: {e}")
             if idx % 50 == 0:
-                logger.info(f"  recommendations: expanded to {len(found)} channels")
-            await asyncio.sleep(0.2)
+                logger.info(f"  recommendations: expanded to {len(found)} channels ({calls} calls)")
+            await asyncio.sleep(0.5)
 
     entities = list(found.values())
     # Prefer larger communities first (more content, more likely active).
