@@ -599,6 +599,11 @@ class InterviewQuestionOrchestrator:
             raise ValueError('Question text must be a non-empty string')
         q['question_text'] = text.strip()
         q['company_name'] = q.get('company_name') or q.get('company') or 'Unknown'
+        # Derive a company_slug so the app's per-company lookups (interview-prep
+        # badge) match — otherwise questions land with a null slug.
+        if not q.get('company_slug'):
+            import re as _re
+            q['company_slug'] = _re.sub(r'[^a-z0-9]+', '-', q['company_name'].lower()).strip('-')
         q['source_name'] = q.get('source_name') or q.get('source') or 'unknown'
         q['source'] = q['source_name']
         q['company_normalized'] = q.get('company_normalized') or q['company_name']
