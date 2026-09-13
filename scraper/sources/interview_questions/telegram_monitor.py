@@ -68,6 +68,17 @@ except ImportError:
     except ImportError:
         logger.warning("[telegram_monitor] Infrastructure modules not available, using basic mode")
         CheckpointManager = None
+        StealthSession = None
+        create_stealth_session = None
+        InstantArchiver = None
+        WebSocketMonitor = None
+        PastebinMonitor = None
+        ResponseCache = None
+        get_cache = None
+        IncrementalScraper = None
+        AdaptiveRateLimiter = None
+        monitor_scraper = None
+        get_monitoring = None
 
 # Checkpoint manager
 _checkpoint = None
@@ -81,17 +92,6 @@ def _get_checkpoint():
         except Exception:
             pass
     return _checkpoint
-        StealthSession = None
-        create_stealth_session = None
-        InstantArchiver = None
-        WebSocketMonitor = None
-        PastebinMonitor = None
-        ResponseCache = None
-        get_cache = None
-        IncrementalScraper = None
-        AdaptiveRateLimiter = None
-        monitor_scraper = None
-        get_monitoring = None
 
 # Backward compatibility
 HAS_INFRASTRUCTURE = INFRA_AVAILABLE
