@@ -223,6 +223,39 @@ DEFAULT_CHANNELS = [
     "leetcode_cn",
 ]
 
+# Keyword queries used to DISCOVER live public channels/groups via Telegram's
+# global search (contacts.Search). Public hardcoded usernames rot fast, but
+# people constantly create new channels that dump company interview questions,
+# OAs, and placement experiences — search finds the ones that are alive right
+# now. Kept broad and multi-lingual/multi-region to maximize coverage.
+SEARCH_QUERIES = [
+    # Core interview-prep
+    "leetcode", "leetcode discuss", "coding interview", "interview questions",
+    "interview experience", "interview prep", "tech interview", "faang",
+    "faang interview", "online assessment", "oa questions", "coding round",
+    "system design interview", "dsa", "dsa sheet", "competitive programming",
+    "software engineer interview", "sde interview", "sde sheet",
+    "backend interview", "frontend interview", "machine learning interview",
+    "data science interview", "coding questions", "hackerrank", "codesignal",
+    # Company-specific (people name channels after the company)
+    "amazon interview", "amazon oa", "google interview", "microsoft interview",
+    "meta interview", "apple interview", "netflix interview", "uber interview",
+    "goldman sachs interview", "jane street", "citadel interview",
+    "nvidia interview", "salesforce interview", "adobe interview",
+    "bloomberg interview", "atlassian interview", "stripe interview",
+    "tiktok interview", "bytedance interview", "oracle interview",
+    # India / placements (huge volume here)
+    "placement", "placement preparation", "off campus", "off campus drive",
+    "on campus placement", "coding ninjas", "gfg", "geeksforgeeks",
+    "interviewbit", "placement material", "sde placement", "campus placement",
+    "tcs interview", "infosys interview", "wipro interview", "flipkart interview",
+    "product based companies", "service based companies", "dream placement",
+    # Region-specific / other languages
+    "собеседование программист", "алгоритмы собеседование", "leetcode ru",
+    "面试题", "算法面试", "求职", "codeforces", "acm icpc",
+    "entrevista programacion", "entretien technique", "vorstellungsgespräch",
+]
+
 # Company detection patterns (100+ companies)
 KNOWN_COMPANIES = [
     # FAANG / MAANG
@@ -349,17 +382,74 @@ def generate_question_id(company: str, question_text: str) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
-def detect_company(text: str) -> Optional[str]:
-    """Detect company name from text."""
-    text_lower = text.lower()
+_COMPANY_PATTERNS: Optional[List] = None
+
+
+def _build_company_patterns() -> List:
+    """Compile word-boundary regexes for every known company.
+
+    Raw substring matching is disastrous for short names — "ea" matches
+    "team"/"please", "line" matches "online", "lg"/"hp" match inside words.
+    Word boundaries fix that. Longest names are tried first so multi-word
+    aliases ("electronic arts") win over their short forms ("ea").
+    """
+    pats = []
     for company in KNOWN_COMPANIES:
-        # Handle multi-word companies
-        if company in text_lower:
-            return company.title()
-        # Handle variations
-        if company.replace(" ", "") in text_lower.replace(" ", ""):
-            return company.title()
+        escaped = r"\s+".join(re.escape(w) for w in company.split())
+        pats.append((company, re.compile(r"\b" + escaped + r"\b", re.IGNORECASE)))
+    pats.sort(key=lambda p: len(p[0]), reverse=True)
+    return pats
+
+
+# Company names that are also common English words. Word boundaries aren't
+# enough ("line by line", "booking a slot", "target sum", "wish list"), so for
+# these we require a Capitalized (proper-noun) occurrence to count as a match.
+_AMBIGUOUS_COMPANIES = {
+    "line", "booking", "target", "wish", "block", "notion", "sea", "wise",
+    "ola", "unity", "square", "meta", "snap", "match", "box", "apple", "sig",
+}
+
+
+def detect_company(text: str) -> Optional[str]:
+    """Detect company name from text using word-boundary matching."""
+    global _COMPANY_PATTERNS
+    if _COMPANY_PATTERNS is None:
+        _COMPANY_PATTERNS = _build_company_patterns()
+    for company, pat in _COMPANY_PATTERNS:
+        matches = list(pat.finditer(text))
+        if not matches:
+            continue
+        if company in _AMBIGUOUS_COMPANIES:
+            # require at least one Capitalized/upper occurrence (proper noun)
+            if not any(m.group(0)[:1].isupper() for m in matches):
+                continue
+        return company.title()
     return None
+
+
+# A candidate that is really a URL, a file path, or mostly non-Latin text is
+# not an interview question — these gates strip the Telegram noise.
+_URLISH = re.compile(r"https?://|www\.|\w+\.(?:com|net|org|io|ru|cn|de|co)\b", re.IGNORECASE)
+
+
+def _looks_like_question(q: str) -> bool:
+    """Heuristic gate: does this fragment read like a real question/prompt?"""
+    q = q.strip()
+    if not (15 <= len(q) <= 600):
+        return False
+    if _URLISH.search(q):
+        return False
+    # slash between word chars => path/URL fragment (net/catalog, ru/claude-…)
+    if re.search(r"\w/\w", q):
+        return False
+    # need enough Latin letters (filters Russian/Chinese-only snippets)
+    latin = sum(1 for c in q if "a" <= c.lower() <= "z")
+    if latin < 12 or latin / len(q) < 0.4:
+        return False
+    # need at least 3 word-ish tokens
+    if len(re.findall(r"[A-Za-z]{2,}", q)) < 3:
+        return False
+    return True
 
 
 def detect_question_type(text: str) -> str:
@@ -417,7 +507,7 @@ def extract_questions_from_text(text: str) -> List[str]:
     unique = []
     for q in questions:
         q_normalized = q.lower().strip()
-        if q_normalized not in seen and len(q) > 15:
+        if q_normalized not in seen and _looks_like_question(q):
             seen.add(q_normalized)
             unique.append(q)
 
@@ -444,10 +534,66 @@ def extract_topics(text: str) -> List[str]:
     return topics
 
 
+async def discover_channels(
+    client: Any,
+    queries: Optional[List[str]] = None,
+    per_query_limit: int = 40,
+    max_channels: int = 250,
+) -> List[str]:
+    """Discover live public channels/groups by searching Telegram globally.
+
+    Uses contacts.Search per keyword and collects public entities that have a
+    username (only those are joinable/readable without an invite). Returns a
+    deduped list of usernames, capped at ``max_channels``.
+    """
+    try:
+        from telethon.tl.functions.contacts import SearchRequest
+    except ImportError:
+        return []
+
+    if queries is None:
+        queries = SEARCH_QUERIES
+
+    found: Dict[str, int] = {}  # username -> participants/subscribers (for ranking)
+    for q in queries:
+        if len(found) >= max_channels:
+            break
+        try:
+            if _rate_limiter:
+                delay = _rate_limiter.get_delay()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+            res = await client(SearchRequest(q=q, limit=per_query_limit))
+        except Exception as e:
+            logger.warning(f"Telegram search failed for '{q}': {e}")
+            await asyncio.sleep(1.0)
+            continue
+
+        for chat in getattr(res, "chats", []) or []:
+            username = getattr(chat, "username", None)
+            # broadcast channel or megagroup with a public username
+            if not username:
+                continue
+            if not (getattr(chat, "broadcast", False) or getattr(chat, "megagroup", False)):
+                continue
+            uname = username.lower()
+            if uname not in found:
+                found[uname] = getattr(chat, "participants_count", 0) or 0
+        logger.info(f"  search '{q}': {len(found)} unique channels so far")
+
+    # Prefer larger communities first (more content, more likely active).
+    ranked = sorted(found.items(), key=lambda kv: kv[1], reverse=True)
+    usernames = [u for u, _ in ranked][:max_channels]
+    logger.info(f"Discovered {len(usernames)} public channels via search")
+    return usernames
+
+
 async def fetch_telegram_messages(
     channels: List[str],
     months_back: int = 5,
     max_messages_per_channel: int = 100,
+    discover: bool = True,
+    max_channels: int = 250,
 ) -> List[Dict[str, Any]]:
     """
     Fetch messages from Telegram channels using telethon.
@@ -507,6 +653,24 @@ async def fetch_telegram_messages(
             else:
                 logger.error("Set TELEGRAM_PHONE for first-time authentication")
                 return []
+
+        # Discover live channels via global search and merge with the seed
+        # list (seeds first so known-good channels are always covered).
+        if discover:
+            try:
+                discovered = await discover_channels(client, max_channels=max_channels)
+            except Exception as e:
+                logger.warning(f"Channel discovery failed: {e}")
+                discovered = []
+            seen_ch = set()
+            merged = []
+            for c in list(channels) + discovered:
+                cl = c.lower()
+                if cl not in seen_ch:
+                    seen_ch.add(cl)
+                    merged.append(c)
+            channels = merged[:max_channels]
+            logger.info(f"Monitoring {len(channels)} channels total (seed + discovered)")
 
         for channel_name in channels:
             try:
@@ -637,9 +801,11 @@ def parse_telegram_messages(
 
         if not extracted:
             # Use the whole message as a question if no specific questions found
-            # but only if it looks like interview content
+            # but only if it looks like interview content AND reads like a question
             if any(kw in text.lower() for kw in ["interview", "oa", "asked", "question", "problem"]):
-                extracted = [text[:500]]  # Truncate long messages
+                candidate = text.strip().lstrip("*# ").strip()[:500]
+                if _looks_like_question(candidate):
+                    extracted = [candidate]
 
         for q_text in extracted:
             # Generate ID
@@ -676,6 +842,8 @@ def scrape_telegram(
     months_back: int = 5,
     max_messages_per_channel: int = 100,
     channels: Optional[List[str]] = None,
+    discover: bool = True,
+    max_channels: int = 250,
 ) -> List[Dict[str, Any]]:
     """
     Scrape interview questions from Telegram channels.
@@ -721,6 +889,8 @@ def scrape_telegram(
                 channels=channels,
                 months_back=months_back,
                 max_messages_per_channel=max_messages_per_channel,
+                discover=discover,
+                max_channels=max_channels,
             )
         )
     except Exception as e:
