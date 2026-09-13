@@ -94,6 +94,23 @@ class InterviewQuestion:
     metadata: dict = field(default_factory=dict)
 
 
+def _question_to_dict(q: Any) -> dict:
+    """Normalize a scraper's question (dict, dataclass, or plain object) to a
+    plain dict so downstream code can use .get() uniformly."""
+    if isinstance(q, dict):
+        return q
+    if hasattr(q, "to_dict") and callable(getattr(q, "to_dict")):
+        try:
+            return q.to_dict()
+        except Exception:
+            pass
+    try:
+        return asdict(q)  # dataclass instances
+    except Exception:
+        pass
+    return dict(getattr(q, "__dict__", {}) or {})
+
+
 @dataclass
 class ScraperConfig:
     """Configuration for a scraper."""
@@ -700,6 +717,11 @@ class InterviewQuestionOrchestrator:
                     elif isinstance(result, dict):
                         questions = result.get('questions', [])
                         errors = result.get('errors', [])
+
+                    # Scrapers return heterogeneous item types (dicts or
+                    # dataclass/plain objects). Normalize everything to dicts so
+                    # downstream dedup/normalize can use .get().
+                    questions = [_question_to_dict(q) for q in questions]
 
                     break  # Success, exit retry loop
 
