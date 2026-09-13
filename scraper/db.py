@@ -18,6 +18,37 @@ MAX_AGE_DAYS = 30  # Jobs older than this are always deactivated
 _client: Optional[Client] = None
 
 
+def detect_ats_type(url: str, source: str = "") -> Optional[str]:
+    """Infer the ATS platform for a job from its URL (falling back to source).
+
+    Powers the "Auto Apply" support check in the UI. Returns None when the URL
+    is a generic careers page with no recognizable ATS."""
+    u = (url or "").lower()
+    patterns = [
+        ("greenhouse", ["greenhouse.io", "boards.greenhouse", "job-boards.greenhouse"]),
+        ("lever", ["lever.co", "jobs.lever"]),
+        ("ashby", ["ashbyhq.com", "jobs.ashby"]),
+        ("workday", ["myworkdayjobs.com", ".wd1.", ".wd2.", ".wd3.", ".wd5."]),
+        ("smartrecruiters", ["smartrecruiters.com"]),
+        ("jobvite", ["jobvite.com"]),
+        ("icims", ["icims.com"]),
+        ("bamboohr", ["bamboohr.com"]),
+        ("breezyhr", ["breezy.hr"]),
+        ("jazzhr", ["applytojob.com", "jazz.co"]),
+        ("recruitee", ["recruitee.com"]),
+        ("taleo", ["taleo.net"]),
+    ]
+    for ats, needles in patterns:
+        if any(n in u for n in needles):
+            return ats
+    # Fall back to the scraper source when it is itself an ATS name
+    src = (source or "").lower()
+    known = {"greenhouse", "lever", "ashby", "workday"}
+    if src in known:
+        return src
+    return None
+
+
 def get_client() -> Client:
     """Get or create Supabase client."""
     global _client
@@ -133,6 +164,7 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
             "source": job["source"],
             "posted": job.get("posted"),
             "is_active": True,
+            "ats_type": detect_ats_type(job.get("url", ""), job.get("source", "")),
             "discovery_sources": discovery,
             "diversity_tags": diversity,
             "work_modes": work_modes,
