@@ -626,8 +626,15 @@ class IncrementalScraper:
                 pass
         return ScraperState()
 
-    def save_state(self, state: ScraperState):
-        """Save scraper state"""
+    def save_state(self, state: ScraperState = None):
+        """Save scraper state (and seen IDs).
+
+        If no state is given, persist the current state — this lets callers do
+        a simple `save_state()` at the end of a run to flush progress.
+        """
+        if state is None:
+            state = self.load_state()
+            state.last_run = time.time()
         data = json.dumps({
             'last_run': state.last_run,
             'last_page': state.last_page,
@@ -636,6 +643,7 @@ class IncrementalScraper:
             'checkpoints': state.checkpoints
         }).encode()
         self.backend.set(self._state_key(), data)
+        self._save_seen_ids()
 
     def save_checkpoint(self, **kwargs):
         """Save a checkpoint with current progress"""

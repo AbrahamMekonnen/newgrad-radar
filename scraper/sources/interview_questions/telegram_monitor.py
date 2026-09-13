@@ -567,13 +567,17 @@ async def fetch_telegram_messages(
                         "forwards": getattr(message, "forwards", 0) or 0,
                     }
 
-                    # Archive immediately (ephemeral content!)
+                    # Archive immediately (ephemeral content!) — best-effort,
+                    # never let an archiver quirk drop the message.
                     if _archiver:
-                        _archiver.archive({
-                            'source': f'telegram:{channel_name}',
-                            'content': message.text,
-                            'metadata': msg_data
-                        })
+                        try:
+                            _archiver.archive({
+                                'source': f'telegram:{channel_name}',
+                                'content': message.text,
+                                'metadata': msg_data
+                            })
+                        except Exception:
+                            pass
 
                     messages.append(msg_data)
 
