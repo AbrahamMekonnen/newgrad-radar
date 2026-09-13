@@ -52,15 +52,13 @@ jobs:
           cd scraper
           MONTHS="${{ inputs.months }}"
           MONTHS="${MONTHS:-12}"
-          # Exclude devto/hackernews: they extract random sentences from
-          # general articles and mis-attribute them to companies (noise).
-          EXCLUDE="--exclude devto hackernews"
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            python cli.py run-all --months "$MONTHS" $EXCLUDE --dry-run
+            python cli.py run-all --months "$MONTHS" --dry-run
           else
-            # Don't fail the whole workflow if a few flaky sources error;
-            # the run still writes everything the working sources produced.
-            python cli.py run-all --months "$MONTHS" $EXCLUDE || echo "::warning::some sources failed; questions from working sources were still saved"
+            # Run every configured source. Don't fail the whole workflow if a
+            # few flaky sources error; the run still writes everything the
+            # working sources produced.
+            python cli.py run-all --months "$MONTHS" || echo "::warning::some sources failed; questions from working sources were still saved"
           fi
 
       - name: Summary

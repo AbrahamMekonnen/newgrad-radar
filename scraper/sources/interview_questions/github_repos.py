@@ -721,7 +721,7 @@ def clear_cache():
 
 # How many questions to keep per company (per source). The 6-month CSVs have
 # hundreds of rows for big companies; we want deep, role-specific banks.
-COMPANY_WISE_CAP = 2000  # effectively uncapped for the 6-month window
+COMPANY_WISE_CAP = 100000  # effectively uncapped
 
 
 def _build_cw_question(company_name, title, difficulty, link, rank, total, extra_tags=None):
@@ -729,11 +729,11 @@ def _build_cw_question(company_name, title, difficulty, link, rank, total, extra
 
     Uses a shared id/source across both source repos so identical
     (company, title) pairs dedupe into a union. `rank` (0 = most frequently
-    asked) staggers interview_date across the last ~90 days so the most
-    relevant/recent questions sort to the top.
+    asked) staggers interview_date across the last ~180 days so the most
+    frequently-asked questions sort to the top.
     """
     diff = (difficulty or "unknown").strip().lower()
-    days_ago = int(rank * 90 / max(total, 1))
+    days_ago = int(rank * 180 / max(total, 1))
     approx_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
     tags = (["leetcode", "coding"] + (extra_tags or []))[:8]
     return InterviewQuestion(
@@ -742,7 +742,7 @@ def _build_cw_question(company_name, title, difficulty, link, rank, total, extra
         position="Software Engineer",
         question_type="technical_coding",
         difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
-        question_text=f"{title} — asked at {company_name} (LeetCode, last 6 months).",
+        question_text=f"{title} — asked at {company_name} (LeetCode).",
         source="leetcode_company_wise",
         source_url=link or None,
         interview_date=approx_date,
@@ -766,11 +766,11 @@ def parse_company_wise_leetcode(top_n_per_company: int = COMPANY_WISE_CAP) -> Li
     questions: List[InterviewQuestion] = []
 
     files = list_directory_files(owner, repo, "")
-    csvs = [f for f in files if f.endswith("_6months.csv")]
-    print(f"  [krishnadey30] {len(csvs)} companies (6-month window)")
+    csvs = [f for f in files if f.endswith("_alltime.csv")]
+    print(f"  [krishnadey30] {len(csvs)} companies (all-time)")
 
     for fname in csvs:
-        comp_slug = fname[: -len("_6months.csv")]
+        comp_slug = fname[: -len("_alltime.csv")]
         content = fetch_file_content(owner, repo, branch, fname)
         if not content:
             continue
@@ -826,14 +826,14 @@ def parse_company_wise_liquidslr(top_n_per_company: int = COMPANY_WISE_CAP) -> L
         return questions
 
     # RECENT only: use each company's "3. Six Months.csv" (last ~6 months).
-    target = "3. Six Months.csv"
+    target = "5. All.csv"
     company_files = {}
     for p in paths:
         parts = p.split("/")
         if len(parts) == 2 and parts[1] == target:
             company_files[parts[0]] = p
 
-    print(f"  [liquidslr] {len(company_files)} companies (6-month window)")
+    print(f"  [liquidslr] {len(company_files)} companies (all-time)")
 
     for company, path in company_files.items():
         content = fetch_file_content(owner, repo, branch, path)

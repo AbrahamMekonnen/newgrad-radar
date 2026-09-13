@@ -254,6 +254,8 @@ class InterviewQuestionOrchestrator:
             module_path='sources.interview_questions.github_repos',
             function_name='scrape_github_repos',
             priority=2,
+            timeout=2400,   # fetches 550+ company files + parses ~20k rows
+            max_retries=1,  # no point re-doing this heavy scrape on timeout
         ),
         ScraperConfig(
             name='github_gists',
