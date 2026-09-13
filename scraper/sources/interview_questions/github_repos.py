@@ -719,6 +719,92 @@ def clear_cache():
         logger.info("Cache cleared")
 
 
+def parse_company_wise_leetcode(top_n_per_company: int = 40) -> List[InterviewQuestion]:
+    """Parse krishnadey30/LeetCode-Questions-CompanyWise.
+
+    This repo has one CSV per company AND timeframe (e.g. amazon_6months.csv,
+    amazon_1year.csv) listing the LeetCode problems most frequently asked at
+    that company in that window — exactly the recent, company-specific data we
+    want. We prefer the 6-month file (most recent) and fall back to 1-year.
+    """
+    import csv as _csv
+    import io as _io
+
+    owner, repo, branch = "krishnadey30", "LeetCode-Questions-CompanyWise", "master"
+    questions: List[InterviewQuestion] = []
+
+    # List all CSV files in the repo root
+    files = list_directory_files(owner, repo, "")
+    csvs = [f for f in files if f.endswith(".csv")]
+
+    # Group by company, preferring the most recent window available
+    window_rank = {"_6months.csv": 0, "_1year.csv": 1, "_2year.csv": 2, "_alltime.csv": 3}
+
+    def company_and_window(fname):
+        for suf, rank in window_rank.items():
+            if fname.endswith(suf):
+                return fname[: -len(suf)], suf, rank
+        return None, None, 99
+
+    best_file: dict[str, tuple[str, int]] = {}
+    for f in csvs:
+        comp, suf, rank = company_and_window(f)
+        if not comp:
+            continue
+        if comp not in best_file or rank < best_file[comp][1]:
+            best_file[comp] = (f, rank)
+
+    print(f"  [company-wise] {len(best_file)} companies")
+
+    for comp_slug, (fname, rank) in best_file.items():
+        content = fetch_file_content(owner, repo, branch, fname)
+        if not content:
+            continue
+        company_name = comp_slug.replace("-", " ").title()
+        # Recency: represent the window bucket with an approximate recent date
+        days_ago = {0: 90, 1: 270, 2: 540, 3: 720}.get(rank, 365)
+        approx_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+
+        rows = []
+        try:
+            reader = _csv.DictReader(_io.StringIO(content))
+            for row in reader:
+                title = (row.get("Title") or "").strip()
+                if not title:
+                    continue
+                try:
+                    freq = float(row.get("Frequency") or 0)
+                except (ValueError, TypeError):
+                    freq = 0.0
+                rows.append((freq, row, title))
+        except Exception as e:
+            logger.error(f"[company-wise] CSV parse error for {fname}: {e}")
+            continue
+
+        # Highest-frequency (most commonly asked) first
+        rows.sort(key=lambda x: x[0], reverse=True)
+        for freq, row, title in rows[:top_n_per_company]:
+            diff = (row.get("Difficulty") or "unknown").strip().lower()
+            link = (row.get("Leetcode Question Link") or row.get("Leetcode Link") or "").strip()
+            questions.append(InterviewQuestion(
+                id=generate_question_id(f"{company_name}|{title}", "company-wise-leetcode"),
+                company=company_name,
+                position="Software Engineer",
+                question_type="technical_coding",
+                difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
+                question_text=f"{title} — asked at {company_name} (LeetCode).",
+                source="github_company-wise-leetcode",
+                source_url=link or None,
+                interview_date=approx_date,
+                tags=["leetcode", "coding"],
+                upvotes=int(freq * 1000),
+                answer_hint=None,
+            ))
+
+    print(f"  [company-wise] parsed {len(questions)} questions")
+    return questions
+
+
 def scrape_github_repos(resume: bool = True) -> List[InterviewQuestion]:
     """Main entry point: scrape all configured GitHub repos for interview questions.
 
@@ -792,6 +878,13 @@ def scrape_github_repos(resume: bool = True) -> List[InterviewQuestion]:
         except Exception as e:
             logger.error(f"Error processing {repo_id}: {e}")
             # Continue to next repo on error
+
+    # Company-wise LeetCode questions (recent, per-company, high volume)
+    try:
+        print("\nProcessing company-wise LeetCode repo...")
+        all_questions.extend(parse_company_wise_leetcode())
+    except Exception as e:
+        logger.error(f"Error processing company-wise repo: {e}")
 
     # Deduplicate
     unique_questions = deduplicate_questions(all_questions)

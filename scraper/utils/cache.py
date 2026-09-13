@@ -371,7 +371,11 @@ class ResponseCache:
                  backend: CacheBackend = None,
                  ttl: int = DEFAULT_TTL_SECONDS,
                  compress: bool = True,
-                 compression_threshold: int = COMPRESSION_THRESHOLD):
+                 compression_threshold: int = COMPRESSION_THRESHOLD,
+                 cache_dir: str = None,
+                 **_kwargs):
+        # `cache_dir` and any other legacy kwargs are accepted for backward
+        # compatibility with callers that pass them.
         self.backend = backend or SQLiteBackend()
         self.default_ttl = ttl
         self.compress = compress

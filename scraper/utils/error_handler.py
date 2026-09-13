@@ -332,23 +332,49 @@ class Checkpoint:
 class CheckpointManager:
     """Manages checkpointing and resumption for long-running scrapes."""
 
-    def __init__(self, checkpoint_dir: Optional[str] = None):
+    def __init__(self, checkpoint_dir: Optional[str] = None, name: Optional[str] = None):
+        # Many scrapers call CheckpointManager("scrapername") — a plain scope
+        # name, not a directory. Detect that and treat it as the scope.
+        scope = name
+        if checkpoint_dir and not name and ('/' not in checkpoint_dir and '\\' not in checkpoint_dir):
+            scope = checkpoint_dir
+            checkpoint_dir = None
+        self._scope = scope or 'default'
+        default_dir = Path(__file__).resolve().parent.parent / '.scraper_state' / 'checkpoints'
         self.checkpoint_dir = Path(checkpoint_dir or os.environ.get(
-            'SCRAPER_CHECKPOINT_DIR',
-            '/tmp/scraper_checkpoints'
+            'SCRAPER_CHECKPOINT_DIR', str(default_dir)
         ))
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            self.checkpoint_dir = default_dir
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._current_checkpoint: Optional[Checkpoint] = None
         self._auto_save_interval = 100  # Save every N items
         self._items_since_save = 0
+
+    def _scope_path(self) -> Path:
+        safe = str(self._scope).replace('/', '_').replace('\\', '_')
+        return self.checkpoint_dir / f"{safe}.checkpoint.json"
 
     def _checkpoint_path(self, scraper_id: str, source_name: str) -> Path:
         """Get the path for a checkpoint file."""
         safe_name = f"{scraper_id}_{source_name}".replace('/', '_').replace('\\', '_')
         return self.checkpoint_dir / f"{safe_name}.checkpoint.json"
 
-    def save(self, checkpoint: Checkpoint) -> None:
-        """Save a checkpoint to disk."""
+    def save(self, checkpoint) -> None:
+        """Save a checkpoint to disk.
+
+        Accepts either a Checkpoint object (strict API) or a plain dict
+        (simple per-scope API used by the interview scrapers)."""
+        if isinstance(checkpoint, dict):
+            path = self._scope_path()
+            temp_path = path.with_suffix('.tmp')
+            with open(temp_path, 'w') as f:
+                json.dump(checkpoint, f, indent=2, default=str)
+            temp_path.rename(path)
+            self._items_since_save = 0
+            return
         path = self._checkpoint_path(checkpoint.scraper_id, checkpoint.source_name)
         checkpoint.timestamp = datetime.utcnow().isoformat()
 
@@ -362,8 +388,20 @@ class CheckpointManager:
         self._items_since_save = 0
         logger.debug(f"Checkpoint saved: {path}")
 
-    def load(self, scraper_id: str, source_name: str) -> Optional[Checkpoint]:
-        """Load a checkpoint from disk if it exists."""
+    def load(self, scraper_id: Optional[str] = None, source_name: Optional[str] = None):
+        """Load a checkpoint from disk if it exists.
+
+        No-arg call (simple API) returns the raw progress dict; the strict
+        two-arg call returns a Checkpoint object."""
+        if scraper_id is None:
+            path = self._scope_path()
+            if not path.exists():
+                return None
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return None
         path = self._checkpoint_path(scraper_id, source_name)
 
         if not path.exists():
@@ -380,9 +418,12 @@ class CheckpointManager:
             logger.warning(f"Failed to load checkpoint: {e}")
             return None
 
-    def clear(self, scraper_id: str, source_name: str) -> None:
-        """Clear a checkpoint after successful completion."""
-        path = self._checkpoint_path(scraper_id, source_name)
+    def clear(self, scraper_id: Optional[str] = None, source_name: Optional[str] = None) -> None:
+        """Clear a checkpoint after successful completion (both APIs)."""
+        if scraper_id is None:
+            path = self._scope_path()
+        else:
+            path = self._checkpoint_path(scraper_id, source_name)
         if path.exists():
             path.unlink()
             logger.debug(f"Checkpoint cleared: {path}")
@@ -470,11 +511,15 @@ class DeadLetterQueue:
     """Tracks failed items for later replay or manual inspection."""
 
     def __init__(self, storage_path: Optional[str] = None, max_items: int = 10000):
+        _default_dlq = Path(__file__).resolve().parent.parent / '.scraper_state' / 'dlq'
         self.storage_path = Path(storage_path or os.environ.get(
-            'SCRAPER_DLQ_PATH',
-            '/tmp/scraper_dlq'
+            'SCRAPER_DLQ_PATH', str(_default_dlq)
         ))
-        self.storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self.storage_path.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            self.storage_path = _default_dlq
+            self.storage_path.mkdir(parents=True, exist_ok=True)
         self.max_items = max_items
         self._items: Dict[str, DeadLetterItem] = {}
         self._lock = threading.Lock()
