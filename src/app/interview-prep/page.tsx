@@ -54,7 +54,8 @@ const DATE_RANGES = [
   { value: 3, label: 'Last 3 Months' },
   { value: 6, label: 'Last 6 Months' },
   { value: 12, label: 'Last Year' },
-  { value: 24, label: 'All Time' },
+  { value: 24, label: 'Last 2 Years' },
+  { value: 600, label: 'All Time' },
 ];
 
 const DIFFICULTY_COLORS: Record<string, string> = {
@@ -366,7 +367,7 @@ function InterviewPrepContent() {
   const [companySearch, setCompanySearch] = useState(urlCompany);
   const [selectedRole, setSelectedRole] = useState('');
   const [selectedType, setSelectedType] = useState('all');
-  const [dateRange, setDateRange] = useState(24);
+  const [dateRange, setDateRange] = useState(6);
 
   // Keep state in sync if URL changes (client-side navigation)
   useEffect(() => {

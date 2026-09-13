@@ -660,6 +660,20 @@ class InterviewQuestionOrchestrator:
         q['company_normalized'] = q.get('company_normalized') or q['company_name']
         q['role_normalized'] = q.get('role_normalized') or q.get('position') or q.get('role') or ''
         q['tags'] = q.get('tags') or q.get('topics') or []
+        # Map a source's real post/ask date into interview_date (a DATE column)
+        # so time filters ("last month" vs "last year") reflect WHEN a question
+        # was actually asked. Telegram/forum scrapers expose this as
+        # posted_date/date/posted; without this it stays null and every time
+        # window returns the same rows.
+        if not q.get('interview_date'):
+            import re as _re_date
+            for _k in ('posted_date', 'date', 'posted', 'created_date'):
+                _v = q.get(_k)
+                if isinstance(_v, str):
+                    _m = _re_date.match(r'(\d{4}-\d{2}-\d{2})', _v)
+                    if _m:
+                        q['interview_date'] = _m.group(1)
+                        break
         for key in ('question_type', 'difficulty'):
             value = q.get(key)
             if isinstance(value, Enum):

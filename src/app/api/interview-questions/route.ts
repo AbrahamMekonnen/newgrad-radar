@@ -123,8 +123,13 @@ export async function GET(request: NextRequest) {
       query = query.eq('question_type', question_type);
     }
 
-    // Date filter - interview_date or scraped_at must be within range
-    query = query.or(`interview_date.gte.${cutoffDateStr},scraped_at.gte.${cutoffDate.toISOString()}`);
+    // Date filter — use interview_date (when the question was actually asked),
+    // NOT scraped_at. Previously this OR'd in `scraped_at.gte`, but everything
+    // was scraped recently, so that clause always matched and every time
+    // window ("last month" vs "last year") returned identical results.
+    // Rows with an unknown interview_date (null) are kept so undated sources
+    // aren't hidden, but dated rows now filter correctly by period.
+    query = query.or(`interview_date.gte.${cutoffDateStr},interview_date.is.null`);
 
     // Search by company name (case-insensitive partial match)
     if (search) {
