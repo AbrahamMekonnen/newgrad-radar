@@ -719,13 +719,45 @@ def clear_cache():
         logger.info("Cache cleared")
 
 
-def parse_company_wise_leetcode(top_n_per_company: int = 40) -> List[InterviewQuestion]:
-    """Parse krishnadey30/LeetCode-Questions-CompanyWise.
+# How many questions to keep per company (per source). The 6-month CSVs have
+# hundreds of rows for big companies; we want deep, role-specific banks.
+COMPANY_WISE_CAP = 250
 
-    This repo has one CSV per company AND timeframe (e.g. amazon_6months.csv,
-    amazon_1year.csv) listing the LeetCode problems most frequently asked at
-    that company in that window — exactly the recent, company-specific data we
-    want. We prefer the 6-month file (most recent) and fall back to 1-year.
+
+def _build_cw_question(company_name, title, difficulty, link, rank, total, extra_tags=None):
+    """Build a company-wise LeetCode question.
+
+    Uses a shared id/source across both source repos so identical
+    (company, title) pairs dedupe into a union. `rank` (0 = most frequently
+    asked) staggers interview_date across the last ~90 days so the most
+    relevant/recent questions sort to the top.
+    """
+    diff = (difficulty or "unknown").strip().lower()
+    days_ago = int(rank * 90 / max(total, 1))
+    approx_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+    tags = (["leetcode", "coding"] + (extra_tags or []))[:8]
+    return InterviewQuestion(
+        id=generate_question_id(f"{company_name.lower()}|{title.lower()}", "leetcode_company_wise"),
+        company=company_name,
+        position="Software Engineer",
+        question_type="technical_coding",
+        difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
+        question_text=f"{title} — asked at {company_name} (LeetCode, last 6 months).",
+        source="leetcode_company_wise",
+        source_url=link or None,
+        interview_date=approx_date,
+        tags=tags,
+        upvotes=max(total - rank, 0),  # higher for more-frequently-asked
+        answer_hint=None,
+    )
+
+
+def parse_company_wise_leetcode(top_n_per_company: int = COMPANY_WISE_CAP) -> List[InterviewQuestion]:
+    """Parse krishnadey30/LeetCode-Questions-CompanyWise — RECENT (6-month) only.
+
+    Per the product requirement we only use each company's `_6months.csv`
+    (last ~6 months), sorted most-frequently-asked first, and keep up to
+    top_n_per_company so users get 100+ role-specific questions per company.
     """
     import csv as _csv
     import io as _io
@@ -733,42 +765,19 @@ def parse_company_wise_leetcode(top_n_per_company: int = 40) -> List[InterviewQu
     owner, repo, branch = "krishnadey30", "LeetCode-Questions-CompanyWise", "master"
     questions: List[InterviewQuestion] = []
 
-    # List all CSV files in the repo root
     files = list_directory_files(owner, repo, "")
-    csvs = [f for f in files if f.endswith(".csv")]
+    csvs = [f for f in files if f.endswith("_6months.csv")]
+    print(f"  [krishnadey30] {len(csvs)} companies (6-month window)")
 
-    # Group by company, preferring the most recent window available
-    window_rank = {"_6months.csv": 0, "_1year.csv": 1, "_2year.csv": 2, "_alltime.csv": 3}
-
-    def company_and_window(fname):
-        for suf, rank in window_rank.items():
-            if fname.endswith(suf):
-                return fname[: -len(suf)], suf, rank
-        return None, None, 99
-
-    best_file: dict[str, tuple[str, int]] = {}
-    for f in csvs:
-        comp, suf, rank = company_and_window(f)
-        if not comp:
-            continue
-        if comp not in best_file or rank < best_file[comp][1]:
-            best_file[comp] = (f, rank)
-
-    print(f"  [company-wise] {len(best_file)} companies")
-
-    for comp_slug, (fname, rank) in best_file.items():
+    for fname in csvs:
+        comp_slug = fname[: -len("_6months.csv")]
         content = fetch_file_content(owner, repo, branch, fname)
         if not content:
             continue
         company_name = comp_slug.replace("-", " ").title()
-        # Recency: represent the window bucket with an approximate recent date
-        days_ago = {0: 90, 1: 270, 2: 540, 3: 720}.get(rank, 365)
-        approx_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
-
         rows = []
         try:
-            reader = _csv.DictReader(_io.StringIO(content))
-            for row in reader:
+            for row in _csv.DictReader(_io.StringIO(content)):
                 title = (row.get("Title") or "").strip()
                 if not title:
                     continue
@@ -778,34 +787,20 @@ def parse_company_wise_leetcode(top_n_per_company: int = 40) -> List[InterviewQu
                     freq = 0.0
                 rows.append((freq, row, title))
         except Exception as e:
-            logger.error(f"[company-wise] CSV parse error for {fname}: {e}")
+            logger.error(f"[krishnadey30] CSV parse error for {fname}: {e}")
             continue
 
-        # Highest-frequency (most commonly asked) first
         rows.sort(key=lambda x: x[0], reverse=True)
-        for freq, row, title in rows[:top_n_per_company]:
-            diff = (row.get("Difficulty") or "unknown").strip().lower()
+        top = rows[:top_n_per_company]
+        for rank, (freq, row, title) in enumerate(top):
             link = (row.get("Leetcode Question Link") or row.get("Leetcode Link") or "").strip()
-            questions.append(InterviewQuestion(
-                id=generate_question_id(f"{company_name}|{title}", "company-wise-leetcode"),
-                company=company_name,
-                position="Software Engineer",
-                question_type="technical_coding",
-                difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
-                question_text=f"{title} — asked at {company_name} (LeetCode).",
-                source="github_company-wise-leetcode",
-                source_url=link or None,
-                interview_date=approx_date,
-                tags=["leetcode", "coding"],
-                upvotes=int(freq * 1000),
-                answer_hint=None,
-            ))
+            questions.append(_build_cw_question(company_name, title, row.get("Difficulty"), link, rank, len(top)))
 
-    print(f"  [company-wise] parsed {len(questions)} questions")
+    print(f"  [krishnadey30] parsed {len(questions)} questions")
     return questions
 
 
-def parse_company_wise_liquidslr(top_n_per_company: int = 30) -> List[InterviewQuestion]:
+def parse_company_wise_liquidslr(top_n_per_company: int = COMPANY_WISE_CAP) -> List[InterviewQuestion]:
     """Parse liquidslr/leetcode-company-wise-problems.
 
     Per-company folders with finer recency buckets ("1. Thirty Days.csv",
@@ -830,27 +825,20 @@ def parse_company_wise_liquidslr(top_n_per_company: int = 30) -> List[InterviewQ
         logger.error(f"[liquidslr] tree parse error: {e}")
         return questions
 
-    # Prefer the most recent window available per company folder
-    window_rank = {"1. Thirty Days.csv": 0, "2. Three Months.csv": 1,
-                   "3. Six Months.csv": 2, "4. More Than Six Months.csv": 3, "5. All.csv": 4}
-    best: dict[str, tuple[str, int]] = {}
+    # RECENT only: use each company's "3. Six Months.csv" (last ~6 months).
+    target = "3. Six Months.csv"
+    company_files = {}
     for p in paths:
         parts = p.split("/")
-        if len(parts) != 2:
-            continue
-        company, fname = parts
-        rank = window_rank.get(fname, 9)
-        if company not in best or rank < best[company][1]:
-            best[company] = (p, rank)
+        if len(parts) == 2 and parts[1] == target:
+            company_files[parts[0]] = p
 
-    print(f"  [liquidslr] {len(best)} companies")
-    days_by_rank = {0: 30, 1: 90, 2: 180, 3: 365, 4: 540, 9: 365}
+    print(f"  [liquidslr] {len(company_files)} companies (6-month window)")
 
-    for company, (path, rank) in best.items():
+    for company, path in company_files.items():
         content = fetch_file_content(owner, repo, branch, path)
         if not content:
             continue
-        approx_date = (datetime.now() - timedelta(days=days_by_rank.get(rank, 365))).strftime("%Y-%m-%d")
         rows = []
         try:
             for row in _csv.DictReader(_io.StringIO(content)):
@@ -865,22 +853,12 @@ def parse_company_wise_liquidslr(top_n_per_company: int = 30) -> List[InterviewQ
         except Exception:
             continue
         rows.sort(key=lambda x: x[0], reverse=True)
-        for freq, row, title in rows[:top_n_per_company]:
-            diff = (row.get("Difficulty") or "unknown").strip().lower()
+        top = rows[:top_n_per_company]
+        for rank, (freq, row, title) in enumerate(top):
             topics = [t.strip() for t in (row.get("Topics") or "").split(",") if t.strip()]
-            questions.append(InterviewQuestion(
-                id=generate_question_id(f"{company}|{title}", "liquidslr"),
-                company=company,
-                position="Software Engineer",
-                question_type="technical_coding",
-                difficulty=diff if diff in ("easy", "medium", "hard") else "unknown",
-                question_text=f"{title} — asked at {company} (LeetCode).",
-                source="github_company-wise-liquidslr",
-                source_url=(row.get("Link") or "").strip() or None,
-                interview_date=approx_date,
-                tags=(["leetcode", "coding"] + topics)[:8],
-                upvotes=int(freq * 100),
-                answer_hint=None,
+            questions.append(_build_cw_question(
+                company, title, row.get("Difficulty"),
+                (row.get("Link") or "").strip(), rank, len(top), extra_tags=topics,
             ))
 
     print(f"  [liquidslr] parsed {len(questions)} questions")
