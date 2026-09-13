@@ -474,6 +474,7 @@ async def fetch_telegram_messages(
 
     try:
         from telethon import TelegramClient
+        from telethon.sessions import StringSession
         from telethon.tl.types import Channel, Message
     except ImportError:
         logger.error("telethon not installed. Run: pip install telethon")
@@ -488,8 +489,13 @@ async def fetch_telegram_messages(
     messages = []
     cutoff_date = datetime.now() - timedelta(days=months_back * 30)
 
+    # Prefer a StringSession (from TELEGRAM_SESSION_STRING) so this runs
+    # headlessly in CI; fall back to a local file session for interactive use.
+    _session_str = os.environ.get("TELEGRAM_SESSION_STRING")
+    _session = StringSession(_session_str) if _session_str else TELEGRAM_SESSION_FILE
+
     async with TelegramClient(
-        TELEGRAM_SESSION_FILE,
+        _session,
         int(TELEGRAM_API_ID),
         TELEGRAM_API_HASH,
     ) as client:
