@@ -270,7 +270,16 @@ async function searchWebForRecruiters(companyName: string): Promise<RecruiterInf
 
     if (!response.ok) return [];
 
-    const data = await response.json();
+    // DuckDuckGo's instant-answer API frequently returns an empty body for
+    // these queries, which makes response.json() throw. Parse defensively.
+    const raw = await response.text();
+    if (!raw || !raw.trim().startsWith('{')) return [];
+    let data: { RelatedTopics?: { Text?: string; FirstURL?: string }[] };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return [];
+    }
 
     // Parse related topics for recruiter names
     const topics = data.RelatedTopics || [];

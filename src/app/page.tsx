@@ -576,61 +576,20 @@ export default function HomePage() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchAutoApplyData]);
 
-  // Fetch recruiters when jobs change, and auto-find for companies without recruiters
+  // Fetch existing recruiters when jobs change.
+  // NOTE: we intentionally do NOT auto-call /api/find-recruiters on every load
+  // — that spammed a slow, key-dependent endpoint for every company on each
+  // render. Recruiter discovery now runs only on explicit user action
+  // (handleFindRecruiters).
   useEffect(() => {
-    const loadRecruitersAndFindMissing = async () => {
+    const loadRecruiters = async () => {
       if (jobs.length === 0) return;
-
       const jobIds = jobs.map((j) => j.id);
       const slugs = [...new Set(jobs.map((j) => j.company_slug))];
-
-      // Fetch existing recruiters
-      const { data: existingRecruiters } = await supabase
-        .from('recruiters')
-        .select('company_slug')
-        .in('company_slug', slugs);
-
-      const companiesWithRecruiters = new Set(
-        existingRecruiters?.map((r) => r.company_slug) || []
-      );
-
-      // Update recruiters map
       await fetchRecruiters(jobIds, slugs);
-
-      // Find recruiters for companies that don't have any (in background, one at a time)
-      const companiesNeedingRecruiters = jobs
-        .filter((j) => !companiesWithRecruiters.has(j.company_slug))
-        .reduce((acc, job) => {
-          if (!acc.find((j) => j.company_slug === job.company_slug)) {
-            acc.push(job);
-          }
-          return acc;
-        }, [] as typeof jobs)
-        .slice(0, 3); // Limit to 3 companies at a time to avoid rate limits
-
-      for (const job of companiesNeedingRecruiters) {
-        try {
-          await fetch('/api/find-recruiters', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              companySlug: job.company_slug,
-              companyName: job.company_name,
-              jobId: job.id,
-            }),
-          });
-        } catch {
-          console.log('Auto-find recruiters skipped for', job.company_name);
-        }
-      }
-
-      // Refresh recruiters after finding
-      if (companiesNeedingRecruiters.length > 0) {
-        await fetchRecruiters(jobIds, slugs);
-      }
     };
 
-    loadRecruitersAndFindMissing();
+    loadRecruiters();
   }, [jobs, supabase, fetchRecruiters]);
 
   // Real-time subscription for application updates
