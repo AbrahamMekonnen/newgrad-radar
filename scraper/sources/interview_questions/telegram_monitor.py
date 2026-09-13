@@ -269,6 +269,18 @@ def _build_search_queries() -> List[str]:
         "palantir", "doordash", "airbnb", "coinbase", "robinhood",
     ]
     company_qs = [f"{c} interview" for c in companies] + [f"{c} oa" for c in companies[:20]]
+    # Prep-resource brand names — a huge number of channels are named after
+    # these creators/platforms and repost their problem sets & experiences.
+    prep_brands = [
+        "striver", "takeuforward", "neetcode", "algoexpert", "apna college",
+        "apnacollege", "love babbar", "lovebabbar", "code with harry",
+        "codewithharry", "codehelp", "pepcoding", "coding blocks", "scaler",
+        "scaler academy", "codingblocks", "prepbytes", "coding minutes",
+        "gate smashers", "abdul bari", "kunal kushwaha", "codeforces",
+        "leetcode patterns", "blind 75", "neetcode 150", "grokking",
+        "educative", "algomonster", "interviewready", "designgurus",
+    ]
+    country_qs_pre = list(prep_brands)
     # country/region + placement/jobs — surfaces regional community channels.
     countries = [
         "india", "usa", "uk", "canada", "germany", "russia", "ukraine", "china",
@@ -305,7 +317,7 @@ def _build_search_queries() -> List[str]:
     ]
     seen = set()
     out = []
-    for q in english + company_qs + country_qs + multilingual:
+    for q in english + company_qs + country_qs_pre + country_qs + multilingual:
         if q not in seen:
             seen.add(q)
             out.append(q)
@@ -675,18 +687,24 @@ def _is_public_channel(chat: Any) -> bool:
 # crypto, English-learning, news...), so every discovered channel must match at
 # least one of these in its username or title or it is dropped.
 _RELEVANCE_TOKENS = (
-    "interview", "leetcode", "leet code", "coding", "coding", "dsa", "sde",
-    "faang", "maang", "algorithm", "algo", "competitive", "hackerrank",
+    "interview", "leetcode", "leet code", "coding", "code", "coder", "dsa",
+    "sde", "faang", "maang", "algorithm", "algo", "competitive", "hackerrank",
     "codeforces", "codechef", "codingninja", "coding ninja", "interviewbit",
     "geeksforgeeks", "gfg", "placement", "campus", "aptitude", "cracking",
     "system design", "systemdesign", "oa ", "online assessment", "coding test",
     "codetest", "programmer", "programming", "developer", "software engineer",
     "swe", "cs prep", "tech prep", "career prep", "off campus", "offcampus",
-    "recruit", "questpre", "exam2026", "exam 2026",
+    "recruit", "questpre", "exam2026", "exam 2026", "intern", "hiring",
+    "software job", "it job", "tech job", "computer science",
+    # prep-resource brands (channels are commonly named after these)
+    "striver", "takeuforward", "neetcode", "algoexpert", "apnacollege",
+    "apna college", "lovebabbar", "codewithharry", "codehelp", "pepcoding",
+    "scaler", "prepbytes", "grokking", "educative", "algomonster",
     # multilingual interview/coding markers
     "собеседован", "литкод", "алгоритм", "面试", "面经", "刷题", "力扣", "校招",
     "코딩", "면접", "コーディング", "エンジニア", "mülakat", "entrevista",
     "programador", "programacion", "मॉक", "साक्षात्कार", "प्लेसमेंट",
+    "lowongan", "phong van", "lap trinh", "vaga", "développeur", "informatik",
 )
 
 
@@ -703,7 +721,7 @@ async def discover_channels(
     per_query_limit: int = 50,
     max_channels: int = 2500,
     use_recommendations: bool = True,
-    max_recommendation_calls: int = 250,
+    max_recommendation_calls: int = 600,
 ) -> List[Any]:
     """Discover live public channels/groups and return telethon ENTITIES.
 
