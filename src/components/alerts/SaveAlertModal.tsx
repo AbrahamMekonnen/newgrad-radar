@@ -32,7 +32,7 @@ export interface AlertFilters {
   salaryMax?: number | null;
   hasRecruiters?: boolean;
   smartFilters?: SmartFilter[];
-  experienceLevel?: ExperienceLevel | null;
+  experienceLevels?: ExperienceLevel[];
   diversityTags?: DiversityTag[];
   workModes?: WorkMode[];
   badges?: BadgeTag[];
@@ -93,7 +93,7 @@ export function SaveAlertModal({
       if (filters.salaryMax !== null && filters.salaryMax !== undefined) cleanFilters.salaryMax = filters.salaryMax;
       if (filters.hasRecruiters) cleanFilters.hasRecruiters = true;
       if (filters.smartFilters?.length) cleanFilters.smartFilters = filters.smartFilters;
-      if (filters.experienceLevel) cleanFilters.experience_levels = [filters.experienceLevel];
+      if (filters.experienceLevels && filters.experienceLevels.length > 0) cleanFilters.experience_levels = filters.experienceLevels;
       if (filters.diversityTags?.length) cleanFilters.diversity_tags = filters.diversityTags;
       if (filters.workModes?.length) cleanFilters.work_modes = filters.workModes;
       if (filters.badges?.length) cleanFilters.badges = filters.badges;
@@ -147,7 +147,7 @@ export function SaveAlertModal({
     if (filters.roles?.length) summary.push(`${filters.roles.length} role(s)`);
     if (filters.sponsorshipFilter) summary.push('Sponsorship filter');
     if (filters.smartFilters?.length) summary.push(`${filters.smartFilters.length} smart filter(s)`);
-    if (filters.experienceLevel) summary.push('Experience level');
+    if (filters.experienceLevels && filters.experienceLevels.length > 0) summary.push('Experience level');
     if (filters.workModes?.length) summary.push(`${filters.workModes.length} work mode(s)`);
     if (filters.diversityTags?.length) summary.push(`${filters.diversityTags.length} diversity tag(s)`);
     if (filters.salaryMin || filters.salaryMax) summary.push('Salary range');

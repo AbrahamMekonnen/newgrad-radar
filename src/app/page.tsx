@@ -143,7 +143,7 @@ export default function HomePage() {
   const [totalJobCount, setTotalJobCount] = useState(0);
   // New filter state
   const [smartFilters, setSmartFilters] = useState<SmartFilter[]>([]);
-  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | null>(null);
+  const [experienceLevels, setExperienceLevels] = useState<ExperienceLevel[]>([]);
   const [diversityTags, setDiversityTags] = useState<DiversityTag[]>([]);
   const [workModes, setWorkModes] = useState<WorkMode[]>([]);
   const [badges, setBadges] = useState<BadgeTag[]>([]);
@@ -339,15 +339,27 @@ export default function HomePage() {
       query = query.gte('salary_min', 150000);
     }
 
-    // Filter by experience level. "New Grad" is inclusive of everything a new
-    // grad can actually apply to — new_grad/entry/junior plus unclassified
-    // roles — while excluding clearly-senior postings. Other levels stay exact.
-    if (experienceLevel === 'new_grad') {
-      query = query.or(
-        'experience_level.in.(new_grad,entry_level,junior),experience_level.is.null'
-      );
-    } else if (experienceLevel) {
-      query = query.eq('experience_level', experienceLevel);
+    // Filter by experience level (multi-select). Picking "New Grad" is
+    // inclusive of everything a new grad can actually apply to — new_grad/
+    // entry/junior plus unclassified generic roles — while excluding clearly-
+    // senior postings. Levels combine as a union (e.g. New Grad + Mid).
+    if (experienceLevels.length > 0) {
+      const levelSet = new Set<string>();
+      let includeNull = false;
+      experienceLevels.forEach((l) => {
+        if (l === 'new_grad') {
+          ['new_grad', 'entry_level', 'junior'].forEach((x) => levelSet.add(x));
+          includeNull = true;
+        } else {
+          levelSet.add(l);
+        }
+      });
+      const inList = Array.from(levelSet).join(',');
+      if (includeNull) {
+        query = query.or(`experience_level.in.(${inList}),experience_level.is.null`);
+      } else {
+        query = query.in('experience_level', Array.from(levelSet));
+      }
     }
 
     // Filter by diversity tags (overlaps array)
@@ -404,7 +416,7 @@ export default function HomePage() {
     // `page` is intentionally omitted from deps: Load More passes the target
     // page via pageOverride, so fetchJobs must NOT be recreated on page change
     // (that would refire the reset effect below and wipe appended results).
-  }, [search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevel, diversityTags, workModes, badges, selectedLocations, sortBy, supabase]);
+  }, [search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, selectedLocations, sortBy, supabase]);
 
   const fetchSavedJobs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -570,7 +582,7 @@ export default function HomePage() {
       fetchAutoApplyData();
     };
     loadData();
-  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevel, diversityTags, workModes, badges, sortBy, fetchJobs, fetchJobsWithRecruiters, fetchSavedJobs, fetchAutoApplyData]);
+  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, sortBy, fetchJobs, fetchJobsWithRecruiters, fetchSavedJobs, fetchAutoApplyData]);
 
   // Refetch auto-apply setting when page gains focus (e.g., returning from settings)
   useEffect(() => {
@@ -871,7 +883,7 @@ export default function HomePage() {
     setHasRecruiters(false);
     // Clear new filter state
     setSmartFilters([]);
-    setExperienceLevel(null);
+    setExperienceLevels([]);
     setDiversityTags([]);
     setWorkModes([]);
     setBadges([]);
@@ -905,12 +917,12 @@ export default function HomePage() {
       salaryMax: salaryMax ?? undefined,
       hasRecruiters: hasRecruiters || undefined,
       smartFilters: smartFilters.length > 0 ? smartFilters : undefined,
-      experienceLevel: experienceLevel || undefined,
+      experienceLevels: experienceLevels.length > 0 ? experienceLevels : undefined,
       diversityTags: diversityTags.length > 0 ? diversityTags : undefined,
       workModes: workModes.length > 0 ? workModes : undefined,
       badges: badges.length > 0 ? badges : undefined,
     };
-  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevel, diversityTags, workModes, badges]);
+  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges]);
 
   const handleSaveAsAlert = () => {
     if (!isLoggedIn) {
@@ -929,7 +941,7 @@ export default function HomePage() {
     }
   };
 
-  const filterCount = selectedTiers.length + selectedRoles.length + selectedLocations.length + (sponsorshipFilter ? 1 : 0) + selectedFundingStages.length + selectedSources.length + (salaryMin !== null || salaryMax !== null ? 1 : 0) + (hasRecruiters ? 1 : 0) + smartFilters.length + (experienceLevel ? 1 : 0) + diversityTags.length + workModes.length + badges.length;
+  const filterCount = selectedTiers.length + selectedRoles.length + selectedLocations.length + (sponsorshipFilter ? 1 : 0) + selectedFundingStages.length + selectedSources.length + (salaryMin !== null || salaryMax !== null ? 1 : 0) + (hasRecruiters ? 1 : 0) + smartFilters.length + experienceLevels.length + diversityTags.length + workModes.length + badges.length;
 
   // Determine if jobs are filtered (for empty state)
   const hasActiveFilters = filterCount > 0 || search.trim().length > 0;
@@ -1083,7 +1095,7 @@ export default function HomePage() {
               selectedSources={selectedSources}
               salaryMin={salaryMin}
               salaryMax={salaryMax}
-              experienceLevel={experienceLevel}
+              experienceLevels={experienceLevels}
               diversityTags={diversityTags}
               workModes={workModes}
               badges={badges}
@@ -1095,7 +1107,7 @@ export default function HomePage() {
               onFundingChange={setSelectedFundingStages}
               onSourceChange={setSelectedSources}
               onSalaryChange={handleSalaryChange}
-              onExperienceLevelChange={setExperienceLevel}
+              onExperienceLevelsChange={setExperienceLevels}
               onDiversityTagsChange={setDiversityTags}
               onWorkModesChange={setWorkModes}
               onBadgesChange={setBadges}
@@ -1203,7 +1215,7 @@ export default function HomePage() {
         selectedSources={selectedSources}
         salaryMin={salaryMin}
         salaryMax={salaryMax}
-        experienceLevel={experienceLevel}
+        experienceLevels={experienceLevels}
         diversityTags={diversityTags}
         workModes={workModes}
         badges={badges}
@@ -1216,7 +1228,7 @@ export default function HomePage() {
         onFundingChange={setSelectedFundingStages}
         onSourceChange={setSelectedSources}
         onSalaryChange={handleSalaryChange}
-        onExperienceLevelChange={setExperienceLevel}
+        onExperienceLevelsChange={setExperienceLevels}
         onDiversityTagsChange={setDiversityTags}
         onWorkModesChange={setWorkModes}
         onBadgesChange={setBadges}

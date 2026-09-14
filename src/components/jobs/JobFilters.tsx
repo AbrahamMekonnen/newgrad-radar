@@ -205,7 +205,7 @@ interface JobFiltersProps {
   selectedSources?: SourceFilter[];
   salaryMin?: number | null;
   salaryMax?: number | null;
-  experienceLevel?: ExperienceLevel | null;
+  experienceLevels?: ExperienceLevel[];
   diversityTags?: DiversityTag[];
   workModes?: WorkMode[];
   badges?: BadgeTag[];
@@ -218,7 +218,7 @@ interface JobFiltersProps {
   onFundingChange?: (stages: FundingFilter[]) => void;
   onSourceChange?: (sources: SourceFilter[]) => void;
   onSalaryChange?: (min: number | null, max: number | null) => void;
-  onExperienceLevelChange?: (level: ExperienceLevel | null) => void;
+  onExperienceLevelsChange?: (levels: ExperienceLevel[]) => void;
   onDiversityTagsChange?: (tags: DiversityTag[]) => void;
   onWorkModesChange?: (modes: WorkMode[]) => void;
   onBadgesChange?: (badges: BadgeTag[]) => void;
@@ -237,7 +237,7 @@ export function JobFilters({
   selectedSources = [],
   salaryMin = null,
   salaryMax = null,
-  experienceLevel = null,
+  experienceLevels = [],
   diversityTags = [],
   workModes = [],
   badges = [],
@@ -250,7 +250,7 @@ export function JobFilters({
   onFundingChange,
   onSourceChange,
   onSalaryChange,
-  onExperienceLevelChange,
+  onExperienceLevelsChange,
   onDiversityTagsChange,
   onWorkModesChange,
   onBadgesChange,
@@ -316,12 +316,12 @@ export function JobFilters({
   };
 
   const toggleExperienceLevel = (level: ExperienceLevel) => {
-    if (onExperienceLevelChange) {
-      if (experienceLevel === level) {
-        onExperienceLevelChange(null);
-      } else {
-        onExperienceLevelChange(level);
-      }
+    if (onExperienceLevelsChange) {
+      onExperienceLevelsChange(
+        experienceLevels.includes(level)
+          ? experienceLevels.filter((l) => l !== level)
+          : [...experienceLevels, level]
+      );
     }
   };
 
@@ -355,7 +355,7 @@ export function JobFilters({
     }
   };
 
-  const hasFilters = selectedTiers.length > 0 || selectedRoles.length > 0 || selectedLocations.length > 0 || hasRecruiters || hiddenGemsOnly || sponsorshipFilter !== null || selectedFundingStages.length > 0 || selectedSources.length > 0 || salaryMin !== null || salaryMax !== null || experienceLevel !== null || diversityTags.length > 0 || workModes.length > 0 || badges.length > 0;
+  const hasFilters = selectedTiers.length > 0 || selectedRoles.length > 0 || selectedLocations.length > 0 || hasRecruiters || hiddenGemsOnly || sponsorshipFilter !== null || selectedFundingStages.length > 0 || selectedSources.length > 0 || salaryMin !== null || salaryMax !== null || experienceLevels.length > 0 || diversityTags.length > 0 || workModes.length > 0 || badges.length > 0;
 
   return (
     <div className="space-y-4" role="group" aria-label="Job filters">
@@ -495,7 +495,7 @@ export function JobFilters({
       )}
 
       {/* Experience Level filter */}
-      {onExperienceLevelChange && (
+      {onExperienceLevelsChange && (
         <CollapsibleSection
           sectionId={SECTION_IDS.experience}
           title="Experience Level"
@@ -507,7 +507,7 @@ export function JobFilters({
               <Checkbox
                 key={level}
                 label={EXPERIENCE_LABELS[level]}
-                checked={experienceLevel === level}
+                checked={experienceLevels.includes(level)}
                 onChange={() => toggleExperienceLevel(level)}
               />
             ))}
@@ -802,7 +802,7 @@ export function MobileFilters({
   selectedSources = [],
   salaryMin = null,
   salaryMax = null,
-  experienceLevel = null,
+  experienceLevels = [],
   diversityTags = [],
   workModes = [],
   badges = [],
@@ -816,7 +816,7 @@ export function MobileFilters({
   onFundingChange,
   onSourceChange,
   onSalaryChange,
-  onExperienceLevelChange,
+  onExperienceLevelsChange,
   onDiversityTagsChange,
   onWorkModesChange,
   onBadgesChange,
@@ -1124,7 +1124,7 @@ export function MobileFilters({
           )}
 
           {/* Experience Level filter */}
-          {onExperienceLevelChange && (
+          {onExperienceLevelsChange && (
             <MobileCollapsibleSection
               sectionId={SECTION_IDS.experience}
               title="Experience Level"
@@ -1136,11 +1136,15 @@ export function MobileFilters({
                   <button
                     key={level}
                     onClick={() =>
-                      onExperienceLevelChange(experienceLevel === level ? null : level)
+                      onExperienceLevelsChange?.(
+                        experienceLevels.includes(level)
+                          ? experienceLevels.filter((l) => l !== level)
+                          : [...experienceLevels, level]
+                      )
                     }
                     className={cn(
                       'px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border transition-colors',
-                      experienceLevel === level
+                      experienceLevels.includes(level)
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 active:bg-gray-100 dark:active:bg-slate-500'
                     )}
@@ -1376,7 +1380,7 @@ export function MobileFilters({
 
         <div className="flex-shrink-0 bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 space-y-3 pb-safe">
           {/* Save as Alert button - only show when filters are active */}
-          {onSaveAsAlert && (selectedTiers.length > 0 || selectedRoles.length > 0 || selectedLocations.length > 0 || hasRecruiters || sponsorshipFilter !== null || selectedFundingStages.length > 0 || selectedSources.length > 0 || salaryMin !== null || salaryMax !== null || experienceLevel !== null || diversityTags.length > 0 || workModes.length > 0 || badges.length > 0 || smartFilters.length > 0) && (
+          {onSaveAsAlert && (selectedTiers.length > 0 || selectedRoles.length > 0 || selectedLocations.length > 0 || hasRecruiters || sponsorshipFilter !== null || selectedFundingStages.length > 0 || selectedSources.length > 0 || salaryMin !== null || salaryMax !== null || experienceLevels.length > 0 || diversityTags.length > 0 || workModes.length > 0 || badges.length > 0 || smartFilters.length > 0) && (
             <Button
               variant="outline"
               onClick={() => {
