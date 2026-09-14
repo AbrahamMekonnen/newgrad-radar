@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 _CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1"
 
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+
 # Titles that mark a real recruiting role.
 _RECRUITER_TITLE_RE = re.compile(
     r"\b(recruiter|recruiting|talent acquisition|talent partner|talent sourcer|"
@@ -123,14 +125,26 @@ def find_recruiters(
         # role/title text (best-effort from the title segment after the name)
         segs = re.split(r"\s[-|–]\s", title)
         role_title = segs[1].strip() if len(segs) > 1 else None
+        # If the indexed snippet exposes an email (some recruiters list it in
+        # their About/posts), grab a company-domain one — a real published
+        # address, no guessing.
+        snippet_email = None
+        for em in _EMAIL_RE.findall(hay):
+            em = em.lower()
+            if em.endswith((".png", ".jpg", ".gif")):
+                continue
+            if domain and domain.lower() in em:
+                snippet_email = em
+                break
+            snippet_email = snippet_email or em  # fall back to any real email
         out.append({
             "name": name,
             "title": role_title,
             "linkedin_url": link.split("?")[0],
             "company": company_name,
             "role_focus": role_focus,
-            "email": None,
-            "email_verified": False,
+            "email": snippet_email,
+            "email_verified": bool(snippet_email),  # published in a public listing
             "source": "linkedin_xray",
         })
         if len(out) >= max_results:
@@ -153,6 +167,8 @@ def _attach_verified_emails(recruiters: List[Dict], domain: str) -> None:
         except Exception:
             return
     for r in recruiters:
+        if r.get("email"):
+            continue  # already have a real (published) email from the snippet
         parts = r["name"].split()
         if len(parts) < 2:
             continue
