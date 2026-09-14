@@ -1129,59 +1129,90 @@ def parse_telegram_messages(
     Returns:
         List of InterviewQuestion objects
     """
-    questions = []
+    questions: List[InterviewQuestion] = []
     seen_ids: Set[str] = set()
 
-    for msg in messages:
-        text = msg["text"]
+    def _add(company, q_text, channel, date, role, q_type, difficulty):
+        q_text = (q_text or "").strip()
+        if not q_text:
+            return
+        company = company or "Unknown"
+        q_id = generate_question_id(company, q_text)
+        if q_id in seen_ids:
+            return
+        seen_ids.add(q_id)
+        questions.append(InterviewQuestion(
+            id=q_id, company=company, position=role or "swe",
+            question_type=q_type or "technical", difficulty=difficulty or "medium",
+            question_text=q_text, source=f"telegram:{channel}",
+            source_url=f"https://t.me/{channel}", posted_date=date,
+            tags=extract_topics(q_text),
+        ))
+
+    # Try context-aware LLM extraction first: it reads the whole message, so it
+    # both extracts cleaner questions AND attributes the company from context
+    # (e.g. "it was Stripe, not Amazon") — which regex fundamentally can't do.
+    llm_results = None
+    if os.environ.get("TELEGRAM_LLM_ENRICH", "1") != "0":
+        extract_batch = None
+        try:
+            from llm_enrich import extract_batch
+        except ImportError:
+            try:
+                from sources.interview_questions.llm_enrich import extract_batch
+            except Exception:
+                extract_batch = None
+        if extract_batch is not None:
+            # Only send messages that plausibly contain a question (saves calls).
+            cand_idx = [i for i, m in enumerate(messages)
+                        if _plausibly_has_question(m.get("text", ""))]
+            if cand_idx:
+                logger.info(f"LLM extraction on {len(cand_idx)} candidate messages")
+                got = extract_batch([messages[i].get("text", "") for i in cand_idx])
+                if got is not None:
+                    llm_results = {cand_idx[j]: got[j] for j in range(len(cand_idx))}
+
+    for i, msg in enumerate(messages):
+        text = msg.get("text", "")
         channel = msg["channel"]
         date = msg.get("date")
 
-        # Detect company
-        company = detect_company(text)
-        if not company:
-            company = "Unknown"
+        res = llm_results.get(i) if llm_results else None
+        if res is not None:
+            # LLM processed this message — trust it (even an empty result means
+            # "no real question here"; regex would only re-add noise).
+            for item in res:
+                _add(item.get("company"), item.get("question_text"), channel, date,
+                     item.get("role"), item.get("question_type"), item.get("difficulty"))
+            continue
 
-        # Extract individual questions from message
+        # Regex fallback: message the LLM didn't process (unavailable, over
+        # budget, or a failed batch call).
+        company = detect_company(text) or "Unknown"
         extracted = extract_questions_from_text(text)
-
         if not extracted:
-            # Use the whole message as a question if no specific questions found
-            # but only if it looks like interview content AND reads like a question
             if any(kw in text.lower() for kw in ["interview", "oa", "asked", "question", "problem"]):
                 candidate = text.strip().lstrip("*# ").strip()[:500]
                 if _looks_like_question(candidate):
-                    extracted = [candidate]
-
+                    extracted = [_clean_question_text(candidate)]
         for q_text in extracted:
-            # Generate ID
-            q_id = generate_question_id(company, q_text)
-
-            # Skip duplicates
-            if q_id in seen_ids:
-                continue
-            seen_ids.add(q_id)
-
-            # Detect attributes
-            q_type = detect_question_type(q_text)
-            role = detect_role(text)  # Check full message for role context
-            difficulty = detect_difficulty(q_text)
-            topics = extract_topics(q_text)
-
-            questions.append(InterviewQuestion(
-                id=q_id,
-                company=company,
-                position=role,
-                question_type=q_type,
-                difficulty=difficulty,
-                question_text=q_text.strip(),
-                source=f"telegram:{channel}",
-                source_url=f"https://t.me/{channel}",
-                posted_date=date,
-                tags=topics,
-            ))
+            _add(company, q_text, channel, date,
+                 detect_role(text), detect_question_type(q_text), detect_difficulty(q_text))
 
     return questions
+
+
+def _plausibly_has_question(text: str) -> bool:
+    """Cheap pre-filter: is this message worth sending to the LLM at all?"""
+    if not text or len(text) < 25:
+        return False
+    t = text.lower()
+    if "?" in text:
+        return True
+    return any(kw in t for kw in (
+        "asked", "interview", "oa", "online assessment", "leetcode", "problem",
+        "question", "round", "coding", "design", "implement", "given", "hackerrank",
+    ))
 
 
 def scrape_telegram(
