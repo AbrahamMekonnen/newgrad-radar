@@ -124,11 +124,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('question_type', question_type);
     }
 
-    // Seniority filter. Rows with a known level match exactly; rows with no
-    // level (null) are kept so company-level data (which has no seniority) is
-    // never hidden by the filter.
+    // Seniority filter — STRICT: when a level is chosen, return only questions
+    // actually tagged for that level, so the info is accurate for the user's
+    // position. Level-less company-frequency data is excluded here (users can
+    // pick "All Levels" to see everything, or another level to browse).
     if (position_level) {
-      query = query.or(`position_level.eq.${position_level},position_level.is.null`);
+      query = query.eq('position_level', position_level);
     }
 
     // Date filter — use interview_date (when the question was actually asked),

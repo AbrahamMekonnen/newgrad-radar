@@ -57,8 +57,9 @@ const DATE_RANGES = [
   { value: 6, label: 'Last 6 Months' },
 ];
 
-// Seniority levels. "" = all. Rows without a known level (e.g. company-level
-// frequency data) always show; picking a level narrows the level-tagged rows.
+// Seniority levels. "" = All Levels (everything, including level-less
+// company-frequency data). Picking a specific level returns ONLY questions
+// tagged for that level — accurate for the user's position.
 const LEVELS = [
   { value: '', label: 'All Levels' },
   { value: 'intern', label: 'Intern' },
