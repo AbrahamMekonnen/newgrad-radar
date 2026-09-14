@@ -98,6 +98,25 @@ WORKDAY_COMPANIES = [
     WorkdayConfig('shell', 3, 'shell', 'Shell', 'shellcareers'),  # ~140 jobs
     WorkdayConfig('paypal', 1, 'paypal', 'PayPal', 'jobs'),  # ~134 jobs
     WorkdayConfig('chevron', 5, 'chevron', 'Chevron', 'jobs'),  # ~124 jobs
+    WorkdayConfig('cadence', 1, 'cadence', 'Cadence', 'University_Talent_NCG'),  # ~3 jobs
+    WorkdayConfig('micron', 1, 'micron', 'Micron', 'External'),  # ~2917 jobs
+    WorkdayConfig('synnex', 5, 'synnex', 'Hyve (Synnex)', 'hyvecareers'),  # ~468 jobs
+    WorkdayConfig('hpe', 5, 'hpe', 'HPE', 'acjobsite'),  # ~1294 jobs
+    WorkdayConfig('kla', 1, 'kla', 'KLA', 'Search'),  # ~999 jobs
+    WorkdayConfig('collegeboard', 1, 'collegeboard', 'College Board', 'Careers'),  # ~37 jobs
+    WorkdayConfig('visa', 5, 'visa', 'Visa', 'Visa_Early_Careers'),  # ~20 jobs
+    WorkdayConfig('aig', 1, 'aig', 'AIG', 'aig'),  # ~493 jobs
+    WorkdayConfig('amat', 1, 'amat', 'Applied Materials', 'External'),  # ~2000 jobs
+    WorkdayConfig('thomsonreuters', 5, 'thomsonreuters', 'Thomson Reuters', 'External_Career_Site'),  # ~438 jobs
+    WorkdayConfig('devonenergy', 5, 'devonenergy', 'Devon Energy', 'Careers'),  # ~53 jobs
+    WorkdayConfig('barclays', 3, 'barclays', 'Barclays', 'External_Career_Site_Barclays'),  # ~980 jobs
+    WorkdayConfig('blackstone', 1, 'blackstone', 'Blackstone', 'Blackstone_Careers'),  # ~177 jobs
+    WorkdayConfig('spgi', 5, 'spgi', 'S&P Global', 'SPGI_Careers'),  # ~300 jobs
+    WorkdayConfig('capgroup', 1, 'capgroup', 'Capital Group', 'capitalgroupcareers'),  # ~154 jobs
+    WorkdayConfig('uline', 1, 'uline', 'Uline', 'Uline_Careers'),  # ~428 jobs
+    WorkdayConfig('aspentech', 5, 'aspentech', 'AspenTech', 'AspenTech'),  # ~137 jobs
+    WorkdayConfig('becu', 1, 'becu', 'BECU', 'External'),  # ~20 jobs
+    WorkdayConfig('connexuscu', 1, 'connexuscu', 'Connexus', 'connexuscareers'),  # ~13 jobs
 ]
 
 
