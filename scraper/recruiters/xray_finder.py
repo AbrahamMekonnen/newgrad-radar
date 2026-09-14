@@ -155,31 +155,59 @@ def find_recruiters(
     return out
 
 
-def _attach_verified_emails(recruiters: List[Dict], domain: str) -> None:
-    """Best-effort: generate email patterns for each name and SMTP-verify."""
+def _attach_verified_emails(recruiters: List[Dict], domain: str, github_org: Optional[str] = None) -> None:
+    """Derive each recruiter's email via the company's LEARNED pattern.
+
+    Learns the domain's email format once (email_intel, from public GitHub
+    data), detects catch-all once, then applies to each recruiter — far more
+    accurate than brute-forcing every pattern per person.
+    """
     try:
-        from email_patterns import generate_patterns
+        from email_intel import learn_domain_pattern, guess_email, _is_catch_all
+    except ImportError:
+        try:
+            from recruiters.email_intel import learn_domain_pattern, guess_email, _is_catch_all
+        except Exception:
+            return
+    try:
         from smtp_verify import verify_email
     except ImportError:
         try:
-            from recruiters.email_patterns import generate_patterns
             from recruiters.smtp_verify import verify_email
         except Exception:
-            return
+            verify_email = None
+
+    org = github_org or re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
+    ranked = learn_domain_pattern(domain, org)
+    candidates = [k for k, _ in ranked] or ["first.last", "firstlast", "flast"]
+    catch_all = _is_catch_all(domain) if verify_email else True
+
     for r in recruiters:
         if r.get("email"):
             continue  # already have a real (published) email from the snippet
-        parts = r["name"].split()
-        if len(parts) < 2:
+        if len(r["name"].split()) < 2:
             continue
-        patterns = generate_patterns(parts[0], parts[-1], domain)
-        for email in patterns[:6]:
+        if catch_all or verify_email is None:
+            # can't SMTP-verify reliably — trust the learned pattern
+            em = guess_email(r["name"], domain, candidates[0])
+            if em:
+                r["email"] = em
+                r["email_verified"] = False
+                r["email_confidence"] = "medium" if ranked else "low"
+            continue
+        for key in candidates[:5]:
+            em = guess_email(r["name"], domain, key)
+            if not em:
+                continue
             try:
-                res = verify_email(email)
+                if getattr(verify_email(em), "valid", False):
+                    r["email"] = em
+                    r["email_verified"] = True
+                    r["email_confidence"] = "high"
+                    break
             except Exception:
                 continue
-            if getattr(res, "valid", False):
-                r["email"] = email
-                r["email_verified"] = True
-                break
-        time.sleep(0.2)
+            time.sleep(0.2)
+        if not r.get("email"):
+            r["email"] = guess_email(r["name"], domain, candidates[0])
+            r["email_confidence"] = "medium" if ranked else "low"
