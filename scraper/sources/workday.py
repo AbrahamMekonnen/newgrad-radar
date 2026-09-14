@@ -77,111 +77,27 @@ class WorkdayConfig:
     datacenter: int
     tenant: str
     display_name: str
+    site: str = "External"  # the career-site path segment; varies per tenant
 
 
 # Known Workday company configurations
 WORKDAY_COMPANIES = [
-    # Tech Giants
-    WorkdayConfig("amazon", 5, "amazon", "Amazon"),
-    WorkdayConfig("salesforce", 3, "salesforce", "Salesforce"),
-    WorkdayConfig("adobe", 1, "adobe", "Adobe"),
-    WorkdayConfig("nvidia", 5, "nvidia", "NVIDIA"),
-    WorkdayConfig("qualcomm", 5, "qualcomm", "Qualcomm"),
-    WorkdayConfig("cisco", 5, "cisco", "Cisco"),
-    WorkdayConfig("vmware", 2, "broadcom", "VMware"),
-    WorkdayConfig("broadcom", 2, "broadcom", "Broadcom"),
-    WorkdayConfig("servicenow", 1, "servicenow", "ServiceNow"),
-    WorkdayConfig("intuit", 1, "intuit", "Intuit"),
-    WorkdayConfig("autodesk", 1, "autodesk", "Autodesk"),
-    WorkdayConfig("atlassian", 5, "atlassian", "Atlassian"),
-    WorkdayConfig("zendesk", 1, "zendesk", "Zendesk"),
-    WorkdayConfig("splunk", 1, "splunk", "Splunk"),
-    WorkdayConfig("paloaltonetworks", 1, "paloaltonetworks", "Palo Alto Networks"),
-    WorkdayConfig("docusign", 1, "docusign", "DocuSign"),
-    WorkdayConfig("okta", 1, "okta", "Okta"),
-    WorkdayConfig("crowdstrike", 1, "crowdstrike", "CrowdStrike"),
-    WorkdayConfig("twilio", 1, "twilio", "Twilio"),
-    WorkdayConfig("fortinet", 1, "fortinet", "Fortinet"),
-    WorkdayConfig("akamai", 1, "akamai", "Akamai"),
-    WorkdayConfig("netapp", 1, "netapp", "NetApp"),
-    WorkdayConfig("f5", 1, "f5", "F5"),
-
-    # Finance / Fintech
-    WorkdayConfig("jpmorgan", 5, "jpmc", "JPMorgan Chase"),
-    WorkdayConfig("bankofamerica", 5, "ghr", "Bank of America"),
-    WorkdayConfig("goldmansachs", 2, "gs", "Goldman Sachs"),
-    WorkdayConfig("morganstanley", 5, "mscareers", "Morgan Stanley"),
-    WorkdayConfig("blackrock", 3, "blackrock", "BlackRock"),
-    WorkdayConfig("capitalgroup", 1, "capitalgroup", "Capital Group"),
-    WorkdayConfig("visa", 5, "visa", "Visa"),
-    WorkdayConfig("mastercard", 5, "mastercard", "Mastercard"),
-    WorkdayConfig("paypal", 1, "paypal", "PayPal"),
-    WorkdayConfig("square", 2, "block", "Block (Square)"),
-    WorkdayConfig("fidelity", 1, "fmr", "Fidelity"),
-    WorkdayConfig("vanguard", 1, "vanguard", "Vanguard"),
-    WorkdayConfig("schwab", 1, "schwab", "Charles Schwab"),
-    WorkdayConfig("americanexpress", 5, "aexp", "American Express"),
-
-    # Healthcare / Pharma
-    WorkdayConfig("unitedhealth", 2, "uhg", "UnitedHealth Group"),
-    WorkdayConfig("jnj", 5, "jnjfamilyofcompanies", "Johnson & Johnson"),
-    WorkdayConfig("pfizer", 1, "pfizer", "Pfizer"),
-    WorkdayConfig("merck", 1, "msd", "Merck"),
-    WorkdayConfig("abbvie", 1, "abbvie", "AbbVie"),
-    WorkdayConfig("bms", 5, "bms", "Bristol-Myers Squibb"),
-    WorkdayConfig("lilly", 1, "lilly", "Eli Lilly"),
-    WorkdayConfig("elevancehealth", 1, "anthemcareers", "Elevance Health"),
-    WorkdayConfig("cvs", 1, "cvshealth", "CVS Health"),
-
-    # Retail / Consumer
-    WorkdayConfig("walmart", 5, "walmartexternal", "Walmart"),
-    WorkdayConfig("target", 5, "target", "Target"),
-    WorkdayConfig("homedepot", 5, "careers-homedepot", "Home Depot"),
-    WorkdayConfig("lowes", 1, "lowes", "Lowes"),
-    WorkdayConfig("costco", 1, "costco", "Costco"),
-    WorkdayConfig("nike", 5, "nike", "Nike"),
-    WorkdayConfig("starbucks", 5, "starbucks", "Starbucks"),
-    WorkdayConfig("disney", 1, "disney", "Disney"),
-    WorkdayConfig("pg", 5, "pg", "Procter & Gamble"),
-    WorkdayConfig("coca-cola", 1, "cocacola", "Coca-Cola"),
-    WorkdayConfig("pepsico", 1, "pepsico", "PepsiCo"),
-    WorkdayConfig("unilever", 1, "unilever", "Unilever"),
-
-    # Consulting / Services
-    WorkdayConfig("deloitte", 1, "deloitte", "Deloitte"),
-    WorkdayConfig("mckinsey", 5, "mckinsey", "McKinsey"),
-    WorkdayConfig("accenture", 5, "accenture", "Accenture"),
-    WorkdayConfig("ey", 5, "ey", "EY"),
-    WorkdayConfig("pwc", 1, "pwc", "PwC"),
-    WorkdayConfig("kpmg", 5, "kpmg", "KPMG"),
-    WorkdayConfig("bcg", 1, "bcg", "Boston Consulting Group"),
-    WorkdayConfig("bain", 1, "bain", "Bain & Company"),
-
-    # Industrial / Manufacturing
-    WorkdayConfig("ge", 5, "ge", "GE"),
-    WorkdayConfig("boeing", 5, "boeing", "Boeing"),
-    WorkdayConfig("lockheedmartin", 5, "lockheed", "Lockheed Martin"),
-    WorkdayConfig("raytheon", 5, "rtx", "Raytheon"),
-    WorkdayConfig("northropgrumman", 5, "northropgrumman", "Northrop Grumman"),
-    WorkdayConfig("3m", 5, "3m", "3M"),
-    WorkdayConfig("honeywell", 5, "honeywell", "Honeywell"),
-    WorkdayConfig("caterpillar", 1, "cat", "Caterpillar"),
-    WorkdayConfig("deere", 5, "johndeere", "John Deere"),
-
-    # Energy / Utilities
-    WorkdayConfig("exxonmobil", 5, "exxonmobil", "ExxonMobil"),
-    WorkdayConfig("chevron", 5, "chevron", "Chevron"),
-    WorkdayConfig("conocophillips", 1, "conoco", "ConocoPhillips"),
-    WorkdayConfig("shell", 5, "shell", "Shell"),
-    WorkdayConfig("bp", 5, "bp", "BP"),
-
-    # Telecom / Media
-    WorkdayConfig("att", 5, "att", "AT&T"),
-    WorkdayConfig("verizon", 1, "vzn", "Verizon"),
-    WorkdayConfig("tmobile", 5, "tmobile", "T-Mobile"),
-    WorkdayConfig("comcast", 5, "comcast", "Comcast"),
-    WorkdayConfig("wbd", 1, "wbd", "Warner Bros. Discovery"),
-    WorkdayConfig("paramount", 1, "paramount", "Paramount"),
+    # Verified live against the Workday CXS API (subdomain, datacenter,
+    # tenant, display_name, site). Each site path was auto-discovered — they
+    # differ per tenant (nvidiaexternalcareersite, External_Career_Site, jobs...).
+    WorkdayConfig('nvidia', 5, 'nvidia', 'NVIDIA', 'nvidiaexternalcareersite'),  # ~2000 jobs
+    WorkdayConfig('target', 5, 'target', 'Target', 'targetcareers'),  # ~2000 jobs
+    WorkdayConfig('tmobile', 1, 'tmobile', 'T-Mobile', 'External'),  # ~2000 jobs
+    WorkdayConfig('salesforce', 12, 'salesforce', 'Salesforce', 'External_Career_Site'),  # ~1445 jobs
+    WorkdayConfig('cisco', 5, 'cisco', 'Cisco', 'cisco_careers'),  # ~1331 jobs
+    WorkdayConfig('caterpillar', 5, 'cat', 'Caterpillar', 'caterpillarcareers'),  # ~885 jobs
+    WorkdayConfig('fidelity', 1, 'fmr', 'Fidelity', 'fidelitycareers'),  # ~633 jobs
+    WorkdayConfig('pfizer', 1, 'pfizer', 'Pfizer', 'pfizercareers'),  # ~577 jobs
+    WorkdayConfig('vanguard', 5, 'vanguard', 'Vanguard', 'vanguard_external'),  # ~433 jobs
+    WorkdayConfig('crowdstrike', 5, 'crowdstrike', 'CrowdStrike', 'crowdstrikecareers'),  # ~393 jobs
+    WorkdayConfig('shell', 3, 'shell', 'Shell', 'shellcareers'),  # ~140 jobs
+    WorkdayConfig('paypal', 1, 'paypal', 'PayPal', 'jobs'),  # ~134 jobs
+    WorkdayConfig('chevron', 5, 'chevron', 'Chevron', 'jobs'),  # ~124 jobs
 ]
 
 
@@ -281,7 +197,7 @@ class WorkdayScraper:
 
     def _build_url(self, config: WorkdayConfig) -> str:
         """Build the Workday jobs API URL."""
-        return f"https://{config.subdomain}.wd{config.datacenter}.myworkdayjobs.com/wday/cxs/{config.tenant}/External/jobs"
+        return f"https://{config.subdomain}.wd{config.datacenter}.myworkdayjobs.com/wday/cxs/{config.tenant}/{config.site}/jobs"
 
     def _build_job_url(self, config: WorkdayConfig, job_path: str) -> str:
         """Build the URL for a specific job posting."""
@@ -328,9 +244,16 @@ class WorkdayScraper:
         # Check cache first
         cache_key = f"workday:{config.subdomain}:{config.tenant}:{offset}:{limit}"
         if self.cache:
-            cached = self.cache.get(cache_key)
+            try:
+                cached = self.cache.get(cache_key)
+            except Exception:
+                cached = None
             if cached:
-                return cached
+                # We store {"content": [jobs...]}; unwrap to the job list.
+                if isinstance(cached, dict) and "content" in cached:
+                    cached = cached["content"]
+                if isinstance(cached, list):
+                    return cached
 
         # Get stealth headers
         headers = self._get_stealth_headers()
@@ -411,9 +334,13 @@ class WorkdayScraper:
                 "external_id": job.get("bulletFields", [""])[0] if job.get("bulletFields") else "",
             })
 
-        # Cache results
+        # Cache results (best-effort — the shared ResponseCache expects a
+        # dict-shaped payload; never let a cache quirk drop fetched jobs).
         if self.cache and jobs:
-            self.cache.set(cache_key, jobs, ttl=3600)
+            try:
+                self.cache.set(cache_key, {"content": jobs})
+            except Exception:
+                pass
 
         return jobs
 
