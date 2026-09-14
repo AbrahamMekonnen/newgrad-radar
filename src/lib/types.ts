@@ -450,7 +450,26 @@ export const SOURCE_TO_FILTER: Record<string, SourceFilter> = {
   'usajobs': 'government',
   'clearancejobs': 'government',
   'government': 'government',
+  // Job aggregators / boards
+  'github_zapplyjobs': 'job_boards',
+  'zapplyjobs': 'job_boards',
+  'hn_hiring': 'job_boards',
+  'remoteok': 'job_boards',
+  'arbeitnow': 'job_boards',
+  'adzuna': 'job_boards',
 };
+
+/**
+ * Expand selected filter categories (e.g. 'ats', 'job_boards') into the raw
+ * `source` column values the jobs table actually stores. The job query filters
+ * on the raw values, so without this the category names match nothing.
+ */
+export function rawSourcesForFilters(filters: SourceFilter[]): string[] {
+  const set = new Set(filters);
+  return Object.entries(SOURCE_TO_FILTER)
+    .filter(([, category]) => set.has(category))
+    .map(([raw]) => raw);
+}
 
 export function sourceToFilter(source: string): SourceFilter | null {
   const normalized = source.toLowerCase().replace(/[^a-z0-9_]/g, '_');

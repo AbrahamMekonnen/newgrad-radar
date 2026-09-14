@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
-import { Job, Tier, RoleType, ApplicationLog, Recruiter, SponsorshipStatus, FundingFilter, SourceFilter, SmartFilter, ExperienceLevel, DiversityTag, WorkMode, BadgeTag, LocationFilter, LOCATION_FILTER_PATTERNS } from '@/lib/types';
+import { Job, Tier, RoleType, ApplicationLog, Recruiter, SponsorshipStatus, FundingFilter, SourceFilter, SmartFilter, ExperienceLevel, DiversityTag, WorkMode, BadgeTag, LocationFilter, LOCATION_FILTER_PATTERNS, rawSourcesForFilters } from '@/lib/types';
 import { JobList } from '@/components/jobs/JobList';
 import { JobFilters, MobileFilters } from '@/components/jobs/JobFilters';
 import { SmartFilters } from '@/components/jobs/SmartFilters';
@@ -281,8 +281,14 @@ export default function HomePage() {
     }
 
     // Filter by source
+    // Source filter: the UI selects categories (ats/job_boards/conferences…)
+    // but the jobs table stores raw source names (greenhouse/simplify/…), so
+    // expand categories to the raw values before filtering.
     if (selectedSources.length > 0) {
-      query = query.in('source', selectedSources);
+      const rawSources = rawSourcesForFilters(selectedSources);
+      // If a category maps to no known raw source, return nothing rather than
+      // silently ignoring the filter.
+      query = query.in('source', rawSources.length > 0 ? rawSources : ['__none__']);
     }
 
     // Filter by salary range
