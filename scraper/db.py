@@ -438,12 +438,21 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
     cutoff_priority = now - timedelta(days=PRIORITY_DAYS)
 
     try:
-        # Step 1: Get all active jobs with their posted dates
-        active_result = client.table("jobs").select(
-            "id, title, company_name, posted"
-        ).eq("is_active", True).execute()
-
-        active_jobs = active_result.data
+        # Step 1: Get all active jobs with their posted dates. PostgREST caps a
+        # response at 1000 rows, so paginate — otherwise rotation/age-out only
+        # ever sees the first 1000 active jobs.
+        active_jobs = []
+        _off = 0
+        while True:
+            _batch = client.table("jobs").select(
+                "id, title, company_name, posted"
+            ).eq("is_active", True).range(_off, _off + 999).execute().data
+            if not _batch:
+                break
+            active_jobs.extend(_batch)
+            if len(_batch) < 1000:
+                break
+            _off += 1000
         print(f"  Current active jobs: {len(active_jobs)}")
 
         # Step 2: Deactivate jobs older than MAX_AGE_DAYS
