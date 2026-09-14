@@ -339,8 +339,14 @@ export default function HomePage() {
       query = query.gte('salary_min', 150000);
     }
 
-    // Filter by experience level
-    if (experienceLevel) {
+    // Filter by experience level. "New Grad" is inclusive of everything a new
+    // grad can actually apply to — new_grad/entry/junior plus unclassified
+    // roles — while excluding clearly-senior postings. Other levels stay exact.
+    if (experienceLevel === 'new_grad') {
+      query = query.or(
+        'experience_level.in.(new_grad,entry_level,junior),experience_level.is.null'
+      );
+    } else if (experienceLevel) {
       query = query.eq('experience_level', experienceLevel);
     }
 
