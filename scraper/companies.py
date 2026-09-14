@@ -166,6 +166,20 @@ COMPANIES = {
     "middesk": {"name": "Middesk", "tier": "yc", "ats_type": "ashby", "ats_token": "middesk"},
     "persona": {"name": "Persona", "tier": "unicorn", "ats_type": "ashby", "ats_token": "persona"},
     "browserbase": {"name": "Browserbase", "tier": "yc", "ats_type": "ashby", "ats_token": "browserbase"},
+    # Workday employers (fetched via WORKDAY_COMPANIES; listed here so their
+    # postings resolve to a slug and pass the jobs->companies foreign key).
+    "target": {"name": "Target", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "tmobile": {"name": "T-Mobile", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "salesforce": {"name": "Salesforce", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "cisco": {"name": "Cisco", "tier": "infra", "ats_type": "workday", "ats_token": None},
+    "caterpillar": {"name": "Caterpillar", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "fidelity": {"name": "Fidelity", "tier": "fintech", "ats_type": "workday", "ats_token": None},
+    "pfizer": {"name": "Pfizer", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "vanguard": {"name": "Vanguard", "tier": "fintech", "ats_type": "workday", "ats_token": None},
+    "crowdstrike": {"name": "CrowdStrike", "tier": "infra", "ats_type": "workday", "ats_token": None},
+    "shell": {"name": "Shell", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
+    "paypal": {"name": "PayPal", "tier": "fintech", "ats_type": "workday", "ats_token": None},
+    "chevron": {"name": "Chevron", "tier": "unicorn", "ats_type": "workday", "ats_token": None},
 }
 
 
