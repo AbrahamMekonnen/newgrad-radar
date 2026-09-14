@@ -199,6 +199,22 @@ COMPANIES = {
     "aspentech": {"name": "AspenTech", "tier": "infra", "ats_type": "workday", "ats_token": None},
     "becu": {"name": "BECU", "tier": "fintech", "ats_type": "workday", "ats_token": None},
     "connexuscu": {"name": "Connexus", "tier": "fintech", "ats_type": "workday", "ats_token": None},
+    "nasdaq": {"name": 'Nasdaq', "tier": 'fintech', "ats_type": "workday", "ats_token": None},
+    "workiva": {"name": 'Workiva', "tier": 'infra', "ats_type": "workday", "ats_token": None},
+    "avav": {"name": 'AeroVironment', "tier": 'infra', "ats_type": "workday", "ats_token": None},
+    "snc": {"name": 'Sierra Nevada', "tier": 'infra', "ats_type": "workday", "ats_token": None},
+    "ntst": {"name": 'Netsmart', "tier": 'infra', "ats_type": "workday", "ats_token": None},
+    "bah": {"name": 'Booz Allen Hamilton', "tier": 'infra', "ats_type": "workday", "ats_token": None},
+    "zendesk": {"name": 'Zendesk', "tier": 'unicorn', "ats_type": "workday", "ats_token": None},
+    "shipt": {"name": 'Shipt', "tier": 'unicorn', "ats_type": "workday", "ats_token": None},
+    "worldpay": {"name": 'Worldpay', "tier": 'fintech', "ats_type": "workday", "ats_token": None},
+    "quickenloans": {"name": 'Rocket', "tier": 'fintech', "ats_type": "workday", "ats_token": None},
+    "bloomberg": {"name": 'Bloomberg', "tier": 'fintech', "ats_type": "workday", "ats_token": None},
+    "csiweb": {"name": 'CSI', "tier": 'fintech', "ats_type": "workday", "ats_token": None},
+    "modernatx": {"name": 'Moderna', "tier": 'unicorn', "ats_type": "workday", "ats_token": None},
+    "owensminor": {"name": 'Owens & Minor', "tier": 'unicorn', "ats_type": "workday", "ats_token": None},
+    "dupont": {"name": 'DuPont', "tier": 'unicorn', "ats_type": "workday", "ats_token": None},
+    "qnity": {"name": 'Qnity', "tier": 'infra', "ats_type": "workday", "ats_token": None},
 }
 
 

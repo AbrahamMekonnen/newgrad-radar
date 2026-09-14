@@ -117,6 +117,22 @@ WORKDAY_COMPANIES = [
     WorkdayConfig('aspentech', 5, 'aspentech', 'AspenTech', 'AspenTech'),  # ~137 jobs
     WorkdayConfig('becu', 1, 'becu', 'BECU', 'External'),  # ~20 jobs
     WorkdayConfig('connexuscu', 1, 'connexuscu', 'Connexus', 'connexuscareers'),  # ~13 jobs
+    WorkdayConfig('nasdaq', 1, 'nasdaq', 'Nasdaq', 'Global_External_Site'),  # ~175 jobs
+    WorkdayConfig('workiva', 503, 'workiva', 'Workiva', 'careers'),  # ~110 jobs
+    WorkdayConfig('avav', 1, 'avav', 'AeroVironment', 'AVAV'),  # ~362 jobs
+    WorkdayConfig('snc', 1, 'snc', 'Sierra Nevada', 'SNC_External_Career_Site'),  # ~361 jobs
+    WorkdayConfig('ntst', 1, 'ntst', 'Netsmart', 'Careers'),  # ~58 jobs
+    WorkdayConfig('bah', 1, 'bah', 'Booz Allen Hamilton', 'BAH_Jobs'),  # ~2000 jobs
+    WorkdayConfig('zendesk', 1, 'zendesk', 'Zendesk', 'zendesk'),  # ~88 jobs
+    WorkdayConfig('shipt', 1, 'shipt', 'Shipt', 'Shipt_External'),  # ~8 jobs
+    WorkdayConfig('worldpay', 5, 'worldpay', 'Worldpay', 'Worldpay_External_Careers_Site'),  # ~207 jobs
+    WorkdayConfig('quickenloans', 5, 'quickenloans', 'Rocket', 'rocket_careers'),  # ~381 jobs
+    WorkdayConfig('bloomberg', 1, 'bloomberg', 'Bloomberg', 'Bloombergindustrygroup_External_Career_Site'),  # ~65 jobs
+    WorkdayConfig('csiweb', 1, 'csiweb', 'CSI', 'csi_careers'),  # ~18 jobs
+    WorkdayConfig('modernatx', 1, 'modernatx', 'Moderna', 'M_tx'),  # ~192 jobs
+    WorkdayConfig('owensminor', 1, 'owensminor', 'Owens & Minor', 'OMCareers'),  # ~152 jobs
+    WorkdayConfig('dupont', 5, 'dupont', 'DuPont', 'Jobs'),  # ~210 jobs
+    WorkdayConfig('qnity', 503, 'qnity', 'Qnity', 'jobs'),  # ~426 jobs
 ]
 
 
