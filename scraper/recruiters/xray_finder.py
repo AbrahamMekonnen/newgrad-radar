@@ -45,30 +45,23 @@ _FOCUS_TERMS = {
 }
 
 
-def cse_available() -> bool:
-    return bool(os.environ.get("GOOGLE_CSE_KEY") and os.environ.get("GOOGLE_CSE_ID"))
-
-
-def cse_search(query: str, num: int = 10) -> List[Dict]:
-    """Run one Custom Search query; return raw items (title/link/snippet). []-safe."""
-    key = os.environ.get("GOOGLE_CSE_KEY")
-    cx = os.environ.get("GOOGLE_CSE_ID")
-    if not key or not cx:
-        return []
+def _search(query: str, num: int = 10) -> List[Dict]:
+    """Search via the provider chain (Google CSE / Serper / Brave / DDG)."""
     try:
-        import requests
-        r = requests.get(
-            _CSE_ENDPOINT,
-            params={"key": key, "cx": cx, "q": query, "num": min(num, 10)},
-            timeout=20,
-        )
-        if r.status_code != 200:
-            logger.warning(f"CSE {r.status_code}: {r.text[:150]}")
-            return []
-        return r.json().get("items", []) or []
-    except Exception as e:
-        logger.debug(f"CSE query failed: {e}")
-        return []
+        from search_providers import web_search
+    except ImportError:
+        from recruiters.search_providers import web_search
+    return web_search(query, num)
+
+
+def cse_available() -> bool:
+    """True if any search provider has a key configured (DDG excluded — it's
+    bot-blocked and unreliable for automated queries)."""
+    return bool(
+        (os.environ.get("GOOGLE_CSE_KEY") and os.environ.get("GOOGLE_CSE_ID"))
+        or os.environ.get("SERPER_API_KEY")
+        or os.environ.get("BRAVE_API_KEY")
+    )
 
 
 def _clean_name(title: str) -> Optional[str]:
@@ -97,8 +90,10 @@ def find_recruiters(
         return []
 
     terms = _FOCUS_TERMS.get(role_focus, _FOCUS_TERMS["generic"])
-    query = f'"{company_name}" ({" OR ".join(terms)})'
-    items = cse_search(query, num=10)
+    # site: scopes non-Google providers to LinkedIn profiles (the Google CSE is
+    # already scoped to linkedin.com/in via its site config, so it's harmless).
+    query = f'site:linkedin.com/in "{company_name}" ({" OR ".join(terms)})'
+    items = _search(query, num=10)
 
     company_key = re.sub(r"[^a-z0-9]", "", company_name.lower())
     seen = set()
