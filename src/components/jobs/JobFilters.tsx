@@ -11,6 +11,9 @@ const ALL_TIERS: Tier[] = ['faang', 'ai', 'unicorn', 'yc', 'fintech', 'infra'];
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
 const SPONSORSHIP_OPTIONS: SponsorshipStatus[] = ['sponsors', 'no_sponsor', 'unknown'];
 const ALL_FUNDING_STAGES: FundingFilter[] = ['seed', 'series-a', 'series-b+', 'public'];
+// The scraper doesn't populate funding_stage, so this filter always returned
+// zero. Hidden until a real funding-data source is wired in.
+const FUNDING_FILTER_ENABLED = false;
 const ALL_SOURCE_FILTERS: SourceFilter[] = ['ats', 'job_boards', 'vc_portfolios', 'conferences', 'newsletters', 'government'];
 const ALL_EXPERIENCE_LEVELS: ExperienceLevel[] = ['new_grad', 'entry_level', 'junior', 'mid', 'senior', 'staff', 'principal'];
 const ALL_DIVERSITY_TAGS: DiversityTag[] = ['ghc_sponsor', 'nsbe_sponsor', 'shpe_sponsor', 'tapia_sponsor', 'afrotech_sponsor', 'outtie_sponsor', 'lesbians_who_tech_sponsor', 'techqueria_sponsor', 'diversity_focused'];
@@ -453,7 +456,7 @@ export function JobFilters({
       )}
 
       {/* Funding Stage filter */}
-      {onFundingChange && (
+      {FUNDING_FILTER_ENABLED && onFundingChange && (
         <CollapsibleSection
           sectionId={SECTION_IDS.funding}
           title="Funding Stage"
@@ -1062,7 +1065,7 @@ export function MobileFilters({
           )}
 
           {/* Funding Stage filter */}
-          {onFundingChange && (
+          {FUNDING_FILTER_ENABLED && onFundingChange && (
             <MobileCollapsibleSection
               sectionId={SECTION_IDS.funding}
               title="Funding Stage"
