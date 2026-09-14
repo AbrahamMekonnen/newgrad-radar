@@ -135,6 +135,7 @@ def _parse_json(text: str):
 _VALID_TYPES = {"technical_coding", "technical_conceptual", "system_design",
                 "behavioral", "oa", "case_study", "take_home", "brain_teaser", "other"}
 _VALID_DIFF = {"easy", "medium", "hard", "unknown"}
+_VALID_LEVELS = {"intern", "new_grad", "junior", "mid", "senior", "staff", "principal"}
 
 _EXTRACT_PROMPT = (
     "You extract REAL technical interview questions from messy chat messages in "
@@ -143,16 +144,20 @@ _EXTRACT_PROMPT = (
     "company or detail from one message into another.\n"
     "For each question output: company (the company it was actually asked at, "
     "judged from that message's context, else null), role (backend/frontend/"
-    "swe/ml/data/mobile/infra or null), question_type (one of technical_coding, "
-    "technical_conceptual, system_design, behavioral, oa, other), difficulty "
+    "swe/ml/data/mobile/infra or null), position_level (the seniority the "
+    "interview was for — map titles like intern/new grad/SDE-1/L3->new_grad, "
+    "SDE-2/L4/mid->mid, senior/SDE-3/L5/E5->senior, staff/L6/E6->staff, "
+    "principal/L7+->principal, junior->junior; null if not stated), "
+    "question_type (one of technical_coding, technical_conceptual, "
+    "system_design, behavioral, oa, other), difficulty "
     "(easy/medium/hard/unknown), question_text (the cleaned question).\n"
     "IGNORE prep advice ('practice daily'), ads, greetings, and non-technical "
     "questions (visa/immigration/admissions). If a message has no real question, "
     "give it an empty array.\n"
     'Reply ONLY with a JSON object mapping the message number (string) to an '
     'array of question objects. Example: {"0":[{"company":"Stripe","role":'
-    '"backend","question_type":"system_design","difficulty":"medium",'
-    '"question_text":"Design a rate limiter"}],"1":[]}\n\n'
+    '"backend","position_level":"senior","question_type":"system_design",'
+    '"difficulty":"medium","question_text":"Design a rate limiter"}],"1":[]}\n\n'
 )
 
 
@@ -203,12 +208,14 @@ def extract_batch(
                         continue
                     typ = (item.get("question_type") or "other").lower()
                     diff = (item.get("difficulty") or "unknown").lower()
+                    lvl = (item.get("position_level") or "").lower().strip()
                     comp = item.get("company")
                     cleaned.append({
                         "question_text": qt,
                         "company": comp.strip() if isinstance(comp, str) and comp.strip()
                                    and comp.strip().lower() not in ("null", "none", "unknown") else None,
                         "role": (item.get("role") or None),
+                        "position_level": lvl if lvl in _VALID_LEVELS else None,
                         "question_type": typ if typ in _VALID_TYPES else "other",
                         "difficulty": diff if diff in _VALID_DIFF else "unknown",
                     })

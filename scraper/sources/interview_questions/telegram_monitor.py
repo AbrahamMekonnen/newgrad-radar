@@ -441,6 +441,7 @@ class InterviewQuestion:
     source_url: str
     posted_date: Optional[str]
     tags: List[str]
+    position_level: Optional[str] = None  # intern/new_grad/junior/mid/senior/staff/principal
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -1132,7 +1133,7 @@ def parse_telegram_messages(
     questions: List[InterviewQuestion] = []
     seen_ids: Set[str] = set()
 
-    def _add(company, q_text, channel, date, role, q_type, difficulty):
+    def _add(company, q_text, channel, date, role, q_type, difficulty, level=None):
         q_text = (q_text or "").strip()
         if not q_text:
             return
@@ -1146,7 +1147,7 @@ def parse_telegram_messages(
             question_type=q_type or "technical", difficulty=difficulty or "medium",
             question_text=q_text, source=f"telegram:{channel}",
             source_url=f"https://t.me/{channel}", posted_date=date,
-            tags=extract_topics(q_text),
+            tags=extract_topics(q_text), position_level=level,
         ))
 
     # Try context-aware LLM extraction first: it reads the whole message, so it
@@ -1183,7 +1184,8 @@ def parse_telegram_messages(
             # "no real question here"; regex would only re-add noise).
             for item in res:
                 _add(item.get("company"), item.get("question_text"), channel, date,
-                     item.get("role"), item.get("question_type"), item.get("difficulty"))
+                     item.get("role"), item.get("question_type"), item.get("difficulty"),
+                     item.get("position_level"))
             continue
 
         # Regex fallback: message the LLM didn't process (unavailable, over

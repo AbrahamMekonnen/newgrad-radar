@@ -57,6 +57,19 @@ const DATE_RANGES = [
   { value: 6, label: 'Last 6 Months' },
 ];
 
+// Seniority levels. "" = all. Rows without a known level (e.g. company-level
+// frequency data) always show; picking a level narrows the level-tagged rows.
+const LEVELS = [
+  { value: '', label: 'All Levels' },
+  { value: 'intern', label: 'Intern' },
+  { value: 'new_grad', label: 'New Grad' },
+  { value: 'junior', label: 'Junior' },
+  { value: 'mid', label: 'Mid' },
+  { value: 'senior', label: 'Senior' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'principal', label: 'Principal' },
+];
+
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
@@ -102,6 +115,11 @@ function QuestionCard({ question }: { question: InterviewQuestion }) {
           <span className="font-semibold text-gray-900 dark:text-white">{question.company_name}</span>
           {question.position && (
             <span className="text-sm text-gray-500 dark:text-gray-400">• {question.position}</span>
+          )}
+          {question.position_level && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+              {question.position_level.replace('_', ' ')}
+            </span>
           )}
           {question.interview_round && (
             <span className="text-xs text-gray-400 dark:text-gray-500">({question.interview_round})</span>
@@ -366,6 +384,7 @@ function InterviewPrepContent() {
   const [companySearch, setCompanySearch] = useState(urlCompany);
   const [selectedRole, setSelectedRole] = useState('');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedLevel, setSelectedLevel] = useState('');
   const [dateRange, setDateRange] = useState(6);
 
   // Keep state in sync if URL changes (client-side navigation)
@@ -404,6 +423,7 @@ function InterviewPrepContent() {
         params.set('position', selectedRole);
       }
       if (selectedType !== 'all') params.set('question_type', selectedType);
+      if (selectedLevel) params.set('position_level', selectedLevel);
 
       const res = await fetch(`/api/interview-questions?${params}`);
       if (!res.ok) throw new Error('Failed to fetch questions');
@@ -417,7 +437,7 @@ function InterviewPrepContent() {
     } finally {
       setLoading(false);
     }
-  }, [companySearch, selectedRole, selectedType, dateRange, page, urlCompany]);
+  }, [companySearch, selectedRole, selectedType, selectedLevel, dateRange, page, urlCompany]);
 
   useEffect(() => {
     fetchQuestions();
@@ -426,7 +446,7 @@ function InterviewPrepContent() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [companySearch, selectedRole, selectedType, dateRange]);
+  }, [companySearch, selectedRole, selectedType, selectedLevel, dateRange]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
@@ -449,7 +469,7 @@ function InterviewPrepContent() {
 
         {/* Filters */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Company Search */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -482,6 +502,24 @@ function InterviewPrepContent() {
               </select>
             </div>
 
+            {/* Seniority Level */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Level
+              </label>
+              <select
+                value={selectedLevel}
+                onChange={(e) => setSelectedLevel(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              >
+                {LEVELS.map((lvl) => (
+                  <option key={lvl.value} value={lvl.value}>
+                    {lvl.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Date Range */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -508,7 +546,8 @@ function InterviewPrepContent() {
                   setCompanySearch('');
                   setSelectedRole('');
                   setSelectedType('all');
-                  setDateRange(24);
+                  setSelectedLevel('');
+                  setDateRange(6);
                 }}
                 className="w-full"
               >

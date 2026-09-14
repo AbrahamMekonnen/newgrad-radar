@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
 
     const company_slug = searchParams.get('company_slug') || undefined;
     const position = searchParams.get('position') || undefined;
+    const position_level = searchParams.get('position_level') || undefined;
     const question_type = searchParams.get('question_type') as QuestionType | undefined;
     const months_back = parseInt(searchParams.get('months_back') || '6', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
@@ -121,6 +122,13 @@ export async function GET(request: NextRequest) {
 
     if (question_type) {
       query = query.eq('question_type', question_type);
+    }
+
+    // Seniority filter. Rows with a known level match exactly; rows with no
+    // level (null) are kept so company-level data (which has no seniority) is
+    // never hidden by the filter.
+    if (position_level) {
+      query = query.or(`position_level.eq.${position_level},position_level.is.null`);
     }
 
     // Date filter — use interview_date (when the question was actually asked),
