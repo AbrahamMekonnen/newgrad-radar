@@ -83,11 +83,11 @@ def _get_rate_limiter() -> AdaptiveRateLimiter:
     global _rate_limiter
     if _rate_limiter is None:
         _rate_limiter = AdaptiveRateLimiter(
-            base_delay=4.0,        # Start with 4s delay
-            min_delay=3.0,         # Never go below 3s
+            base_delay=1.5,        # LeetCode GraphQL tolerates ~1-2s comfortably
+            min_delay=1.0,         # floor
             max_delay=30.0,        # Max 30s on errors
             target_response_time=2.0,
-            error_penalty_multiplier=2.5,  # Aggressive backoff on errors
+            error_penalty_multiplier=2.5,  # Aggressive backoff on errors (429)
             jitter_factor=0.25,    # 25% jitter
         )
         logger.debug("AdaptiveRateLimiter initialized for LeetCode scraper")
@@ -107,19 +107,12 @@ def _get_cache() -> Optional[ResponseCache]:
 
 
 def _get_stealth_session() -> Optional['StealthSession']:
-    """Get or initialize stealth session for anti-detection."""
-    global _stealth_session
-    if _stealth_session is None and INFRA_AVAILABLE:
-        try:
-            _stealth_session = create_stealth_session(
-                min_delay=3.0,
-                max_delay=6.0,
-                requests_per_minute=15,  # Conservative rate for LeetCode
-            )
-            logger.debug("StealthSession initialized for LeetCode scraper")
-        except Exception as e:
-            logger.warning(f"Failed to initialize stealth session: {e}")
-    return _stealth_session
+    """Disabled: LeetCode's GraphQL endpoint returns EMPTY bodies for the
+    stealth session's header fingerprint (verified — simple browser headers
+    return 200 + JSON reliably, stealth headers return char-0 empty). We rely
+    on the AdaptiveRateLimiter for pacing and plain browser headers instead.
+    """
+    return None
 
 
 def get_session():

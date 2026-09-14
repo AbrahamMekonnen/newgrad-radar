@@ -111,6 +111,37 @@ def _question_to_dict(q: Any) -> dict:
     return dict(getattr(q, "__dict__", {}) or {})
 
 
+def _explode_questions(items: list) -> list:
+    """Some scrapers (e.g. leetcode_discuss) return one record per interview
+    post carrying a ``questions`` list rather than a single ``question_text``.
+    The persistence layer stores one row per question, so explode those into
+    individual question dicts. Records that already have ``question_text`` pass
+    through unchanged.
+    """
+    out = []
+    for q in items:
+        if not isinstance(q, dict):
+            out.append(q)
+            continue
+        if q.get("question_text"):
+            out.append(q)
+            continue
+        qs = q.get("questions")
+        if isinstance(qs, list) and qs:
+            base = {k: v for k, v in q.items() if k != "questions"}
+            # carry a couple of common field-name variants to the row schema
+            if not base.get("source_url") and base.get("url"):
+                base["source_url"] = base["url"]
+            for qt in qs:
+                if isinstance(qt, str) and qt.strip():
+                    row = dict(base)
+                    row["question_text"] = qt.strip()
+                    out.append(row)
+        else:
+            out.append(q)  # no questions at all — let normalize skip it
+    return out
+
+
 @dataclass
 class ScraperConfig:
     """Configuration for a scraper."""
@@ -792,6 +823,8 @@ class InterviewQuestionOrchestrator:
                     # dataclass/plain objects). Normalize everything to dicts so
                     # downstream dedup/normalize can use .get().
                     questions = [_question_to_dict(q) for q in questions]
+                    # Explode multi-question records (questions list) into rows.
+                    questions = _explode_questions(questions)
 
                     break  # Success, exit retry loop
 
@@ -851,7 +884,9 @@ class InterviewQuestionOrchestrator:
             else:
                 output = stdout.decode()
                 result = json.loads(output)
-                questions = result.get('questions', [])
+                questions = _explode_questions(
+                    [_question_to_dict(q) for q in result.get('questions', [])]
+                )
                 errors.extend(result.get('errors', []))
 
         except asyncio.TimeoutError:
