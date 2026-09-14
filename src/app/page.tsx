@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { Job, Tier, RoleType, ApplicationLog, Recruiter, SponsorshipStatus, FundingFilter, SourceFilter, SmartFilter, ExperienceLevel, DiversityTag, WorkMode, BadgeTag, LocationFilter, LOCATION_FILTER_PATTERNS } from '@/lib/types';
@@ -135,6 +135,7 @@ export default function HomePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [autoApplyEnabled, setAutoApplyEnabled] = useState(true);
   const [applications, setApplications] = useState<Map<string, ApplicationLog>>(new Map());
   const [recruitersMap, setRecruitersMap] = useState<Map<string, Recruiter[]>>(new Map());
@@ -710,13 +711,29 @@ export default function HomePage() {
     }
   };
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     const nextPage = page + 1;
     setPage(nextPage);
     // Pass the next page explicitly — fetchJobs' closure still holds the old
     // `page` value at this point (state updates are async).
     fetchJobs(false, undefined, nextPage);
-  };
+  }, [page, fetchJobs]);
+
+  // Infinite scroll: auto-load the next page when the sentinel near the bottom
+  // scrolls into view. rootMargin prefetches ~700px early so new jobs are
+  // already loading before the user reaches the end — feels continuous.
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el || !hasMore || loading || jobs.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) handleLoadMore();
+      },
+      { rootMargin: '700px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, jobs.length, handleLoadMore]);
 
   const handleAutoApply = async (jobId: string) => {
     // Find the job to get its URL
@@ -1137,15 +1154,18 @@ export default function HomePage() {
                 isLoggedIn={isLoggedIn}
               />
 
-              {hasMore && jobs.length > 0 && (
-                <div className="mt-8 text-center">
-                  <Button
-                    variant="outline"
-                    onClick={handleLoadMore}
-                    disabled={loading}
-                  >
-                    {loading ? 'Loading...' : 'Load More'}
-                  </Button>
+              {/* Infinite scroll sentinel + status. The observer above watches
+                  this element and loads the next page as it nears the viewport. */}
+              {jobs.length > 0 && (
+                <div ref={loadMoreRef} className="mt-8 flex flex-col items-center justify-center min-h-[3rem]">
+                  {hasMore ? (
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                      <span className="inline-block w-5 h-5 border-2 border-gray-300 dark:border-slate-600 border-t-blue-600 rounded-full animate-spin" />
+                      <span className="text-sm">Loading more jobs…</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 dark:text-gray-500">You've reached the end — that's all the jobs for these filters.</p>
+                  )}
                 </div>
               )}
             </Suspense>
