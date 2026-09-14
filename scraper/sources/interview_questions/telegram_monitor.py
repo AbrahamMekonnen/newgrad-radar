@@ -501,10 +501,70 @@ def detect_company(text: str) -> Optional[str]:
 # not an interview question — these gates strip the Telegram noise.
 _URLISH = re.compile(r"https?://|www\.|\w+\.(?:com|net|org|io|ru|cn|de|co)\b", re.IGNORECASE)
 
+# Generic prep-advice bullets ("Practice algorithms daily.", "Build a cheat
+# sheet.", "Learn one language deeply.") are NOT interview questions — they're
+# motivational listicles. Reject candidates that start with an advice verb.
+_ADVICE_STARTERS = re.compile(
+    r"^(learn|practice|master|understand|prepare|build|use|simulate|read|focus|"
+    r"stay|keep|remember|try|make sure|do n'?t|don'?t|avoid|improve|develop|study|"
+    r"review|revise|memori[sz]e|create|know|be\b|get\b|start|follow|take|apply|"
+    r"explore|work on|solve|attempt|refer|watch|join|subscribe|share|note down|"
+    r"always|never|ensure|maintain|set up|pick|choose)\b",
+    re.IGNORECASE,
+)
+
+# A real question/problem usually asks something or states a task. Require one
+# of these cues (or a trailing '?') so generic statements are filtered out.
+_QUESTION_CUES = re.compile(
+    r"\?\s*$"
+    r"|^(what|how|why|when|where|which|who|whose|explain|describe|compare|define|"
+    r"design|implement|write|given|find|return|reverse|merge|sort|count|construct|"
+    r"detect|determine|calculate|compute|check|validate|parse|evaluate|search|"
+    r"rotate|traverse|serialize|deserialize|print|generate|remove|insert|delete|"
+    r"can you|tell me|difference between|maximum|minimum|longest|shortest|"
+    r"number of|two sum|is it|are you|walk me|estimate)\b"
+    r"|\b(asked|question was|problem was|round|interview|coding question|"
+    r"leetcode|time complexity|space complexity)\b",
+    re.IGNORECASE,
+)
+
+
+# Clearly non-technical questions (visa/immigration/admissions) that can slip
+# in from mixed channels — reject regardless of source.
+_NON_TECH_RE = re.compile(
+    r"\b(visa|ds-?160|i-?20|sevis|consulate|embassy|green\s*card|"
+    r"port of entry|purpose of your visit|home country|"
+    r"funding your (education|studies|study)|how will you fund|"
+    r"why (this|our|do you want to study at) (university|college|school)|"
+    r"study in the (us|usa|uk|states)|which university|scholarship|"
+    r"i-?94|work permit|sponsor your)\b",
+    re.IGNORECASE,
+)
+
+
+# Job-ad / promo / channel-spam markers — not interview questions.
+_SPAM_RE = re.compile(
+    r"\b(want more|similar jobs|who can apply|apply now|admission|enroll|"
+    r"register now|training program|batch (start|begin)|limited seat|hurry|"
+    r"dm for|dm me|contact us|we are hiring|hiring for|job alert|"
+    r"placement drive|whatsapp group|telegram group|join (our|the|us)|"
+    r"click here|link in bio|subscribe|ctc|stipend|eligibility criteria|"
+    r"vacancy|walk-?in|openings?)\b",
+    re.IGNORECASE,
+)
+
+
+def _clean_question_text(q: str) -> str:
+    """Strip markdown emphasis/bullets/quotes and collapse whitespace."""
+    q = re.sub(r"[*_`#>]+", "", q)
+    q = q.strip().strip("-•·–—").strip()
+    q = re.sub(r"\s+", " ", q)
+    return q
+
 
 def _looks_like_question(q: str) -> bool:
     """Heuristic gate: does this fragment read like a real question/prompt?"""
-    q = q.strip()
+    q = _clean_question_text(q)
     if not (15 <= len(q) <= 600):
         return False
     if _URLISH.search(q):
@@ -518,6 +578,18 @@ def _looks_like_question(q: str) -> bool:
         return False
     # need at least 3 word-ish tokens
     if len(re.findall(r"[A-Za-z]{2,}", q)) < 3:
+        return False
+    # reject generic advice/listicle bullets
+    if _ADVICE_STARTERS.match(q):
+        return False
+    # reject clearly non-technical (visa/immigration/admissions) questions
+    if _NON_TECH_RE.search(q):
+        return False
+    # reject job-ad / promo / channel-spam
+    if _SPAM_RE.search(q):
+        return False
+    # require an actual question/problem cue
+    if not _QUESTION_CUES.search(q):
         return False
     return True
 
@@ -576,10 +648,13 @@ def extract_questions_from_text(text: str) -> List[str]:
     seen = set()
     unique = []
     for q in questions:
-        q_normalized = q.lower().strip()
-        if q_normalized not in seen and _looks_like_question(q):
+        if not _looks_like_question(q):
+            continue
+        cleaned = _clean_question_text(q)
+        q_normalized = cleaned.lower()
+        if q_normalized not in seen:
             seen.add(q_normalized)
-            unique.append(q)
+            unique.append(cleaned)
 
     return unique
 
@@ -708,10 +783,25 @@ _RELEVANCE_TOKENS = (
 )
 
 
+# Channels that match a relevance token but are NOT software-interview
+# channels: visa/immigration interviews (F1/B1B2), English/standardized-test
+# prep, medical/govt-exam prep. The word "interview" matches "visa interview",
+# so these must be excluded explicitly.
+_IRRELEVANT_TOKENS = (
+    "visa", "f1_", "f1 ", "f-1", "b1b2", "b1/b2", "b1 b2", "embassy",
+    "consulate", "immigration", "immigrant", "green card", "study abroad",
+    "ielts", "toefl", " pte", "duolingo", "gmat", "gre exam", "sat exam",
+    "usmle", "nclex", "nursing", "mbbs", "neet", "upsc", "mpsc", "ssc exam",
+    "sarkari", "railway", "bank po", "defence exam", "army exam",
+)
+
+
 def _is_relevant_channel(chat: Any) -> bool:
     hay = (
         (getattr(chat, "username", "") or "") + " " + (getattr(chat, "title", "") or "")
     ).lower()
+    if any(tok in hay for tok in _IRRELEVANT_TOKENS):
+        return False
     return any(tok in hay for tok in _RELEVANCE_TOKENS)
 
 
