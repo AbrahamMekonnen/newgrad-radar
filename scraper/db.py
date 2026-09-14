@@ -111,6 +111,49 @@ def is_us_location(location: Optional[str]) -> bool:
     return True  # ambiguous (Remote / Hybrid / Distributed) — keep
 
 
+# ---------------------------------------------------------------------------
+# Experience-level classification from job title (deterministic, no LLM)
+# ---------------------------------------------------------------------------
+# A title-derived level is authoritative: "Senior/Staff/Manager/Lead" is never
+# a new-grad role, so we tag it and exclude it from the New Grad filter. Generic
+# titles ("Software Engineer") stay whatever the scraper set (often null).
+_LVL_STAFF = re.compile(
+    r"\b(staff|principal|distinguished|fellow|architect|director|vp|"
+    r"vice\s+president|head\s+of|l[6-9]|level\s*[6-9])\b", re.IGNORECASE)
+_LVL_SENIOR = re.compile(
+    r"\b(senior|sr\.?|lead|manager|mgr|l5|level\s*5|iii|iv|"
+    r"([6-9]|1[0-9])\+?\s*years)\b", re.IGNORECASE)
+_LVL_MID = re.compile(r"\b(mid[\s-]*level|ii|[3-5]\+?\s*years)\b", re.IGNORECASE)
+_LVL_NEWGRAD = re.compile(
+    r"\b(new\s*grad(uate)?|new\s*college\s*grad|entry[\s-]*level|early\s*career|"
+    r"university\s*grad|campus|recent\s*grad(uate)?|apprentice|intern(ship)?|"
+    r"grad\s*(20)?2[4-9]|0[\s-]*2\s*years|l3|level\s*3|sde\s*[i1]\b|"
+    r"software\s*engineer\s*[i1]\b|associate)\b", re.IGNORECASE)
+_LVL_JUNIOR = re.compile(r"\b(junior|jr\.?)\b", re.IGNORECASE)
+
+
+def classify_experience_from_title(title: Optional[str]) -> Optional[str]:
+    """Return a seniority level from a job title, or None if no clear signal.
+
+    Senior/staff signals win over everything (a title can't be both senior and
+    new-grad). Only returns a value when the title is unambiguous.
+    """
+    if not title:
+        return None
+    t = title
+    if _LVL_STAFF.search(t):
+        return "staff"
+    if _LVL_SENIOR.search(t):
+        return "senior"
+    if _LVL_NEWGRAD.search(t):
+        return "new_grad"
+    if _LVL_JUNIOR.search(t):
+        return "junior"
+    if _LVL_MID.search(t):
+        return "mid"
+    return None
+
+
 # Job rotation constants
 MAX_ACTIVE_JOBS = 8000  # Maximum number of active jobs to keep (all experience levels)
 PRIORITY_DAYS = 7  # Jobs newer than this are protected from rotation
@@ -280,7 +323,9 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
             "diversity_tags": diversity,
             "work_modes": work_modes,
             "badges": badges,
-            "experience_level": job.get("experience_level"),
+            # A clear title signal (Senior/Staff/Manager/New Grad/...) overrides;
+            # otherwise keep whatever the scraper/classifier set.
+            "experience_level": classify_experience_from_title(job.get("title")) or job.get("experience_level"),
         })
 
     CHUNK = 500
