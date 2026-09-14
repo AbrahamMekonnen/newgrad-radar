@@ -1,12 +1,114 @@
 """Supabase database operations."""
 
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from supabase import create_client, Client
 
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+
+
+# ---------------------------------------------------------------------------
+# US-only location filtering
+# ---------------------------------------------------------------------------
+# The app targets US jobs, but sources return worldwide postings (Bengaluru,
+# London, Tokyo, Singapore...). We keep a job if its location shows a US signal
+# OR is ambiguous (Remote/Hybrid/blank — likely US on these boards), and drop
+# it only when it shows a foreign signal with no US signal. Multi-location
+# postings that include a US site are kept.
+
+_US_STATE_ABBR = (
+    "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS "
+    "MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC"
+).split()
+_US_STATE_NAMES = [
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
+    "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+    "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
+    "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
+    "new mexico", "new york", "north carolina", "north dakota", "ohio",
+    "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina",
+    "south dakota", "tennessee", "texas", "utah", "vermont", "virginia",
+    "washington", "west virginia", "wisconsin", "wyoming",
+]
+_US_CITIES = [
+    "san francisco", "new york", "seattle", "austin", "boston", "chicago",
+    "los angeles", "mountain view", "sunnyvale", "palo alto", "cupertino",
+    "menlo park", "san jose", "san diego", "denver", "atlanta", "dallas",
+    "houston", "washington dc", "washington, d.c", "bellevue", "redmond",
+    "cambridge, ma", "san mateo", "santa clara", "irvine", "pittsburgh",
+    "philadelphia", "phoenix", "portland, or", "nyc", "bay area", "silicon valley",
+]
+_US_TOKENS = [
+    "united states", "u.s.a", "u.s.", " usa", "usa ", "(usa)", ", us", " us)",
+    "remote us", "remote - us", "remote, us", "remote-us", "remote (us",
+    "onsite us", "us remote",
+]
+
+_FOREIGN_TOKENS = [
+    # India
+    "india", "bengaluru", "bangalore", "gurugram", "gurgaon", "hyderabad",
+    "pune", "mumbai", "new delhi", "noida", "chennai", "kolkata", "ahmedabad",
+    # UK / Ireland
+    "united kingdom", "london", "u.k", "(uk)", ", uk", "england", "scotland",
+    "edinburgh", "manchester", "ireland", "dublin",
+    # Canada
+    "canada", "toronto", "vancouver", "montreal", "ontario", "waterloo, on",
+    "ottawa", "calgary",
+    # Europe
+    "france", "paris", "germany", "berlin", "munich", "netherlands",
+    "amsterdam", "spain", "madrid", "barcelona", "italy", "poland", "warsaw",
+    "krakow", "sweden", "stockholm", "switzerland", "zurich", "portugal",
+    "lisbon", "romania", "bucharest", "austria", "vienna", "belgium",
+    "brussels", "denmark", "copenhagen", "finland", "helsinki", "norway",
+    "oslo", "czech", "prague", "hungary", "budapest", "greece", "athens",
+    # Middle East / Africa
+    "united arab emirates", "dubai", "abu dhabi", "israel", "tel aviv",
+    "egypt", "cairo", "nigeria", "lagos", "south africa", "kenya", "nairobi",
+    # APAC
+    "singapore", "japan", "tokyo", "china", "shanghai", "beijing", "shenzhen",
+    "hong kong", "korea", "seoul", "taiwan", "taipei", "australia", "sydney",
+    "melbourne", "new zealand", "auckland", "thailand", "bangkok", "malaysia",
+    "kuala lumpur", "vietnam", "hanoi", "ho chi minh", "indonesia", "jakarta",
+    "philippines", "manila", "pakistan", "karachi", "lahore", "bangladesh",
+    "turkey", "istanbul",
+    # LATAM
+    "brazil", "sao paulo", "mexico", "mexico city", "argentina", "buenos aires",
+    "colombia", "bogota", "chile", "santiago", "peru", "lima", "costa rica",
+]
+
+_US_ABBR_RE = re.compile(r",\s*(" + "|".join(_US_STATE_ABBR) + r")\b")
+
+
+def _has_us_signal(t: str) -> bool:
+    if _US_ABBR_RE.search(t):
+        return True
+    if any(tok in t for tok in _US_TOKENS):
+        return True
+    if any(name in t for name in _US_STATE_NAMES):
+        return True
+    if any(city in t for city in _US_CITIES):
+        return True
+    return False
+
+
+def _has_foreign_signal(t: str) -> bool:
+    return any(tok in t for tok in _FOREIGN_TOKENS)
+
+
+def is_us_location(location: Optional[str]) -> bool:
+    """True if a job location is US-based (or ambiguous), False if clearly foreign."""
+    if not location or not location.strip():
+        return True  # ambiguous/blank — keep (US-focused boards)
+    t = " " + location.lower() + " "
+    if _has_us_signal(t):
+        return True  # US signal wins even in mixed "SF, CA | London" postings
+    if _has_foreign_signal(t):
+        return False
+    return True  # ambiguous (Remote / Hybrid / Distributed) — keep
 
 
 # Job rotation constants
@@ -94,6 +196,15 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
     Returns:
         Tuple of (new_count, updated_count)
     """
+    if not jobs:
+        return 0, 0
+
+    # US-only: drop postings that are clearly outside the US before writing.
+    before = len(jobs)
+    jobs = [j for j in jobs if is_us_location(j.get("location"))]
+    dropped = before - len(jobs)
+    if dropped:
+        print(f"  Filtered out {dropped} non-US jobs ({len(jobs)} US jobs remain)")
     if not jobs:
         return 0, 0
 
