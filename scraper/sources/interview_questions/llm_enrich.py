@@ -64,8 +64,55 @@ def _get_model():
     return _genai
 
 
+_GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+
+
+def _groq_generate(prompt: str) -> Optional[str]:
+    """Call Groq's OpenAI-compatible endpoint (via requests — no extra dep)."""
+    key = os.environ.get("GROQ_API_KEY")
+    if not key:
+        return None
+    try:
+        import requests
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": _GROQ_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=60,
+        )
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        logger.debug(f"Groq {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        logger.debug(f"Groq call failed: {e}")
+    return None
+
+
+def _generate(prompt: str) -> Optional[str]:
+    """Provider-agnostic text generation: Gemini first, Groq as fallback.
+
+    Falls back to Groq whenever Gemini is unavailable, errors, hits quota, or
+    returns nothing — so enrichment keeps working when one provider is down.
+    """
+    model = _get_model()
+    if model is not None:
+        try:
+            resp = model.generate_content(prompt)
+            text = getattr(resp, "text", "") or ""
+            if text.strip():
+                return text
+        except Exception as e:
+            logger.debug(f"Gemini generate failed, trying Groq: {e}")
+    return _groq_generate(prompt)
+
+
 def llm_available() -> bool:
-    return _get_model() is not None
+    return _get_model() is not None or bool(os.environ.get("GROQ_API_KEY"))
 
 
 _JSON_RE = re.compile(r"\{.*\}|\[.*\]", re.DOTALL)
@@ -122,8 +169,7 @@ def extract_batch(
     fall back to regex. Messages beyond the call budget come back as [] (the
     caller should regex-handle those). Never raises.
     """
-    model = _get_model()
-    if model is None or not messages:
+    if not llm_available() or not messages:
         return None
     # None = not processed (caller should regex-fallback); a list = processed by
     # the LLM (trust it, even when empty — regex would only re-add noise).
@@ -135,12 +181,7 @@ def extract_batch(
         batch = messages[start:start + batch_size]
         numbered = "\n\n".join(f"[{i}] {m[:1200]}" for i, m in enumerate(batch))
         calls += 1
-        try:
-            resp = model.generate_content(_EXTRACT_PROMPT + numbered + "\n\nJSON:")
-            data = _parse_json(getattr(resp, "text", "") or "")
-        except Exception as e:
-            logger.debug(f"LLM extract batch failed: {e}")
-            data = None
+        data = _parse_json(_generate(_EXTRACT_PROMPT + numbered + "\n\nJSON:") or "")
         if isinstance(data, dict):
             # call succeeded: default every message in this batch to [] (trust
             # "no questions"), then fill in what the model returned.
@@ -189,9 +230,8 @@ def assign_companies(
     the same length; entries are a company name string or None (unknown / not
     determinable / LLM unavailable). Never raises.
     """
-    model = _get_model()
     out: List[Optional[str]] = [None] * len(messages)
-    if model is None or not messages:
+    if not llm_available() or not messages:
         return out
 
     calls = 0
@@ -215,12 +255,7 @@ def assign_companies(
             + "\n\nJSON:"
         )
         calls += 1
-        try:
-            resp = model.generate_content(prompt)
-            data = _parse_json(getattr(resp, "text", "") or "")
-        except Exception as e:
-            logger.debug(f"LLM enrich batch failed: {e}")
-            data = None
+        data = _parse_json(_generate(prompt) or "")
         if isinstance(data, dict):
             for k, v in data.items():
                 try:
