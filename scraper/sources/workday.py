@@ -295,33 +295,37 @@ class WorkdayScraper:
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "application/json"
 
-        payload = {
-            "appliedFacets": {},
-            "limit": limit,
-            "offset": offset,
-            "searchText": "",
-        }
-
-        # Apply rate limiting
         self._apply_rate_limit(config)
 
-        def _do_request():
-            response = requests.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=REQUEST_TIMEOUT
-            )
-            response.raise_for_status()
-            return response.json()
-
+        # Workday's CXS API caps `limit` at 20 per request (>20 returns HTTP
+        # 400), so page through in chunks of 20 up to the requested total.
+        PAGE = 20
+        want = max(1, limit)
+        all_postings: List[Dict[str, Any]] = []
+        cur = offset
         try:
-            if self.retry:
-                data = self.retry.execute(_do_request)
-            else:
-                data = _do_request()
+            while len(all_postings) < want:
+                payload = {
+                    "appliedFacets": {},
+                    "limit": min(PAGE, want - len(all_postings)),
+                    "offset": cur,
+                    "searchText": "",
+                }
 
-            # Record success
+                def _do_request(_pl=payload):
+                    response = requests.post(url, json=_pl, headers=headers, timeout=REQUEST_TIMEOUT)
+                    response.raise_for_status()
+                    return response.json()
+
+                page = self.retry.execute(_do_request) if self.retry else _do_request()
+                postings = page.get("jobPostings", []) or []
+                all_postings.extend(postings)
+                total = page.get("total", 0)
+                cur += PAGE
+                if not postings or cur >= total:
+                    break
+                self._apply_rate_limit(config)
+
             self._record_circuit_result(config, True)
             if self.stealth:
                 self.stealth.after_request(200)
@@ -337,6 +341,7 @@ class WorkdayScraper:
             self._record_circuit_result(config, False)
             return []
 
+        data = {"jobPostings": all_postings}
         jobs = []
         job_postings = data.get("jobPostings", [])
 

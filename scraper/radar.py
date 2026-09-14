@@ -921,7 +921,7 @@ def fetch_ats_sources() -> list[dict]:
     # Workday (Fortune 500 companies)
     print("  Fetching Workday boards...")
     try:
-        workday_jobs = fetch_workday_all()
+        workday_jobs = fetch_workday_all(limit_per_company=150)
         print(f"    Workday: {len(workday_jobs)} jobs")
         all_jobs.extend(workday_jobs)
     except Exception as e:
