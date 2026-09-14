@@ -724,7 +724,9 @@ export default function HomePage() {
   // already loading before the user reaches the end — feels continuous.
   useEffect(() => {
     const el = loadMoreRef.current;
-    if (!el || !hasMore || loading || jobs.length === 0) return;
+    // Don't auto-load while the filter drawer is open — the extra content
+    // reflows the page and fights the user scrolling through the filters.
+    if (!el || !hasMore || loading || jobs.length === 0 || showFilters) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) handleLoadMore();
@@ -733,7 +735,7 @@ export default function HomePage() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loading, jobs.length, handleLoadMore]);
+  }, [hasMore, loading, jobs.length, handleLoadMore, showFilters]);
 
   const handleAutoApply = async (jobId: string) => {
     // Find the job to get its URL
@@ -1057,7 +1059,7 @@ export default function HomePage() {
       <div className="flex gap-8">
         {/* Desktop sidebar filters with slide-in animation */}
         <Animated animation="slide-right" delay={200} className="hidden lg:block w-56 shrink-0">
-          <div className="sticky top-24 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-slate-700/50 p-4 shadow-sm">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-slate-700/50 p-4 shadow-sm">
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Smart Filters</h3>
               <SmartFilters
