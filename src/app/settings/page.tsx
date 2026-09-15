@@ -12,6 +12,16 @@ import { cn } from '@/lib/utils';
 
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
 
+// A long, hard-to-guess ntfy topic. Topics are effectively public (anyone who
+// knows the string can subscribe), so we generate a random one instead of
+// letting users pick something weak.
+function generateNtfyTopic(): string {
+  const rand =
+    (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))
+      .replace(/-/g, '');
+  return `hireradar-${rand.slice(0, 24)}`;
+}
+
 export default function SettingsPage() {
   return (
     <AuthGuard>
@@ -323,23 +333,39 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
             <Checkbox
               label="Push notifications (via ntfy.sh)"
               checked={preferences.push_enabled}
-              onChange={(checked) => setPreferences({ ...preferences, push_enabled: checked })}
+              onChange={(checked) =>
+                setPreferences({
+                  ...preferences,
+                  push_enabled: checked,
+                  // Auto-generate a secure topic the first time push is enabled.
+                  ntfy_topic: checked && !preferences.ntfy_topic ? generateNtfyTopic() : preferences.ntfy_topic,
+                })
+              }
             />
             {preferences.push_enabled && (
               <div className="ml-6 space-y-3">
-                <Input
-                  label="Your ntfy.sh Topic"
-                  value={preferences.ntfy_topic || ''}
-                  onChange={(e) => setPreferences({ ...preferences, ntfy_topic: e.target.value })}
-                  placeholder="newgrad-jobs-abc123"
-                />
+                <div>
+                  <Input
+                    label="Your ntfy.sh Topic"
+                    value={preferences.ntfy_topic || ''}
+                    onChange={(e) => setPreferences({ ...preferences, ntfy_topic: e.target.value })}
+                    placeholder="hireradar-xxxxxxxx"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPreferences({ ...preferences, ntfy_topic: generateNtfyTopic() })}
+                    className="mt-1 text-xs font-medium text-indigo-600 hover:text-indigo-500"
+                  >
+                    Generate a new random topic
+                  </button>
+                </div>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm font-medium text-blue-900 mb-2">How to set up push notifications:</p>
                   <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-                    <li>Pick a unique topic name above (make it hard to guess)</li>
+                    <li>We generated a private topic above — keep it secret (anyone with it can see your alerts).</li>
                     <li>Download the <strong>ntfy</strong> app on your phone (iOS/Android)</li>
-                    <li>In the app, tap &quot;+&quot; and subscribe to your topic name</li>
-                    <li>Save your settings here - done!</li>
+                    <li>In the app, tap &quot;+&quot; and subscribe to that exact topic</li>
+                    <li>Save your settings here — done!</li>
                   </ol>
                   <p className="text-xs text-blue-700 mt-2">
                     No account needed. Topics are auto-created when you subscribe.
