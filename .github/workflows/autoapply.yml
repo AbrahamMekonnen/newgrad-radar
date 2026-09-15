@@ -9,7 +9,7 @@ name: Auto-Apply Pipeline
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "0 * * * *" # hourly catch-all; on-demand dispatch handles the rest
   workflow_dispatch:
     inputs:
       per_user_limit:

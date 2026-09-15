@@ -77,51 +77,57 @@ def build_profile(client, user_id: str) -> gh.Profile:
     return prof
 
 
-def process_queue(limit: int) -> int:
+def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
+    """Prepare a single queued application and write it back. Returns True on success."""
+    job = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type")
+           .eq("id", r["job_id"]).single().execute().data)
+    if not job:
+        return False
+    ats = (job.get("ats_type") or "").lower()
+    token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
+    jid = _ats_job_id(job.get("apply_url") or job.get("url") or "")
+    if ats not in SUPPORTED or not token or not jid:
+        client.table("autoapply_job_queue").update({"status": "unsupported"}).eq("id", r["id"]).execute()
+        return False
+    prepared = prepare_application({
+        "ats_type": ats, "ats_token": token, "ats_job_id": jid,
+        "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
+    }, profile)
+    client.table("autoapply_job_queue").update({
+        "status": "prepared" if prepared.get("status") == "prepared" else "failed",
+        "prepared_data": prepared.get("fields"), "ready_pct": prepared.get("ready_pct"),
+        "needs_user": prepared.get("needs_user"),
+        "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }).eq("id", r["id"]).execute()
+    logger.info(f"  {job.get('company_name')}: {prepared.get('ready_pct')}% ready "
+                f"({prepared.get('ai_drafted_count')} AI-drafted)")
+    return prepared.get("status") == "prepared"
+
+
+def process_queue(limit: int, workers: int = 8) -> int:
+    """Prepare pending applications IN PARALLEL (each is an independent form fetch
+    + ~1 LLM call, so concurrency is a big speedup)."""
     from supabase import create_client
     from companies import COMPANIES
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
     rows = (client.table("autoapply_job_queue").select("*")
             .eq("status", "pending").order("priority").limit(limit).execute().data) or []
-    logger.info(f"{len(rows)} pending applications to prepare")
+    logger.info(f"{len(rows)} pending applications to prepare ({workers} in parallel)")
 
-    prof_cache: dict = {}
+    # Build each user's profile once, up front (thread-safe: no shared mutation).
+    prof_cache = {uid: build_profile(client, uid) for uid in {r["user_id"] for r in rows}}
+
     done = 0
-    for r in rows:
-        try:
-            job = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type")
-                   .eq("id", r["job_id"]).single().execute().data)
-            if not job:
-                continue
-            ats = (job.get("ats_type") or "").lower()
-            token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
-            jid = _ats_job_id(job.get("apply_url") or job.get("url") or "")
-            if ats not in SUPPORTED or not token or not jid:
-                client.table("autoapply_job_queue").update(
-                    {"status": "unsupported"}).eq("id", r["id"]).execute()
-                continue
-
-            profile = prof_cache.get(r["user_id"]) or build_profile(client, r["user_id"])
-            prof_cache[r["user_id"]] = profile
-
-            prepared = prepare_application({
-                "ats_type": ats, "ats_token": token, "ats_job_id": jid,
-                "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
-            }, profile)
-
-            client.table("autoapply_job_queue").update({
-                "status": "prepared" if prepared.get("status") == "prepared" else "failed",
-                "prepared_data": prepared.get("fields"),
-                "ready_pct": prepared.get("ready_pct"),
-                "needs_user": prepared.get("needs_user"),
-                "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-            }).eq("id", r["id"]).execute()
-            logger.info(f"  {job.get('company_name')}: {prepared.get('ready_pct')}% ready "
-                        f"({prepared.get('ai_drafted_count')} AI-drafted)")
-            done += 1
-        except Exception as e:
-            logger.warning(f"  queue row {r.get('id')} failed: {e}")
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(_prepare_one, client, COMPANIES, r, prof_cache[r["user_id"]]): r for r in rows}
+        for fut in as_completed(futs):
+            try:
+                if fut.result():
+                    done += 1
+            except Exception as e:
+                logger.warning(f"  queue row {futs[fut].get('id')} failed: {e}")
     logger.info(f"DONE: prepared {done}/{len(rows)}")
     return done
 

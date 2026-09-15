@@ -97,8 +97,22 @@ export default function AutoApplyCriteriaPage() {
       auto_apply_min_match: minMatch,
       auto_apply_filters: c,
     }).eq('user_id', user.id);
+    if (error) {
+      setSaving(false);
+      showToast('Could not save. Try again.', 'error');
+      return;
+    }
+    // Kick off matching + preparation right away (don't wait for the schedule).
+    let msg = 'Auto-apply criteria saved.';
+    if (enabled) {
+      try {
+        const res = await fetch('/api/auto-apply/run', { method: 'POST' });
+        const data = await res.json();
+        if (data?.message) msg = data.message;
+      } catch { /* falls back to the scheduled run */ }
+    }
     setSaving(false);
-    showToast(error ? 'Could not save. Try again.' : 'Auto-apply criteria saved.', error ? 'error' : 'success');
+    showToast(msg, 'success');
   };
 
   if (loading) return <div className="max-w-2xl mx-auto p-8 text-gray-500">Loading…</div>;
