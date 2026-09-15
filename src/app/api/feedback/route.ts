@@ -1,6 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+// Push a heads-up to the developer's ntfy topic when new feedback arrives.
+// Server-side only; the topic stays private (DEV_NTFY_TOPIC env var). No-ops if
+// unset, and never throws (a notification failure must not break submission).
+async function notifyDeveloper(fb: {
+  type: string;
+  title: string;
+  priority: string;
+  email?: string;
+}): Promise<void> {
+  const topic = process.env.DEV_NTFY_TOPIC;
+  if (!topic) return;
+  try {
+    const priorityMap: Record<string, string> = {
+      critical: 'urgent', high: 'high', medium: 'default', low: 'low',
+    };
+    await fetch(`https://ntfy.sh/${topic}`, {
+      method: 'POST',
+      headers: {
+        Title: `New ${fb.type}: ${fb.title}`.slice(0, 200),
+        Priority: priorityMap[fb.priority] || 'default',
+        Tags: fb.type === 'bug' ? 'beetle' : fb.type === 'feature' ? 'bulb' : 'speech_balloon',
+      },
+      body: `${fb.title}\nFrom: ${fb.email || 'unknown'} · priority: ${fb.priority}`,
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (e) {
+    console.error('[dev ntfy] feedback notification failed:', e);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -77,6 +107,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Notify the developer via ntfy so new feedback can be reviewed right away.
+    // Private, dev-only: set DEV_NTFY_TOPIC to a long random topic and subscribe
+    // to it in your ntfy app. Fire-and-forget — never affects the response.
+    await notifyDeveloper({ type, title, priority: priority || 'medium', email: user.email });
 
     return NextResponse.json({ success: true, report: data[0] });
   } catch (error) {

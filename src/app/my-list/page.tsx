@@ -11,6 +11,7 @@ import { AddCompanyModal } from '@/components/companies/AddCompanyModal';
 import { CompanyFilterModal } from '@/components/companies/CompanyFilterModal';
 import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWithFiltersModal';
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
+import { ToastContainer, useToast } from '@/components/ui/Toast';
 
 type TabType = 'my-companies' | 'add-companies';
 
@@ -23,6 +24,7 @@ export default function MyListPage() {
 }
 
 function MyListContent({ userId }: { userId: string }) {
+  const { toasts, showToast, removeToast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('my-companies');
   const [trackedCompanies, setTrackedCompanies] = useState<Company[]>([]);
   const [autoApplySlugs, setAutoApplySlugs] = useState<Set<string>>(new Set());
@@ -357,6 +359,13 @@ function MyListContent({ userId }: { userId: string }) {
   ) => {
     const { autoApply = false, notifyEnabled = true } = options;
 
+    // Already tracking this company? Tell the user instead of failing silently.
+    if (trackedCompanies.some((c) => c.slug === slug)) {
+      showToast('That company is already in your watchlist.', 'info');
+      setSelectedCompanyToAdd(null);
+      return;
+    }
+
     // Insert into user_lists with all options
     const { error } = await supabase
       .from('user_lists')
@@ -370,15 +379,28 @@ function MyListContent({ userId }: { userId: string }) {
       });
 
     if (error) {
-      // Try fallback without filters
+      // Unique-constraint violation = already tracked (race with the check above).
+      if (error.code === '23505') {
+        showToast('That company is already in your watchlist.', 'info');
+        setSelectedCompanyToAdd(null);
+        return;
+      }
+      // Try fallback without filters (e.g. optional columns missing)
       const { error: fallbackError } = await supabase
         .from('user_lists')
         .insert({ user_id: userId, company_slug: slug });
       if (fallbackError) {
-        console.error('Error adding company:', fallbackError);
+        if (fallbackError.code === '23505') {
+          showToast('That company is already in your watchlist.', 'info');
+        } else {
+          console.error('Error adding company:', fallbackError);
+          showToast('Could not add that company. Please try again.', 'error');
+        }
+        setSelectedCompanyToAdd(null);
         return;
       }
     }
+    showToast('Added to your watchlist.', 'success');
 
     const company = allCompanies.find((c) => c.slug === slug);
     if (company) {
@@ -772,6 +794,8 @@ function MyListContent({ userId }: { userId: string }) {
         company={selectedCompanyToAdd}
         onSubmit={handleAddCompanyWithFilters}
       />
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Bulk Filter Modal */}
       <BulkFilterModal
