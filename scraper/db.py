@@ -124,9 +124,12 @@ _LVL_SENIOR = re.compile(
     r"\b(senior|sr\.?|lead|manager|mgr|l5|level\s*5|iii|iv|"
     r"([6-9]|1[0-9])\+?\s*years)\b", re.IGNORECASE)
 _LVL_MID = re.compile(r"\b(mid[\s-]*level|ii|[3-5]\+?\s*years)\b", re.IGNORECASE)
+# Interns are their own audience now — classify them distinctly, not as new_grad.
+_LVL_INTERN = re.compile(r"\b(intern(ship)?|co[\s-]*op|apprentice(ship)?|summer\s*20\d\d)\b",
+                         re.IGNORECASE)
 _LVL_NEWGRAD = re.compile(
     r"\b(new\s*grad(uate)?|new\s*college\s*grad|entry[\s-]*level|early\s*career|"
-    r"university\s*grad|campus|recent\s*grad(uate)?|apprentice|intern(ship)?|"
+    r"university\s*grad|campus|recent\s*grad(uate)?|"
     r"grad\s*(20)?2[4-9]|0[\s-]*2\s*years|l3|level\s*3|sde\s*[i1]\b|"
     r"software\s*engineer\s*[i1]\b|associate)\b", re.IGNORECASE)
 _LVL_JUNIOR = re.compile(r"\b(junior|jr\.?)\b", re.IGNORECASE)
@@ -145,6 +148,8 @@ def classify_experience_from_title(title: Optional[str]) -> Optional[str]:
         return "staff"
     if _LVL_SENIOR.search(t):
         return "senior"
+    if _LVL_INTERN.search(t):
+        return "intern"
     if _LVL_NEWGRAD.search(t):
         return "new_grad"
     if _LVL_JUNIOR.search(t):
@@ -326,6 +331,15 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
             # A clear title signal (Senior/Staff/Manager/New Grad/...) overrides;
             # otherwise keep whatever the scraper/classifier set.
             "experience_level": classify_experience_from_title(job.get("title")) or job.get("experience_level"),
+            # Pass through structured fields the sources extract. These were
+            # previously DROPPED here, which is why salary/sponsorship/funding
+            # filters were always empty even though the scrapers populated them.
+            # Only include keys that are present so we never overwrite an
+            # existing value with None on update.
+            **{k: job[k] for k in (
+                "salary_min", "salary_max", "salary_text",
+                "sponsorship_status", "funding_stage", "deadline",
+            ) if job.get(k) is not None},
         })
 
     CHUNK = 500

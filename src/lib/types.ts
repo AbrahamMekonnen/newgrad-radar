@@ -670,6 +670,7 @@ export interface Tag {
 // =============================================================================
 
 export type ExperienceLevel =
+  | 'intern'
   | 'new_grad'
   | 'entry_level'
   | 'junior'
@@ -679,6 +680,7 @@ export type ExperienceLevel =
   | 'principal';
 
 export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
+  intern: 'Intern',
   new_grad: 'New Grad',
   entry_level: 'Entry Level',
   junior: 'Junior',
@@ -696,7 +698,7 @@ export function focusForLevel(level: ExperienceLevel | null | undefined): 'new_g
   if (level && ['mid', 'senior', 'staff', 'principal'].includes(level)) {
     return 'experienced';
   }
-  return 'new_grad'; // new_grad / entry_level / junior / unknown
+  return 'new_grad'; // intern / new_grad / entry_level / junior / unknown
 }
 
 // Pick the recruiters that actually align with a job instead of dumping every
