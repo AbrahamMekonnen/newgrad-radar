@@ -820,7 +820,7 @@ $$ LANGUAGE plpgsql;
 
 ---
 
-## Recommendation for NewGrad Radar
+## Recommendation for HireRadar
 
 ### Phase 1: Start Simple (Supabase Queue)
 - No additional infrastructure

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-NewGrad Radar is a full-stack job tracking and auto-apply application designed for new graduate software engineers. It combines a Next.js frontend, Supabase backend, Python scraper, and an AI-powered auto-apply agent.
+HireRadar is a full-stack job tracking and auto-apply application designed for new graduate software engineers. It combines a Next.js frontend, Supabase backend, Python scraper, and an AI-powered auto-apply agent.
 
 ## Table of Contents
 

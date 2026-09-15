@@ -1,7 +1,7 @@
 # AI Cost Optimization Analysis
 
 **Generated:** September 2026  
-**Codebase:** NewGrad Radar  
+**Codebase:** HireRadar  
 
 ## Executive Summary
 

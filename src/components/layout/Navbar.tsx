@@ -20,8 +20,8 @@ const CommandIcon = () => (
 
 const navLinks = [
   { href: '/', label: 'All Jobs' },
-  { href: '/interview-prep', label: 'Interview Prep' },
-  { href: '/recruiters', label: 'Recruiters' },
+  { href: '/interview-prep', label: 'Interview Prep', protected: true },
+  { href: '/recruiters', label: 'Recruiters', protected: true },
   { href: '/my-list', label: 'Watchlist', protected: true },
   { href: '/applications', label: 'Applications', protected: true },
   { href: '/analytics', label: 'Analytics', protected: true },

@@ -1,4 +1,4 @@
-# Tiered Cache Implementation for NewGrad Radar
+# Tiered Cache Implementation for HireRadar
 
 Complete implementation of L1 (memory) + L2 (file/disk) tiered caching for the auto-apply system.
 

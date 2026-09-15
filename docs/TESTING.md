@@ -1,6 +1,6 @@
 # Testing Guide
 
-Manual testing checklist for the NewGrad Radar job tracking application.
+Manual testing checklist for the HireRadar job tracking application.
 
 ## Prerequisites
 

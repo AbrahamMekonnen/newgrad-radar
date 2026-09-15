@@ -9,7 +9,7 @@ This document researches best UX patterns for showing auto-apply progress during
 3. [Progress Indicators](#progress-indicators)
 4. [Error Communication](#error-communication)
 5. [User Control Options](#user-control-options)
-6. [Recommendations for NewGrad Radar](#recommendations-for-newgrad-radar)
+6. [Recommendations for HireRadar](#recommendations-for-newgrad-radar)
 
 ---
 
@@ -454,7 +454,7 @@ When to automatically pause for user input:
 
 ---
 
-## Recommendations for NewGrad Radar
+## Recommendations for HireRadar
 
 ### Phase 1: MVP (Single Application)
 

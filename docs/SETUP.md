@@ -1,6 +1,6 @@
-# NewGrad Radar - Setup Guide
+# HireRadar - Setup Guide
 
-Complete setup guide for running the NewGrad Radar job tracking application locally.
+Complete setup guide for running the HireRadar job tracking application locally.
 
 ---
 

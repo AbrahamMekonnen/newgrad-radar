@@ -564,7 +564,7 @@ class FormFiller:
 
 ---
 
-## Summary: Key Takeaways for NewGrad Radar
+## Summary: Key Takeaways for HireRadar
 
 ### Architecture Recommendations
 1. **Modular scraper design** - Separate scraper per job board (LinkedIn, Indeed, Greenhouse)

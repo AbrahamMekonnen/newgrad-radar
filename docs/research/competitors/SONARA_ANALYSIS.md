@@ -188,9 +188,9 @@ On persistent failure: skip and log
 
 ---
 
-## Comparison: Sonara AI vs NewGrad Radar
+## Comparison: Sonara AI vs HireRadar
 
-| Aspect | Sonara AI | NewGrad Radar (Current) |
+| Aspect | Sonara AI | HireRadar (Current) |
 |--------|-----------|------------------------|
 | **Speed Model** | Server-side, 24/7 background | Client-triggered, on-demand |
 | **Browser** | Headless cloud workers | Local Playwright |
@@ -203,7 +203,7 @@ On persistent failure: skip and log
 | **Job Discovery** | Built-in aggregation | Separate scraper |
 | **Pricing** | Subscription (~$20-50/mo) | Free/self-hosted |
 
-### NewGrad Radar Advantages
+### HireRadar Advantages
 - Open source / self-hosted
 - AI-powered contextual answers (not templates)
 - User controls the process
@@ -217,7 +217,7 @@ On persistent failure: skip and log
 
 ---
 
-## Recommendations for NewGrad Radar
+## Recommendations for HireRadar
 
 ### Quick Wins (Speed Improvements)
 1. **Pre-generate common answers** - Build an answer cache similar to Sonara
@@ -254,7 +254,7 @@ Hybrid:   Pre-compute templates -> Use AI only for novel questions
 - Sonara AI's public product pages and marketing materials
 - Industry-standard patterns for job application automation
 - Technical inference from similar platforms (LazyApply, Simplify, etc.)
-- Comparison with NewGrad Radar's current implementation
+- Comparison with HireRadar's current implementation
 
 *For more accurate technical details, recommend reviewing:*
 - Sonara AI demo videos (YouTube)

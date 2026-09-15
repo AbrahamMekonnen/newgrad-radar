@@ -1,4 +1,4 @@
-# NewGrad Radar
+# HireRadar
 
 A job tracking app for new grad software engineering positions at top tech companies.
 

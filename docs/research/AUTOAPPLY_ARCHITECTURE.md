@@ -6,7 +6,7 @@ This document compares different architectural approaches for implementing auto-
 
 ## Current Implementation
 
-NewGrad Radar currently has two approaches in `/auto-apply`:
+HireRadar currently has two approaches in `/auto-apply`:
 
 1. **v1 (Node.js + Playwright)**: Deterministic form filling with ATS-specific adapters
 2. **v2 (Python + browser-use + LLM)**: AI-powered intelligent form filling
@@ -267,7 +267,7 @@ chrome.runtime.connectNative('com.newgrad_radar.helper').postMessage({
 1. **Cost-Effective**: Zero ongoing server costs for automation
 2. **Universal ATS Support**: Can fill forms on any ATS, not just API-enabled ones
 3. **User Privacy**: Resume/profile stays local unless user opts into sync
-4. **Existing Infrastructure**: NewGrad Radar already has Supabase backend
+4. **Existing Infrastructure**: HireRadar already has Supabase backend
 5. **Mobile Fallback**: Users can still browse jobs on mobile, apply on desktop
 
 ### Implementation Plan
@@ -399,7 +399,7 @@ chrome-extension/
 
 ## Conclusion
 
-For NewGrad Radar's use case, a **Chrome Extension with Web Dashboard integration** provides the best balance of:
+For HireRadar's use case, a **Chrome Extension with Web Dashboard integration** provides the best balance of:
 
 1. **Cost efficiency**: No server costs for automation
 2. **ATS coverage**: Works with any ATS platform

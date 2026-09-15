@@ -480,4 +480,4 @@ NEVER use these phrases:
 ---
 
 *Last updated: 2026-09-10*
-*For use with the NewGrad Radar auto-apply system*
+*For use with the HireRadar auto-apply system*

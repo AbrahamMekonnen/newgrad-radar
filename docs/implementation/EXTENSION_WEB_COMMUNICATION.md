@@ -1,6 +1,6 @@
 # Chrome Extension to Web App Communication
 
-This document describes the communication architecture between the NewGrad Radar Chrome extension and the Next.js web application, including message passing, authentication sharing, real-time synchronization, and security considerations.
+This document describes the communication architecture between the HireRadar Chrome extension and the Next.js web application, including message passing, authentication sharing, real-time synchronization, and security considerations.
 
 ---
 
@@ -51,7 +51,7 @@ The extension must declare external connectivity in `manifest.json`:
 ```json
 {
   "manifest_version": 3,
-  "name": "NewGrad Radar Auto-Apply",
+  "name": "HireRadar Auto-Apply",
   "version": "1.0.0",
   "permissions": [
     "storage",
@@ -316,7 +316,7 @@ async function handleGetStatus(): Promise<ExtensionResponse> {
 
 ### 4. Content Script to Web Page Communication
 
-For detecting when the user is on the NewGrad Radar web app:
+For detecting when the user is on the HireRadar web app:
 
 ```typescript
 // extension/src/content/web-app-detector.ts

@@ -75,7 +75,7 @@ extension/
 ```json
 {
   "manifest_version": 3,
-  "name": "NewGrad Radar Auto-Fill",
+  "name": "HireRadar Auto-Fill",
   "version": "1.0.0",
   "description": "Auto-fill job application forms with your profile data",
   
@@ -116,7 +116,7 @@ extension/
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "NewGrad Radar Auto-Fill"
+    "default_title": "HireRadar Auto-Fill"
   },
   
   "content_scripts": [
@@ -697,7 +697,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   // Create context menu
   chrome.contextMenus.create({
     id: 'fillForm',
-    title: 'Fill form with NewGrad Radar',
+    title: 'Fill form with HireRadar',
     contexts: ['page', 'editable']
   });
 });
@@ -1283,7 +1283,7 @@ export { handleIframes };
 <body>
   <div class="header">
     <img src="../icons/icon32.png" alt="Logo">
-    <h1>NewGrad Radar</h1>
+    <h1>HireRadar</h1>
   </div>
   
   <div class="button-group">
