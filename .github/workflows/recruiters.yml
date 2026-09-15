@@ -17,12 +17,15 @@ on:
       limit:
         description: "Max companies to process (kept modest to fit the 50-min job; grind covers the rest over subsequent days)"
         type: string
-        default: "200"
+        default: "120"
 
 jobs:
   enrich-recruiters:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # Recruiter sourcing is slow per company (search + GitHub pattern learning +
+    # SMTP). Give it headroom and keep the per-run limit modest so a run finishes
+    # instead of being cancelled at the timeout (the grind covers the rest daily).
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -54,7 +57,7 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           cd scraper
-          LIMIT="${{ inputs.limit }}"; LIMIT="${LIMIT:-200}"
+          LIMIT="${{ inputs.limit }}"; LIMIT="${LIMIT:-120}"
           # 0) Keep the companies table in sync with companies.py (so newly
           #    imported companies are covered by recruiter enrichment).
           python sync_companies.py || echo "::warning::company sync failed"
