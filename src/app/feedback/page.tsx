@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -67,21 +66,18 @@ function FeedbackContent() {
   const [priority, setPriority] = useState<Priority>('medium');
   const [screenshotUrl, setScreenshotUrl] = useState('');
 
-  const supabase = createClient();
-
   const fetchReports = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('feedback_reports')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching reports:', error);
-    } else {
-      setReports(data || []);
+    // Go through the API (not a direct client query) so admins get ALL reports
+    // via the service-role read — a direct query is RLS-restricted to own rows.
+    try {
+      const res = await fetch('/api/feedback');
+      const data = await res.json();
+      setReports(res.ok ? (data.reports || []) : []);
+    } catch (e) {
+      console.error('Error fetching reports:', e);
     }
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchReports();
