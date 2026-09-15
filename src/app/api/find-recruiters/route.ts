@@ -152,6 +152,12 @@ export async function POST(request: NextRequest) {
 }
 
 async function findRecruitersWithAI(companyName: string): Promise<RecruiterInfo[]> {
+  // DISABLED: LLMs hallucinate recruiter names + fake LinkedIn URLs. Real
+  // recruiters are now sourced by the Python pipeline (recruiters/enrich.py:
+  // LinkedIn X-Ray via Serper -> learned-pattern emails) and written to the
+  // recruiters table, which the app reads directly. Never fabricate people.
+  return [];
+  // eslint-disable-next-line no-unreachable
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) return [];
 
