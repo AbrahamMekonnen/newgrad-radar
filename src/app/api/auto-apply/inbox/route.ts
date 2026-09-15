@@ -1,0 +1,63 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
+
+// The auto-apply "Ready to Submit" inbox: the user's prepared applications.
+// Reads/writes with the service role (the queue is machine-owned) but always
+// scoped to the authenticated user's own rows.
+function admin() {
+  return createClient(
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'),
+    process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+  );
+}
+
+async function requireUser() {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+export async function GET() {
+  const user = await requireUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data } = await admin()
+    .from('autoapply_job_queue')
+    .select('id, job_id, job_title, company_name, company_slug, job_url, ats_type, status, ready_pct, needs_user, prepared_data, prepared_at')
+    .eq('user_id', user.id)
+    .eq('status', 'prepared')
+    .order('ready_pct', { ascending: false })
+    .limit(200);
+
+  return NextResponse.json({ applications: data || [] });
+}
+
+// PATCH: update status ('applied' | 'skipped') and/or save edited fields.
+export async function PATCH(request: NextRequest) {
+  const user = await requireUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { id, status, prepared_data } = await request.json();
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  const patch: Record<string, unknown> = {};
+  if (status && ['applied', 'skipped', 'prepared'].includes(status)) patch.status = status;
+  if (Array.isArray(prepared_data)) patch.prepared_data = prepared_data;
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: 'nothing to update' }, { status: 400 });
+  }
+
+  // Scope the update to this user's own row.
+  const { error } = await admin()
+    .from('autoapply_job_queue')
+    .update(patch)
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('inbox PATCH error:', error);
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
+}

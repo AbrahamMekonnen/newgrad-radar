@@ -18,6 +18,7 @@ const navLinks = [
   { href: '/interview-prep', label: 'Interview Prep', protected: true },
   { href: '/recruiters', label: 'Recruiters', protected: true },
   { href: '/my-list', label: 'Watchlist', protected: true },
+  { href: '/auto-apply', label: 'Auto-Apply', protected: true },
   { href: '/applications', label: 'Applications', protected: true },
   { href: '/analytics', label: 'Analytics', protected: true },
   { href: '/settings', label: 'Settings', protected: true },
