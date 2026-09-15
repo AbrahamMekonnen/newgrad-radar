@@ -112,7 +112,7 @@ _CAT = [
     ("linkedin",   r"\blinkedin\b"),
     ("github",     r"\bgithub\b"),
     ("portfolio",  r"\bportfolio|website|personal site\b"),
-    ("location",   r"\blocation|city|current location\b"),
+    ("location",   r"\b(location|city|current location|address|zip|postal)\b"),
     ("work_auth",  r"\b(authoriz|eligible to work|legally.*work|work permit)\b"),
     ("sponsorship", r"\b(sponsor|visa)\b"),
     ("relocate",   r"\brelocat\b"),
@@ -194,8 +194,8 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
         v = _authorized_option(values, p.work_authorized) if values else ("Yes" if p.work_authorized else "No")
         return (v, "matched") if v else (None, "user_needed")
     if cat == "sponsorship" and p.require_sponsorship is not None:
-        # "require sponsorship?" — authorized flips the polarity of _authorized_option
-        v = _authorized_option(values, not p.require_sponsorship) if values else ("Yes" if p.require_sponsorship else "No")
+        # "will you require sponsorship?" -> Yes iff they require it.
+        v = _yesno(values, p.require_sponsorship) if values else ("Yes" if p.require_sponsorship else "No")
         return (v, "matched") if v else (None, "user_needed")
     if cat == "relocate" and p.willing_to_relocate is not None:
         return (_yesno(values, p.willing_to_relocate) if values else ("Yes" if p.willing_to_relocate else "No"), "matched")

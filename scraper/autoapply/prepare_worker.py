@@ -112,9 +112,19 @@ def process_queue(limit: int, workers: int = 8) -> int:
     from concurrent.futures import ThreadPoolExecutor, as_completed
     client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
-    rows = (client.table("autoapply_job_queue").select("*")
-            .eq("status", "pending").order("priority").limit(limit).execute().data) or []
-    logger.info(f"{len(rows)} pending applications to prepare ({workers} in parallel)")
+    # Atomically CLAIM a batch (status pending -> processing) so many workers can
+    # run in parallel across users without ever double-processing the same job.
+    # Falls back to a plain select if the claim RPC isn't installed yet.
+    try:
+        client.rpc("requeue_stale_autoapply", {"p_minutes": 30}).execute()  # reap crashed workers
+        rows = client.rpc("claim_autoapply_jobs", {"p_limit": limit}).execute().data or []
+        claimed = True
+    except Exception:
+        rows = (client.table("autoapply_job_queue").select("*")
+                .eq("status", "pending").order("priority").limit(limit).execute().data) or []
+        claimed = False
+    logger.info(f"{len(rows)} applications to prepare ({workers} in parallel, "
+                f"{'claimed' if claimed else 'unclaimed — run migration 041 for multi-worker'})")
 
     # Build each user's profile once, up front (thread-safe: no shared mutation).
     prof_cache = {uid: build_profile(client, uid) for uid in {r["user_id"] for r in rows}}
