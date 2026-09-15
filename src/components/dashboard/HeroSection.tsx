@@ -22,6 +22,39 @@ function getTimeOfDayGreeting(): string {
   return 'Good evening';
 }
 
+// A pool of fun, encouraging one-liners for the subtitle. Rotated by time bucket
+// (see getFunLine) so it changes every few hours with zero runtime AI cost.
+// Refreshable later via a scheduled job if we want new lines over time.
+const FUN_LINES = [
+  "Your dream job is out there refreshing its careers page.",
+  "Somewhere, a hiring manager is about to make your day.",
+  "Plot twist: today's the day you apply to the right one.",
+  "Great careers are built one 'apply' button at a time.",
+  "The best time to apply was yesterday. The second best is now.",
+  "New roles drop daily — fortune favors the refresh.",
+  "One good application beats ten perfect ones you never send.",
+  "Your future coworkers are already rooting for you.",
+  "You miss 100% of the jobs you don't apply to.",
+  "Today's rejection is tomorrow's 'their loss'.",
+  "Momentum beats motivation. Apply to one more.",
+  "Ship the application. Perfect it never.",
+  "Every 'no' is quietly routing you toward the 'yes'.",
+  "Somewhere a job description was written just for you.",
+  "Your next chapter is one application away.",
+  "Big things start with a single click of 'Submit'.",
+  "Interviews are just conversations (sometimes with snacks).",
+  "Keep going — offers find the persistent.",
+  "The right role is closer than your last tab refresh.",
+  "Confidence is a resume line you write yourself.",
+];
+
+// Deterministic per ~3-hour window so it rotates a few times a day and stays
+// stable within a window (no flicker between renders).
+function getFunLine(): string {
+  const bucket = Math.floor(Date.now() / (3 * 60 * 60 * 1000));
+  return FUN_LINES[bucket % FUN_LINES.length];
+}
+
 function formatInterviewDay(date: Date): string {
   const today = new Date();
   const tomorrow = new Date(today);
@@ -59,27 +92,15 @@ function getStatusMessage(
     };
   }
 
-  // New user - no applications yet
+  // No urgent interview — show a rotating fun line (changes every few hours).
+  // Keep the state 'type' for styling/icon, but the copy is the fun one.
   if (applicationCount === 0) {
-    return {
-      message: "Let's track your first application",
-      type: 'new',
-    };
+    return { message: getFunLine(), type: 'new' };
   }
-
-  // Dry spell - no activity in a while (streak broken)
   if (streakDays === 0) {
-    return {
-      message: 'Ready to get back in the game?',
-      type: 'dryspell',
-    };
+    return { message: getFunLine(), type: 'dryspell' };
   }
-
-  // Active user with healthy pipeline
-  return {
-    message: 'Your pipeline is healthy',
-    type: 'active',
-  };
+  return { message: getFunLine(), type: 'active' };
 }
 
 export function HeroSection({
