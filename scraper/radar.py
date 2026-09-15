@@ -1219,6 +1219,50 @@ def run_recruiter_enrichment(
     return enriched
 
 
+def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, int, list[dict]]:
+    """Normalize -> filter -> dedup -> classify -> upsert ONE batch of raw jobs.
+
+    Saving per source-group (rather than all-at-end) means a timeout or crash
+    mid-run keeps everything already fetched — no total loss. Upserts are
+    idempotent (keyed by job id), so cross-group duplicates are harmless.
+
+    Returns (new_count, updated_count, classified_jobs).
+    """
+    normalized = []
+    for job in raw_jobs:
+        if not job.get("title") or not job.get("url"):
+            continue
+        if is_generic_careers_url(job.get("url", "")):
+            continue
+        company_slug = normalize_company(job.get("company", ""))
+        if company_slug and company_slug in COMPANIES:
+            normalized.append(normalize_job(job, company_slug))
+
+    # dedup by id within this batch (merge sources)
+    seen: dict = {}
+    for job in normalized:
+        jid = job["id"]
+        if jid not in seen:
+            seen[jid] = job
+        else:
+            es = seen[jid].get("source", "")
+            ns = job.get("source", "")
+            if ns and ns not in es:
+                seen[jid]["source"] = f"{es},{ns}"
+    deduped = list(seen.values())
+    if not deduped:
+        return 0, 0, []
+
+    classified = classify_jobs(deduped)
+    if getattr(args, "add_h1b_flags", False):
+        classified = add_sponsorship_flags(classified)
+    if getattr(args, "enrich_recruiters", False):
+        classified = run_recruiter_enrichment(classified, args.recruiter_data, dry_run)
+
+    new_count, updated_count = upsert_jobs(classified, dry_run)
+    return new_count, updated_count, classified
+
+
 def main():
     parser = argparse.ArgumentParser(description="NewGrad Radar Job Scraper")
     parser.add_argument(
@@ -1359,77 +1403,54 @@ def main():
         print("\nDone!")
         return 0
 
-    # 1. Fetch from all sources
-    all_jobs = fetch_all_jobs(
-        dry_run=dry_run,
-        include_api=not args.skip_api,
-        include_ats=not args.skip_ats,
-        include_aggregators=not args.skip_aggregators,
-        include_career_fairs=not args.skip_career_fairs,
-        include_hot_hiring=args.include_hot_hiring,
-    )
-    print(f"\nTotal jobs after cross-source dedup: {len(all_jobs)}")
+    # 1-5. Fetch each source GROUP and immediately process + save it, so a
+    # timeout/crash mid-run never loses everything already fetched. mark_inactive
+    # and cleanup run once at the end over the union of everything seen.
+    new_count = 0
+    updated_count = 0
+    classified: list[dict] = []
+    active_ids: set = set()
+    groups_ok = True  # False if any enabled group failed -> skip mark_inactive
 
-    # 2. Normalize and filter to target companies
-    normalized = []
-    for job in all_jobs:
-        # Skip malformed jobs missing required fields (some sources return
-        # partial records without a title/url).
-        if not job.get("title") or not job.get("url"):
-            continue
-        # Skip synthetic entries whose link is a generic careers homepage
-        # rather than a specific job posting (bad "Apply" links).
-        if is_generic_careers_url(job.get("url", "")):
-            continue
-        company_slug = normalize_company(job.get("company", ""))
-        if company_slug and company_slug in COMPANIES:
-            normalized.append(normalize_job(job, company_slug))
+    def _process_group(label: str, jobs: list[dict]) -> None:
+        nonlocal new_count, updated_count, groups_ok
+        if not jobs:
+            return
+        print(f"\n--- Processing {label}: {len(jobs)} raw jobs ---")
+        try:
+            n, u, saved = process_and_save(jobs, args, dry_run)
+        except Exception as e:
+            print(f"  ERROR processing {label}: {e} (other groups already saved)")
+            groups_ok = False
+            return
+        new_count += n
+        updated_count += u
+        classified.extend(saved)
+        active_ids.update(j["id"] for j in saved)
+        print(f"  {label}: saved {n} new, {u} updated (running total: {new_count} new)")
 
-    print(f"After filtering to target companies: {len(normalized)}")
+    if not args.skip_ats:
+        _process_group("ATS sources", fetch_ats_sources())
+    if not args.skip_api:
+        _process_group("API sources", fetch_api_sources())
+    if not args.skip_aggregators:
+        _process_group("aggregator sources", fetch_aggregator_sources())
+    if not args.skip_career_fairs:
+        _process_group("career-fair sources", fetch_career_fair_sources())
+    if args.include_hot_hiring:
+        _process_group("hot-hiring sources", fetch_hot_hiring_sources())
 
-    # 3. Dedupe by job ID (same job from multiple sources after normalization)
-    seen = {}
-    for job in normalized:
-        job_id = job["id"]
-        if job_id not in seen:
-            seen[job_id] = job
-        else:
-            # Merge sources if same job found via multiple paths
-            existing_source = seen[job_id].get("source", "")
-            new_source = job.get("source", "")
-            if new_source and new_source not in existing_source:
-                seen[job_id]["source"] = f"{existing_source},{new_source}"
+    print(f"\nTotal saved: {new_count} new, {updated_count} updated across all groups")
 
-    deduped = list(seen.values())
-    print(f"After ID dedup: {len(deduped)}")
-
-    # 4. Classify with AI (or heuristics)
-    print("\nClassifying jobs...")
-    classified = classify_jobs(deduped)
-    print(f"After classification: {len(classified)} new grad positions")
-
-    # 4.5. Optionally add H1B sponsorship flags
-    if args.add_h1b_flags:
-        print("\nAdding H1B sponsorship flags...")
-        classified = add_sponsorship_flags(classified)
-        sponsors = sum(1 for j in classified if j.get("h1b_sponsor"))
-        print(f"  Jobs with H1B sponsors: {sponsors}/{len(classified)}")
-
-    # 4.6. Optionally enrich with recruiter emails
-    if args.enrich_recruiters:
-        print("\nEnriching with recruiter emails...")
-        classified = run_recruiter_enrichment(classified, args.recruiter_data, dry_run)
-
-    # 5. Upsert to Supabase
-    print("\nUpserting to database...")
-    new_count, updated_count = upsert_jobs(classified, dry_run)
-    print(f"New jobs: {new_count}, Updated: {updated_count}")
-
-    # Mark inactive jobs
-    active_ids = {j["id"] for j in classified}
-    inactive_count = mark_inactive(active_ids, dry_run)
-    if inactive_count > 0:
-        print(f"Marked {inactive_count} jobs as inactive")
+    # Mark inactive jobs (union of everything seen this run). ONLY when every
+    # enabled group succeeded — otherwise active_ids is incomplete and we'd
+    # wrongly deactivate valid jobs from a group that failed to run.
+    if groups_ok and active_ids:
+        inactive_count = mark_inactive(active_ids, dry_run)
+        if inactive_count > 0:
+            print(f"Marked {inactive_count} jobs as inactive")
+    else:
+        print("Skipping mark-inactive (a source group failed; avoiding false deactivations)")
 
     # 5.5. Cleanup: enforce max job limit and remove old jobs
     print("\nRunning job cleanup...")
