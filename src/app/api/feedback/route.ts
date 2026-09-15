@@ -7,8 +7,10 @@ import { createClient } from '@/lib/supabase/server';
 async function notifyDeveloper(fb: {
   type: string;
   title: string;
+  description: string;
   priority: string;
   email?: string;
+  clickUrl?: string;
 }): Promise<void> {
   const topic = process.env.DEV_NTFY_TOPIC;
   if (!topic) return;
@@ -16,14 +18,19 @@ async function notifyDeveloper(fb: {
     const priorityMap: Record<string, string> = {
       critical: 'urgent', high: 'high', medium: 'default', low: 'low',
     };
+    const headers: Record<string, string> = {
+      Title: `New ${fb.type}: ${fb.title}`.slice(0, 200),
+      Priority: priorityMap[fb.priority] || 'default',
+      Tags: fb.type === 'bug' ? 'beetle' : fb.type === 'feature' ? 'bulb' : 'speech_balloon',
+    };
+    // Tapping the notification opens the app's feedback page.
+    if (fb.clickUrl) headers.Click = fb.clickUrl;
+    // Include the actual content so it's readable in the notification itself.
+    const desc = fb.description.length > 400 ? fb.description.slice(0, 400) + '…' : fb.description;
     await fetch(`https://ntfy.sh/${topic}`, {
       method: 'POST',
-      headers: {
-        Title: `New ${fb.type}: ${fb.title}`.slice(0, 200),
-        Priority: priorityMap[fb.priority] || 'default',
-        Tags: fb.type === 'bug' ? 'beetle' : fb.type === 'feature' ? 'bulb' : 'speech_balloon',
-      },
-      body: `${fb.title}\nFrom: ${fb.email || 'unknown'} · priority: ${fb.priority}`,
+      headers,
+      body: `${desc}\n\nFrom: ${fb.email || 'unknown'} · priority: ${fb.priority}`,
       signal: AbortSignal.timeout(5000),
     });
   } catch (e) {
@@ -111,7 +118,10 @@ export async function POST(request: NextRequest) {
     // Notify the developer via ntfy so new feedback can be reviewed right away.
     // Private, dev-only: set DEV_NTFY_TOPIC to a long random topic and subscribe
     // to it in your ntfy app. Fire-and-forget — never affects the response.
-    await notifyDeveloper({ type, title, priority: priority || 'medium', email: user.email });
+    await notifyDeveloper({
+      type, title, description, priority: priority || 'medium', email: user.email,
+      clickUrl: `${new URL(request.url).origin}/feedback`,
+    });
 
     return NextResponse.json({ success: true, report: data[0] });
   } catch (error) {
