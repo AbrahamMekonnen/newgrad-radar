@@ -118,8 +118,10 @@ def _ddg(query: str, num: int) -> List[Dict]:
         return []
 
 
-# Ordered by cost/quality: paid-ish keys first (best results), free no-key last.
-_PROVIDERS: List[Callable[[str, int], List[Dict]]] = [_google, _serper, _brave, _ddg]
+# Order: working keyed providers first. Google CSE is LAST because Google
+# closed the Custom Search JSON API to new projects (permanent 403 for new
+# keys) — kept only for anyone with legacy access; it fast-fails to [] otherwise.
+_PROVIDERS: List[Callable[[str, int], List[Dict]]] = [_serper, _brave, _google, _ddg]
 
 
 def available_providers() -> List[str]:
