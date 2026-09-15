@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -18,9 +18,27 @@ export function AuthForm({ mode }: AuthFormProps) {
   const redirectTo = searchParams.get('redirect') || '/';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
+
+  // If the user is already signed in (e.g. they just completed Google OAuth and
+  // landed back here), send them on instead of leaving them on the auth page.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        router.replace(redirectTo);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        router.replace(redirectTo);
+        router.refresh();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase, router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +53,11 @@ export function AuthForm({ mode }: AuthFormProps) {
         });
         if (error) throw error;
       } else {
+        if (password !== confirmPassword) {
+          setError('Passwords do not match.');
+          setLoading(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -113,6 +136,20 @@ export function AuthForm({ mode }: AuthFormProps) {
           minLength={mode === 'signup' ? 6 : undefined}
           required
         />
+
+        {mode === 'signup' && (
+          <Input
+            id="confirm-password"
+            type="password"
+            label="Confirm password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password"
+            minLength={6}
+            required
+            error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+          />
+        )}
 
         {error && (
           <div className={`p-3 rounded-lg text-sm ${error.includes('Check your email') ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
