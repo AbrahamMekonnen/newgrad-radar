@@ -1111,7 +1111,7 @@ export default function HomePage() {
           )}
         </div>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Browse new grad positions at top tech companies
+          Browse tech roles at every level, from interns to senior
         </p>
       </HeroAnimated>
 

@@ -1,5 +1,5 @@
 /**
- * Salary Data Sources for NewGrad Radar
+ * Salary Data Sources for HireRadar
  *
  * Research and implementation guide for integrating salary data into job listings.
  * Focus: FREE and publicly available data sources.

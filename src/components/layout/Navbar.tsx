@@ -81,7 +81,7 @@ export function Navbar() {
               </button>
 
               <Link href="/" className="flex items-center gap-2 ml-2 lg:ml-0">
-                <span className="text-xl font-bold text-gray-900 dark:text-white">NewGrad Radar</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">HireRadar</span>
               </Link>
 
               {/* Desktop navigation */}

@@ -3,15 +3,15 @@ import { Metadata } from 'next';
 import { AuthForm } from '@/components/auth/AuthForm';
 
 export const metadata: Metadata = {
-  title: "Sign Up - NewGrad Radar",
-  description: "Create a free NewGrad Radar account to track new grad software engineering jobs at top tech companies",
+  title: "Sign Up - HireRadar",
+  description: "Create a free HireRadar account to track software engineering jobs at top tech companies",
   openGraph: {
-    title: "Sign Up - NewGrad Radar",
-    description: "Create a free NewGrad Radar account to track new grad software engineering jobs at top tech companies",
+    title: "Sign Up - HireRadar",
+    description: "Create a free HireRadar account to track software engineering jobs at top tech companies",
   },
   twitter: {
-    title: "Sign Up - NewGrad Radar",
-    description: "Create a free NewGrad Radar account to track new grad software engineering jobs at top tech companies",
+    title: "Sign Up - HireRadar",
+    description: "Create a free HireRadar account to track software engineering jobs at top tech companies",
   },
 };
 

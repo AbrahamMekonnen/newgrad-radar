@@ -91,7 +91,7 @@ export function GuestHero({ totalJobCount, className }: GuestHeroProps) {
             mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
           )}
         >
-          Find Your First Tech Job
+          Find Your Next Tech Job
         </h1>
 
         {/* Subtitle */}
@@ -101,7 +101,7 @@ export function GuestHero({ totalJobCount, className }: GuestHeroProps) {
             mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
           )}
         >
-          Curated new grad positions from top tech companies, all in one place.
+          Tech roles at every level — intern to senior — all in one place.
         </p>
 
         {/* Trust signals row */}

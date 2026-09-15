@@ -20,20 +20,20 @@ const geistMono = Geist_Mono({
 const baseUrl = 'https://newgrad-radar.vercel.app';
 
 export const metadata: Metadata = {
-  title: "NewGrad Radar - New Grad Tech Jobs",
-  description: "Track new grad software engineering jobs at top tech companies",
+  title: "HireRadar - Tech Jobs at Every Level",
+  description: "Track software engineering jobs at top tech companies",
   metadataBase: new URL(baseUrl),
   openGraph: {
-    title: "NewGrad Radar - New Grad Tech Jobs",
-    description: "Track new grad software engineering jobs at top tech companies",
+    title: "HireRadar - Tech Jobs at Every Level",
+    description: "Track software engineering jobs at top tech companies",
     type: "website",
     url: baseUrl,
-    siteName: "NewGrad Radar",
+    siteName: "HireRadar",
   },
   twitter: {
     card: "summary_large_image",
-    title: "NewGrad Radar - New Grad Tech Jobs",
-    description: "Track new grad software engineering jobs at top tech companies",
+    title: "HireRadar - Tech Jobs at Every Level",
+    description: "Track software engineering jobs at top tech companies",
   },
 };
 
