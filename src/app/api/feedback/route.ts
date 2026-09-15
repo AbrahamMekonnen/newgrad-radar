@@ -147,12 +147,28 @@ export async function GET() {
       );
     }
 
-    // Fetch user's feedback reports
-    const { data, error } = await supabase
-      .from('feedback_reports')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // Admins (emails listed in ADMIN_EMAILS) see ALL feedback so it can be
+    // reviewed in-app — the ntfy push is only a heads-up, not the record.
+    // Everyone else sees just their own submissions.
+    const admins = (process.env.ADMIN_EMAILS || '')
+      .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const isAdmin = !!user.email && admins.includes(user.email.toLowerCase());
+
+    // Admins read ALL rows — use a service-role client so RLS (own-rows-only)
+    // doesn't restrict them. Everyone else uses the RLS-bound session client.
+    let query;
+    if (isAdmin && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { createClient: createServiceClient } = await import('@supabase/supabase-js');
+      const admin = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      query = admin.from('feedback_reports').select('*').order('created_at', { ascending: false });
+    } else {
+      query = supabase.from('feedback_reports').select('*')
+        .eq('user_id', user.id).order('created_at', { ascending: false });
+    }
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching feedback reports:', error);
