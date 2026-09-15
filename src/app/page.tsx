@@ -252,7 +252,9 @@ export default function HomePage() {
     let query = supabase
       .from('jobs')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      // Hide listings the enricher flagged as non-jobs (conferences/events/ads).
+      .neq('is_job', false);
 
     // Apply sort order based on sortBy
     if (sortBy === 'salary') {

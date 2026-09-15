@@ -232,7 +232,8 @@ export function useJobFilterCounts(
       const { data, error: fetchError } = await supabase
         .from('jobs')
         .select('tier, role_types, sponsorship_status')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .neq('is_job', false); // exclude enricher-flagged non-jobs
 
       if (fetchError) {
         throw new Error(fetchError.message);
