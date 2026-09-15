@@ -64,41 +64,56 @@ def _get_model():
     return _genai
 
 
-_GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+# OpenAI-compatible free providers, tried in order after Gemini. Each is used
+# only if its API key is set, so you can add as many free tiers as you want and
+# the chain rides through whichever still has quota. All are OpenAI-compatible
+# /chat/completions endpoints — adding one is just a row here + a repo secret.
+# (Using several providers' free tiers is fine; this is NOT multi-accounting one
+# provider.) Order = preference: fast/generous first.
+_OAI_PROVIDERS = [
+    # (name, env_key, base_url, default_model, model_env)
+    ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1",
+     "openai/gpt-oss-20b", "GROQ_MODEL"),
+    ("cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1",
+     "llama-3.3-70b", "CEREBRAS_MODEL"),
+    ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1",
+     "meta-llama/llama-3.3-70b-instruct:free", "OPENROUTER_MODEL"),
+    ("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1",
+     "mistral-small-latest", "MISTRAL_MODEL"),
+    ("together", "TOGETHER_API_KEY", "https://api.together.xyz/v1",
+     "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free", "TOGETHER_MODEL"),
+    ("github", "GITHUB_MODELS_TOKEN", "https://models.github.ai/inference",
+     "openai/gpt-4o-mini", "GITHUB_MODELS_MODEL"),
+]
 
 
-def _groq_generate(prompt: str) -> Optional[str]:
-    """Call Groq's OpenAI-compatible endpoint (via requests — no extra dep)."""
-    key = os.environ.get("GROQ_API_KEY")
-    if not key:
-        return None
+def _openai_compat_generate(base_url: str, model: str, key: str, prompt: str) -> Optional[str]:
+    """Call any OpenAI-compatible /chat/completions endpoint. Returns text or
+    None (None = unavailable/rate-limited, so the caller tries the next one)."""
     try:
         import requests
         r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            base_url.rstrip("/") + "/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json={
-                "model": _GROQ_MODEL,
+                "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
-                "response_format": {"type": "json_object"},
             },
             timeout=60,
         )
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
-        logger.debug(f"Groq {r.status_code}: {r.text[:200]}")
+        logger.debug(f"provider {base_url} -> {r.status_code}: {r.text[:150]}")
     except Exception as e:
-        logger.debug(f"Groq call failed: {e}")
+        logger.debug(f"provider {base_url} failed: {e}")
     return None
 
 
 def _generate(prompt: str) -> Optional[str]:
-    """Provider-agnostic text generation: Gemini first, Groq as fallback.
-
-    Falls back to Groq whenever Gemini is unavailable, errors, hits quota, or
-    returns nothing — so enrichment keeps working when one provider is down.
-    """
+    """Provider-agnostic generation: Gemini first, then each configured
+    OpenAI-compatible free provider in order, until one returns text. Keeps
+    working as long as ANY provider still has quota."""
     model = _get_model()
     if model is not None:
         try:
@@ -107,12 +122,36 @@ def _generate(prompt: str) -> Optional[str]:
             if text.strip():
                 return text
         except Exception as e:
-            logger.debug(f"Gemini generate failed, trying Groq: {e}")
-    return _groq_generate(prompt)
+            logger.debug(f"Gemini generate failed, trying next provider: {e}")
+    for name, env_key, base_url, default_model, model_env in _OAI_PROVIDERS:
+        key = os.environ.get(env_key)
+        if not key:
+            continue
+        text = _openai_compat_generate(base_url, os.environ.get(model_env, default_model), key, prompt)
+        if text and text.strip():
+            return text
+    return None
+
+
+def available_llm_providers() -> list:
+    """Names of providers that have a key configured (for logging)."""
+    out = []
+    if _get_model() is not None:
+        out.append("gemini")
+    out += [name for name, env_key, *_ in _OAI_PROVIDERS if os.environ.get(env_key)]
+    return out
+
+
+def _groq_generate(prompt: str) -> Optional[str]:  # back-compat shim
+    key = os.environ.get("GROQ_API_KEY")
+    if not key:
+        return None
+    return _openai_compat_generate("https://api.groq.com/openai/v1",
+                                   os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"), key, prompt)
 
 
 def llm_available() -> bool:
-    return _get_model() is not None or bool(os.environ.get("GROQ_API_KEY"))
+    return _get_model() is not None or any(os.environ.get(k) for _, k, *_ in _OAI_PROVIDERS)
 
 
 _JSON_RE = re.compile(r"\{.*\}|\[.*\]", re.DOTALL)
