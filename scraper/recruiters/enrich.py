@@ -48,10 +48,37 @@ def _domain_for(company: dict) -> Optional[str]:
     return f"{slug}.com" if slug else None
 
 
-def enrich_company(client, company: dict) -> int:
+def _has_fresh_recruiters(client, slug: str, max_age_days: int = 45) -> bool:
+    """Reuse check: do we already have recent company-level recruiters?"""
+    import datetime as _dt
+    try:
+        rows = (client.table("recruiters").select("id,created_at")
+                .eq("company_slug", slug).is_("job_id", "null")
+                .order("created_at", desc=True).limit(1).execute().data)
+    except Exception:
+        return False
+    if not rows:
+        return False
+    created = rows[0].get("created_at")
+    if not created:
+        return True  # have some; treat as fresh
+    try:
+        dt = _dt.datetime.fromisoformat(created.replace("Z", "+00:00"))
+        age = (_dt.datetime.now(_dt.timezone.utc) - dt).days
+        return age <= max_age_days
+    except Exception:
+        return True
+
+
+def enrich_company(client, company: dict, refresh: bool = False) -> int:
     from xray_finder import find_recruiters
     slug = company["slug"]
     name = company.get("name") or slug
+    # Reuse: don't burn a search if we already have fresh recruiters for this
+    # company — the frontend serves them for every job at that company.
+    if not refresh and _has_fresh_recruiters(client, slug):
+        logger.info(f"{slug}: reusing existing recruiters (skipped search)")
+        return 0
     domain = _domain_for(company)
     recs = find_recruiters(name, domain=domain, role_focus="new_grad",
                            max_results=6, verify_emails=bool(domain))
@@ -90,6 +117,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--company", help="single company slug")
     ap.add_argument("--limit", type=int, default=25, help="max companies (by active jobs)")
+    ap.add_argument("--refresh", action="store_true",
+                    help="re-research even companies that already have fresh recruiters")
     args = ap.parse_args()
 
     from supabase import create_client
@@ -109,7 +138,7 @@ def main() -> None:
     total = 0
     for c in companies:
         try:
-            n = enrich_company(client, c)
+            n = enrich_company(client, c, refresh=args.refresh)
             total += n
             logger.info(f"{c['slug']}: +{n} recruiters")
         except Exception as e:
