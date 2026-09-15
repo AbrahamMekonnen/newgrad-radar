@@ -187,6 +187,8 @@ export interface Recruiter {
   email: string | null;
   email_verified: boolean;
   email_variants: EmailVariant[] | null;
+  phone: string | null;
+  role_focus: string | null;
   linkedin_url: string | null;
   linkedin_verified: boolean;
   source: RecruiterSource;
@@ -685,6 +687,36 @@ export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   staff: 'Staff',
   principal: 'Principal',
 };
+
+// Which recruiter focus owns a given job level. Early-career levels are handled
+// by university/campus recruiters (focus 'new_grad'); mid+ levels by
+// technical/senior recruiters (focus 'experienced'). 'generic' recruiters fit
+// any level.
+export function focusForLevel(level: ExperienceLevel | null | undefined): 'new_grad' | 'experienced' {
+  if (level && ['mid', 'senior', 'staff', 'principal'].includes(level)) {
+    return 'experienced';
+  }
+  return 'new_grad'; // new_grad / entry_level / junior / unknown
+}
+
+// Pick the recruiters that actually align with a job instead of dumping every
+// recruiter a company has onto every card. Matches the job's level to each
+// recruiter's focus, always keeping 'generic' recruiters, and falls back to the
+// full list only if nothing matches (so a card is never empty when we have data).
+export function recruitersForJob(recruiters: Recruiter[], job: Job): Recruiter[] {
+  if (!recruiters || recruiters.length === 0) return [];
+  const wanted = focusForLevel(job.experience_level);
+  const matched = recruiters.filter((r) => {
+    const f = r.role_focus;
+    return !f || f === 'generic' || f === wanted; // null = legacy, treat as generic
+  });
+  const list = matched.length > 0 ? matched : recruiters;
+  // Rank: exact-focus first, then generic/legacy — so the most relevant show up top.
+  return [...list].sort((a, b) => {
+    const score = (r: Recruiter) => (r.role_focus === wanted ? 0 : 1);
+    return score(a) - score(b);
+  });
+}
 
 // =============================================================================
 // SMART FILTER TYPES

@@ -18,6 +18,7 @@ export interface RecruiterFormData {
   name: string;
   title: string;
   email: string;
+  phone: string;
   linkedin_url: string;
   job_id: string;
   company_slug: string;
@@ -35,6 +36,7 @@ export function AddRecruiterModal({
     name: '',
     title: '',
     email: '',
+    phone: '',
     linkedin_url: '',
     job_id: jobId,
     company_slug: companySlug,
@@ -57,9 +59,9 @@ export function AddRecruiterModal({
       newErrors.linkedin_url = 'Invalid LinkedIn URL';
     }
 
-    if (!formData.email && !formData.linkedin_url) {
-      newErrors.email = 'Provide either email or LinkedIn URL';
-      newErrors.linkedin_url = 'Provide either email or LinkedIn URL';
+    if (!formData.email && !formData.linkedin_url && !formData.phone.trim()) {
+      newErrors.email = 'Provide an email, phone, or LinkedIn URL';
+      newErrors.linkedin_url = 'Provide an email, phone, or LinkedIn URL';
     }
 
     setErrors(newErrors);
@@ -97,6 +99,7 @@ export function AddRecruiterModal({
       name: '',
       title: '',
       email: '',
+      phone: '',
       linkedin_url: '',
       job_id: jobId,
       company_slug: companySlug,
@@ -152,6 +155,16 @@ export function AddRecruiterModal({
         />
 
         <Input
+          id="recruiter-phone"
+          type="tel"
+          label="Phone"
+          placeholder="+1 (555) 123-4567"
+          value={formData.phone}
+          onChange={handleChange('phone')}
+          error={errors.phone}
+        />
+
+        <Input
           id="recruiter-linkedin"
           label="LinkedIn URL"
           placeholder="https://linkedin.com/in/janesmith"
@@ -163,7 +176,8 @@ export function AddRecruiterModal({
         <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
           <p className="text-sm text-yellow-800 dark:text-yellow-300">
             <strong>Note:</strong> Only submit public, professional contact info.
-            The community will verify submissions.
+            You can paste a personal email or phone here (e.g. from a ContactOut
+            lookup) — the community will verify submissions.
           </p>
         </div>
 

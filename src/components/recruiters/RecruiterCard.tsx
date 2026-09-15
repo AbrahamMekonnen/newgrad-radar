@@ -123,6 +123,18 @@ export function RecruiterCard({ recruiter, onVote, compact = false }: RecruiterC
                 />
               </a>
             )}
+
+            {recruiter.phone && (
+              <a
+                href={`tel:${recruiter.phone}`}
+                className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span>{recruiter.phone}</span>
+              </a>
+            )}
           </div>
 
           {/* Email options */}
@@ -140,13 +152,13 @@ export function RecruiterCard({ recruiter, onVote, compact = false }: RecruiterC
                 </div>
               ) : (
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Possible emails
-                  <span className="text-yellow-600 dark:text-yellow-500 ml-1" title="Verify via LinkedIn before contacting">
-                    (verify on LinkedIn first)
+                  Likely emails
+                  <span className="text-green-600 dark:text-green-500 ml-1" title="These are the most probable address formats for this company. Send to all of them so at least one reaches the recruiter.">
+                    (at least one is active — email all to be sure)
                   </span>
                 </p>
               )}
-              {recruiter.email_variants.slice(0, 4).map((variant, idx) => (
+              {recruiter.email_variants.slice(0, 5).map((variant, idx) => (
                 <div key={variant.email} className="flex items-center gap-2">
                   <a
                     href={`mailto:${variant.email}`}

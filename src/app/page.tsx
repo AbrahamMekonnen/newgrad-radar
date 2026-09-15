@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { Job, Tier, RoleType, ApplicationLog, Recruiter, SponsorshipStatus, FundingFilter, SourceFilter, SmartFilter, ExperienceLevel, DiversityTag, WorkMode, BadgeTag, LocationFilter, LOCATION_FILTER_PATTERNS, rawSourcesForFilters } from '@/lib/types';
 import { JobList } from '@/components/jobs/JobList';
+import { RecruiterFormData } from '@/components/recruiters/AddRecruiterModal';
 import { JobFilters, MobileFilters } from '@/components/jobs/JobFilters';
 import { SmartFilters } from '@/components/jobs/SmartFilters';
 import { AlertFilters } from '@/components/alerts/SaveAlertModal';
@@ -568,6 +569,35 @@ export default function HomePage() {
       }
     } catch (error) {
       showToast('Failed to find recruiters', 'error');
+    }
+  };
+
+  const handleAddRecruiter = async (data: RecruiterFormData) => {
+    try {
+      const response = await fetch('/api/recruiters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          title: data.title,
+          email: data.email,
+          phone: data.phone,
+          linkedin_url: data.linkedin_url,
+          company_slug: data.company_slug,
+          job_id: data.job_id || null,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        showToast(result.error || 'Failed to add recruiter', 'error');
+        return;
+      }
+      showToast(result.merged ? 'Updated recruiter contact' : 'Recruiter added — thanks!', 'success');
+      const jobIds = jobs.map((j) => j.id);
+      const slugs = [...new Set(jobs.map((j) => j.company_slug))];
+      await fetchRecruiters(jobIds, slugs);
+    } catch {
+      showToast('Failed to add recruiter', 'error');
     }
   };
 
@@ -1177,6 +1207,7 @@ export default function HomePage() {
                 onCancelApplication={handleCancelApplication}
                 recruitersMap={recruitersMap}
                 onFindRecruiters={handleFindRecruiters}
+                onAddRecruiter={handleAddRecruiter}
                 isLoggedIn={isLoggedIn}
               />
 

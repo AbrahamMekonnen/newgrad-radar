@@ -36,11 +36,17 @@ _RECRUITER_TITLE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Role focus -> extra title terms to bias the X-Ray query.
+# Role focus -> extra title terms to bias the X-Ray query. Each focus finds a
+# DIFFERENT set of recruiters so we can match them to a job's level:
+#   new_grad     -> the people who own early-career / campus requisitions
+#   experienced  -> senior/technical recruiters who own mid+ requisitions
+#   generic      -> broad recruiting/TA (fallback that fits any level)
 _FOCUS_TERMS = {
     "new_grad": ['"university recruiter"', '"campus recruiter"', '"early career recruiter"',
-                 '"early talent"', '"technical recruiter"'],
+                 '"early talent"', '"early career"'],
     "intern": ['"university recruiter"', '"campus recruiter"', '"early career recruiter"'],
+    "experienced": ['"technical recruiter"', '"senior technical recruiter"',
+                    '"engineering recruiter"', '"senior recruiter"', '"experienced hiring"'],
     "generic": ['"technical recruiter"', '"recruiter"', '"talent acquisition"'],
 }
 
@@ -151,11 +157,24 @@ def find_recruiters(
 
 
 def _attach_verified_emails(recruiters: List[Dict], domain: str, github_org: Optional[str] = None) -> None:
-    """Derive each recruiter's email via the company's LEARNED pattern.
+    """Attach a RANKED LIST of candidate work emails to each recruiter.
 
-    Learns the domain's email format once (email_intel, from public GitHub
-    data), detects catch-all once, then applies to each recruiter — far more
-    accurate than brute-forcing every pattern per person.
+    Instead of picking one guess, we surface every high-probability candidate
+    (the company's LEARNED pattern first, then the common ~80%-coverage formats).
+    The user can contact all of them, so one being the person's real address is
+    near-certain even on catch-all domains we can't SMTP-verify. Each recruiter
+    gets:
+      - r["email_variants"]: ranked [{email, confidence (0-1 float), verified}]
+        — the shape the DB column + RecruiterCard already expect.
+      - r["email"]:  the top candidate (kept as the scalar primary).
+
+    Confidence scale (matches the frontend thresholds):
+      0.95 verified (real published, or SMTP-confirmed)
+      0.70 learned company pattern (from public GitHub data)
+      0.50 common default pattern (no learning available)
+
+    We learn the domain's format once (email_intel, from public GitHub data) and
+    detect catch-all once, then apply to each recruiter.
     """
     try:
         from email_intel import learn_domain_pattern, guess_email, _is_catch_all
@@ -174,35 +193,51 @@ def _attach_verified_emails(recruiters: List[Dict], domain: str, github_org: Opt
 
     org = github_org or re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
     ranked = learn_domain_pattern(domain, org)
-    candidates = [k for k, _ in ranked] or ["first.last", "firstlast", "flast"]
+    # learned patterns first, then the common defaults; dedup, cap at a sane N
+    pat_order, seen_pat = [], set()
+    for k in [k for k, _ in ranked] + ["first.last", "firstlast", "flast", "f.last", "firstl"]:
+        if k not in seen_pat:
+            seen_pat.add(k)
+            pat_order.append(k)
+    learned_conf = 0.70 if ranked else 0.50
     catch_all = _is_catch_all(domain) if verify_email else True
 
     for r in recruiters:
-        if r.get("email"):
-            continue  # already have a real (published) email from the snippet
         if len(r["name"].split()) < 2:
             continue
-        if catch_all or verify_email is None:
-            # can't SMTP-verify reliably — trust the learned pattern
-            em = guess_email(r["name"], domain, candidates[0])
-            if em:
-                r["email"] = em
-                r["email_verified"] = False
-                r["email_confidence"] = "medium" if ranked else "low"
-            continue
-        for key in candidates[:5]:
+        variants: List[Dict] = []
+        seen_em = set()
+
+        # 1) A real published email from the snippet always ranks first.
+        published = r.get("email")
+        if published:
+            variants.append({"email": published.lower(), "confidence": 0.95,
+                             "verified": True})
+            seen_em.add(published.lower())
+
+        # 2) Pattern-derived candidates (learned patterns first).
+        for key in pat_order:
             em = guess_email(r["name"], domain, key)
-            if not em:
+            if not em or em in seen_em:
                 continue
-            try:
-                if getattr(verify_email(em), "valid", False):
-                    r["email"] = em
-                    r["email_verified"] = True
-                    r["email_confidence"] = "high"
-                    break
-            except Exception:
-                continue
-            time.sleep(0.2)
-        if not r.get("email"):
-            r["email"] = guess_email(r["name"], domain, candidates[0])
-            r["email_confidence"] = "medium" if ranked else "low"
+            seen_em.add(em)
+            entry = {"email": em, "confidence": learned_conf, "verified": False}
+            # SMTP-verify only when the domain isn't catch-all (else unreliable).
+            if not catch_all and verify_email is not None:
+                try:
+                    if getattr(verify_email(em), "valid", False):
+                        entry.update(verified=True, confidence=0.95)
+                except Exception:
+                    pass
+                time.sleep(0.2)
+            variants.append(entry)
+            if len(variants) >= 5:
+                break
+
+        if not variants:
+            continue
+        # Rank: verified first, then by confidence. Primary = the top one.
+        variants.sort(key=lambda v: (v["verified"], v["confidence"]), reverse=True)
+        r["email_variants"] = variants
+        r["email"] = variants[0]["email"]
+        r["email_verified"] = variants[0]["verified"]

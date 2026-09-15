@@ -243,6 +243,18 @@ def get_ashby_companies() -> dict:
     return get_companies_by_ats("ashby")
 
 
+# Merge auto-imported companies (validated Greenhouse/Lever/Ashby boards
+# harvested from the public new-grad feed by import_companies.py). These extend
+# our universe well beyond the hand-curated list above without hardcoding each
+# one. Curated entries win on slug collisions (setdefault).
+try:
+    from companies_imported import IMPORTED_COMPANIES
+    for _slug, _info in IMPORTED_COMPANIES.items():
+        COMPANIES.setdefault(_slug, _info)
+except Exception:
+    pass
+
+
 # Build lookup tables for company name normalization
 COMPANY_NAME_TO_SLUG = {}
 COMPANY_TOKEN_TO_SLUG = {}
