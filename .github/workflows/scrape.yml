@@ -89,6 +89,12 @@ jobs:
             ARGS="$ARGS --event-scrape"
           fi
           python radar.py $ARGS
+          # AI-enrich jobs whose experience level the title classifier missed
+          # (fills level + opportunistic salary/sponsorship, flags non-jobs).
+          # Budgeted per run; the incremental grind covers the rest over days.
+          if [[ "${{ inputs.dry_run }}" != "true" ]]; then
+            python enrich_jobs.py --limit 400 || echo "::warning::job enrichment had errors"
+          fi
 
       - name: Summary
         if: always()
