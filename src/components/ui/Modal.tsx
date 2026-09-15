@@ -45,32 +45,28 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
     }
   }, [onClose]);
 
+  // Focus management + scroll lock — runs ONLY when the modal opens/closes.
+  // (Previously this shared an effect with the keydown listener, whose deps
+  // changed on every render because onClose isn't memoized — so it refocused
+  // the close button after every keystroke, letting you type only one letter.)
   useEffect(() => {
-    if (isOpen) {
-      // Store currently focused element
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      document.body.style.overflow = 'hidden';
-
-      // Focus the close button when modal opens
-      setTimeout(() => {
-        closeButtonRef.current?.focus();
-      }, 0);
-
-      // Add keyboard event listener
-      document.addEventListener('keydown', handleKeyDown);
-    } else {
-      document.body.style.overflow = 'unset';
-
-      // Restore focus to previously focused element
-      if (previousFocusRef.current) {
-        previousFocusRef.current.focus();
-      }
-    }
-
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    document.body.style.overflow = 'hidden';
+    const focusTimer = setTimeout(() => closeButtonRef.current?.focus(), 0);
     return () => {
+      clearTimeout(focusTimer);
       document.body.style.overflow = 'unset';
-      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
     };
+  }, [isOpen]);
+
+  // Keyboard handling (Esc + focus trap). Re-subscribes if the handler changes,
+  // but has NO focus side effects, so it can't steal focus while typing.
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
