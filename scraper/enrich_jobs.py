@@ -133,11 +133,16 @@ def _ashby_salary(comp) -> tuple:
     return None, None
 
 
-def _extract_batch(items: list) -> dict:
-    """items: list of (idx, title, desc). Returns {idx: fields} via LLM."""
+def _extract_batch(items: list) -> tuple:
+    """items: list of (idx, title, desc). Returns ({idx: fields}, ok).
+
+    ok=False means the LLM CALL failed (quota/rate-limit/no response) — the
+    caller must NOT mark those jobs enriched, so they retry later. Retries the
+    call a few times with backoff to ride through transient rate limits.
+    """
     import llm_enrich
     if not items:
-        return {}
+        return {}, True
     numbered = "\n\n".join(
         f"[{i}] TITLE: {t}\nDESCRIPTION: {d[:2200]}" for i, t, d in items
     )
@@ -154,8 +159,13 @@ def _extract_batch(items: list) -> dict:
         '130000,"sponsorship_status":"offers_sponsorship","is_real_job":true}}\n\n'
         + numbered + "\n\nJSON:"
     )
-    data = llm_enrich._parse_json(llm_enrich._generate(prompt) or "")
-    return data if isinstance(data, dict) else {}
+    for attempt in range(3):
+        raw = llm_enrich._generate(prompt)
+        if raw:
+            data = llm_enrich._parse_json(raw)
+            return (data if isinstance(data, dict) else {}), True
+        time.sleep(2 * (attempt + 1))  # backoff on rate limit
+    return {}, False  # call failed after retries
 
 
 def enrich(client, limit: int, dry_run: bool, batch_size: int = 6) -> tuple:
@@ -211,11 +221,18 @@ def enrich(client, limit: int, dry_run: bool, batch_size: int = 6) -> tuple:
                 matched.append((j, entry))
 
         # AI in batches
+        ai_ok_ids = set()
         for start in range(0, len(matched), batch_size):
             chunk = matched[start:start + batch_size]
             items = [(i, j["title"], e["desc"]) for i, (j, e) in enumerate(chunk)]
-            result = _extract_batch(items)
+            result, ok = _extract_batch(items)
+            if not ok:
+                # Call failed (quota/rate-limit) — leave these jobs unmarked so a
+                # later run retries them, and stop hammering the provider.
+                logger.warning("LLM call failed after retries — leaving batch for a later run")
+                continue
             for i, (j, entry) in enumerate(chunk):
+                ai_ok_ids.add(j["id"])
                 fields = result.get(str(i)) or {}
                 patch = {}
                 # experience_level — only if missing
@@ -249,7 +266,7 @@ def enrich(client, limit: int, dry_run: bool, batch_size: int = 6) -> tuple:
                 else:
                     _update_job(client, j["id"], patch)
                     updated += 1
-            time.sleep(0.3)
+            time.sleep(1.5)  # pace to stay under provider rate limits
         # mark matched-but-nothing and unmatched jobs enriched too, so we don't
         # reprocess them forever (a later --refresh can revisit).
         if not dry_run:
