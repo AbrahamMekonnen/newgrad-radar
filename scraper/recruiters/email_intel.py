@@ -125,6 +125,37 @@ def guess_email(name: str, domain: str, pattern_key: str) -> Optional[str]:
     return f"{_PATTERNS[pattern_key](f, l)}@{domain}"
 
 
+def candidate_emails(name: str, domain: str, github_org: Optional[str] = None,
+                     top_n: int = 4) -> list:
+    """Return the top-N most-likely work emails for a person, best first.
+
+    Ordered by: the company's LEARNED pattern(s) first, then the common
+    ~80%-coverage formats (first.last / firstlast / flast). Letting the user
+    contact all of them makes reaching the person near-certain even when we
+    can't SMTP-verify (catch-all domains).
+    """
+    parts = [p for p in re.split(r"[\s.]+", name.strip()) if p]
+    if len(parts) < 2 or not domain:
+        return []
+    org = github_org or _norm(domain.split(".")[0])
+    ranked = [k for k, _ in learn_domain_pattern(domain, org)]
+    # learned patterns first, then sensible defaults, deduped, keep valid keys
+    order, seen = [], set()
+    for k in ranked + ["first.last", "firstlast", "flast", "f.last", "firstl"]:
+        if k in _PATTERNS and k not in seen:
+            seen.add(k)
+            order.append(k)
+    out, seen_em = [], set()
+    for k in order:
+        em = guess_email(name, domain, k)
+        if em and em not in seen_em:
+            seen_em.add(em)
+            out.append(em)
+        if len(out) >= top_n:
+            break
+    return out
+
+
 def _is_catch_all(domain: str) -> bool:
     """A domain that accepts a random nonexistent mailbox is catch-all — SMTP
     verification can't be trusted there."""

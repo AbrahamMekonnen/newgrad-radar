@@ -1,7 +1,8 @@
 'use client';
 
-import { Job, ApplicationLog, Recruiter } from '@/lib/types';
+import { Job, ApplicationLog, Recruiter, recruitersForJob } from '@/lib/types';
 import { JobCard } from './JobCard';
+import { RecruiterFormData } from '@/components/recruiters/AddRecruiterModal';
 import { JobCardSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ interface JobListProps {
   onCancelApplication?: (jobId: string) => Promise<void>;
   recruitersMap?: Map<string, Recruiter[]>;
   onFindRecruiters?: (companySlug: string, companyName: string, jobId: string) => Promise<void>;
+  onAddRecruiter?: (data: RecruiterFormData) => Promise<void>;
   isLoggedIn?: boolean;
 }
 
@@ -30,6 +32,7 @@ export function JobList({
   onCancelApplication,
   recruitersMap = new Map(),
   onFindRecruiters,
+  onAddRecruiter,
   isLoggedIn = false,
 }: JobListProps) {
   if (loading) {
@@ -98,8 +101,9 @@ export function JobList({
             application={applications?.get(job.id)}
             onAutoApply={onAutoApply}
             onCancelApplication={onCancelApplication}
-            recruiters={recruitersMap.get(job.id) || recruitersMap.get(job.company_slug) || []}
+            recruiters={recruitersForJob(recruitersMap.get(job.id) || recruitersMap.get(job.company_slug) || [], job)}
             onFindRecruiters={onFindRecruiters}
+            onAddRecruiter={onAddRecruiter}
             isLoggedIn={isLoggedIn}
           />
         </div>
