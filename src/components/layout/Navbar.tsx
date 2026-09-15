@@ -50,6 +50,10 @@ export function Navbar() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setShowDropdown(false);
+    // Hard-reload to the home page so all cached logged-in state (dashboard
+    // greeting, personalized data) is cleared and the server re-renders as a
+    // signed-out visitor. A soft router.push left stale state behind.
+    window.location.href = '/';
   };
 
   // Open command palette by dispatching keyboard event
