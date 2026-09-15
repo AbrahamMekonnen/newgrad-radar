@@ -75,7 +75,7 @@ _OAI_PROVIDERS = [
     ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1",
      "openai/gpt-oss-20b", "GROQ_MODEL"),
     ("cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1",
-     "llama-3.3-70b", "CEREBRAS_MODEL"),
+     "gpt-oss-120b", "CEREBRAS_MODEL"),
     ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1",
      "meta-llama/llama-3.3-70b-instruct:free", "OPENROUTER_MODEL"),
     ("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1",
