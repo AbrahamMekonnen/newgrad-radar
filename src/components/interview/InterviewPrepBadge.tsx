@@ -20,13 +20,26 @@ interface InterviewPrepBadgeProps {
   companyName: string;
   position?: string;
   className?: string;
+  // Pre-fetched count (from the page's bulk counts map). When provided, the
+  // badge does NOT fetch on its own — this avoids an N+1 fetch per job card
+  // that made cards lag badly while scrolling. undefined = fetch as fallback.
+  count?: number;
 }
 
-export function InterviewPrepBadge({ companySlug, companyName, position, className }: InterviewPrepBadgeProps) {
-  const [questionCount, setQuestionCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+export function InterviewPrepBadge({ companySlug, companyName, position, className, count }: InterviewPrepBadgeProps) {
+  const hasProvidedCount = count !== undefined;
+  const [questionCount, setQuestionCount] = useState<number | null>(
+    hasProvidedCount ? count : null
+  );
+  const [loading, setLoading] = useState(!hasProvidedCount);
 
   useEffect(() => {
+    // Count supplied by the parent (bulk fetch) — no per-card request needed.
+    if (hasProvidedCount) {
+      setQuestionCount(count);
+      setLoading(false);
+      return;
+    }
     const fetchCount = async () => {
       try {
         const params = new URLSearchParams({ limit: '1' });
@@ -49,7 +62,7 @@ export function InterviewPrepBadge({ companySlug, companyName, position, classNa
     };
 
     fetchCount();
-  }, [companySlug, companyName]);
+  }, [companySlug, companyName, hasProvidedCount, count]);
 
   if (loading || questionCount === null || questionCount === 0) {
     return null;

@@ -49,6 +49,19 @@ const ROLES = [
   { value: 'infra', label: 'Infrastructure' },
 ];
 
+// Keyword that actually appears in raw scraped `position` text for each role
+// code. Selecting a role matches these PLUS untagged/generic questions.
+const ROLE_KEYWORDS: Record<string, string> = {
+  swe: 'software',
+  frontend: 'front',
+  backend: 'back',
+  fullstack: 'full stack',
+  ml: 'machine learning',
+  data: 'data',
+  mobile: 'mobile',
+  infra: 'infrastructure',
+};
+
 // We only scrape ~6 months of recent history, so longer windows (year, all
 // time) would return the identical set. Keep only windows that differentiate.
 const DATE_RANGES = [
@@ -419,9 +432,11 @@ function InterviewPrepContent() {
       if (searchTerm) {
         params.set('search', searchTerm);
       }
-      // Only filter by position if it's a full role name, not a short code like "swe"
-      if (selectedRole && selectedRole.length > 5) {
-        params.set('position', selectedRole);
+      // Map the role code to a keyword that actually appears in the raw scraped
+      // `position` text (the code "swe" never matches "Software Engineer"). The
+      // API also includes untagged/generic questions, so the list won't be empty.
+      if (selectedRole && ROLE_KEYWORDS[selectedRole]) {
+        params.set('position', ROLE_KEYWORDS[selectedRole]);
       }
       if (selectedType !== 'all') params.set('question_type', selectedType);
       if (selectedLevel) params.set('position_level', selectedLevel);

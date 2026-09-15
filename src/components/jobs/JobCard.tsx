@@ -31,6 +31,7 @@ interface JobCardProps {
   onAutoApply?: (jobId: string) => Promise<void>;
   onCancelApplication?: (jobId: string) => Promise<void>;
   saveCount?: number;
+  interviewCount?: number;
 }
 
 export function JobCard({
@@ -47,6 +48,7 @@ export function JobCard({
   onAutoApply,
   onCancelApplication,
   saveCount = 0,
+  interviewCount,
 }: JobCardProps) {
   const [showRecruiters, setShowRecruiters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -884,6 +886,7 @@ export function JobCard({
         companySlug={job.company_slug || undefined}
         companyName={job.company_name}
         position={job.role_types?.[0]}
+        count={interviewCount}
         className="mt-4 pt-4 border-t border-gray-100/80 dark:border-slate-700/60"
       />
 

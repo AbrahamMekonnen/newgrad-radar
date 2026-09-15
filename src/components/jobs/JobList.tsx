@@ -19,6 +19,8 @@ interface JobListProps {
   onFindRecruiters?: (companySlug: string, companyName: string, jobId: string) => Promise<void>;
   onAddRecruiter?: (data: RecruiterFormData) => Promise<void>;
   isLoggedIn?: boolean;
+  // Bulk interview-question counts keyed by company_slug and lowercased name.
+  interviewCounts?: Record<string, number>;
 }
 
 export function JobList({
@@ -34,6 +36,7 @@ export function JobList({
   onFindRecruiters,
   onAddRecruiter,
   isLoggedIn = false,
+  interviewCounts,
 }: JobListProps) {
   if (loading) {
     return (
@@ -105,6 +108,12 @@ export function JobList({
             onFindRecruiters={onFindRecruiters}
             onAddRecruiter={onAddRecruiter}
             isLoggedIn={isLoggedIn}
+            interviewCount={
+              interviewCounts
+                ? (interviewCounts[job.company_slug] ??
+                   interviewCounts[job.company_name?.toLowerCase()] ?? 0)
+                : undefined
+            }
           />
         </div>
       ))}

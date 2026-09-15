@@ -116,8 +116,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('company_slug', company_slug);
     }
 
+    // Role filter is INCLUSIVE of the generic pool. In practice the scraped
+    // data barely distinguishes specializations — the vast majority of rows are
+    // tagged the generic "Software Engineer" (or have no position), not
+    // "Frontend"/"Backend"/etc. A strict ilike on the role therefore returned
+    // almost nothing. So when a role is chosen we return questions matching that
+    // role PLUS the generic Software-Engineer / untagged pool (a coding or
+    // behavioral question is relevant across specializations anyway), instead of
+    // an almost-empty list.
     if (position) {
-      query = query.ilike('position', `%${position}%`);
+      query = query.or(
+        `position.ilike.%${position}%,position.is.null,position.ilike.%software engineer%`
+      );
     }
 
     if (question_type) {

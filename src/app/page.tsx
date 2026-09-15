@@ -140,6 +140,13 @@ export default function HomePage() {
   const [autoApplyEnabled, setAutoApplyEnabled] = useState(true);
   const [applications, setApplications] = useState<Map<string, ApplicationLog>>(new Map());
   const [recruitersMap, setRecruitersMap] = useState<Map<string, Recruiter[]>>(new Map());
+  // Job ids we've already fetched recruiters for — so infinite-scroll only
+  // fetches the delta instead of re-querying the whole list each append.
+  const fetchedRecruiterJobIds = useRef<Set<string>>(new Set());
+  // Bulk interview-question counts per company (fetched once), so each job
+  // card's Interview Prep badge reads from this map instead of firing its own
+  // request — the per-card fetch was an N+1 that made scrolling lag.
+  const [interviewCounts, setInterviewCounts] = useState<Record<string, number>>({});
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [totalJobCount, setTotalJobCount] = useState(0);
   // New filter state
@@ -529,22 +536,31 @@ export default function HomePage() {
   }, [supabase]);
 
   const fetchRecruiters = useCallback(async (jobIds: string[], companySlugs: string[]) => {
+    if (jobIds.length === 0 && companySlugs.length === 0) return;
     const { data } = await supabase
       .from('recruiters')
       .select('*')
       .or(`job_id.in.(${jobIds.join(',')}),company_slug.in.(${companySlugs.join(',')})`);
 
     if (data) {
-      const map = new Map<string, Recruiter[]>();
+      // Build a partial map for just the keys we queried, then MERGE it into the
+      // existing map (overwriting only those keys). This lets us fetch recruiters
+      // incrementally for newly-loaded jobs instead of re-querying every job on
+      // the page on each infinite-scroll append.
+      const partial = new Map<string, Recruiter[]>();
       data.forEach((r) => {
         const key = r.job_id || r.company_slug;
         if (key) {
-          const existing = map.get(key) || [];
+          const existing = partial.get(key) || [];
           existing.push(r as Recruiter);
-          map.set(key, existing);
+          partial.set(key, existing);
         }
       });
-      setRecruitersMap(map);
+      setRecruitersMap((prev) => {
+        const map = new Map(prev);
+        partial.forEach((list, key) => map.set(key, list));
+        return map;
+      });
     }
   }, [supabase]);
 
@@ -620,6 +636,24 @@ export default function HomePage() {
     loadData();
   }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, sortBy, fetchJobs, fetchJobsWithRecruiters, fetchSavedJobs, fetchAutoApplyData]);
 
+  // Fetch interview-question counts for all companies ONCE (bulk), so job-card
+  // badges don't each fire their own request.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/interview-questions/company-counts');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setInterviewCounts(data.counts || {});
+        }
+      } catch {
+        /* non-fatal: badges just won't show until counts load */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Refetch auto-apply setting when page gains focus (e.g., returning from settings)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -638,14 +672,19 @@ export default function HomePage() {
   // (handleFindRecruiters).
   useEffect(() => {
     const loadRecruiters = async () => {
-      if (jobs.length === 0) return;
-      const jobIds = jobs.map((j) => j.id);
-      const slugs = [...new Set(jobs.map((j) => j.company_slug))];
+      // Only fetch recruiters for jobs we haven't fetched yet. Previously this
+      // re-queried EVERY job on the page on each infinite-scroll append, which
+      // grew O(n²) and made cards render slowly while scrolling.
+      const newJobs = jobs.filter((j) => !fetchedRecruiterJobIds.current.has(j.id));
+      if (newJobs.length === 0) return;
+      const jobIds = newJobs.map((j) => j.id);
+      const slugs = [...new Set(newJobs.map((j) => j.company_slug))];
+      newJobs.forEach((j) => fetchedRecruiterJobIds.current.add(j.id));
       await fetchRecruiters(jobIds, slugs);
     };
 
     loadRecruiters();
-  }, [jobs, supabase, fetchRecruiters]);
+  }, [jobs, fetchRecruiters]);
 
   // Real-time subscription for application updates
   useEffect(() => {
@@ -1209,6 +1248,7 @@ export default function HomePage() {
                 onFindRecruiters={handleFindRecruiters}
                 onAddRecruiter={handleAddRecruiter}
                 isLoggedIn={isLoggedIn}
+                interviewCounts={interviewCounts}
               />
 
               {/* Infinite scroll sentinel + status. The observer above watches
