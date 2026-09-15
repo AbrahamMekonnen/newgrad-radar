@@ -708,13 +708,17 @@ export function focusForLevel(level: ExperienceLevel | null | undefined): 'new_g
 export function recruitersForJob(recruiters: Recruiter[], job: Job): Recruiter[] {
   if (!recruiters || recruiters.length === 0) return [];
   const wanted = focusForLevel(job.experience_level);
+  // Strict association: a card shows only recruiters whose focus matches this
+  // job's level, plus 'generic' recruiters that fit any level (and legacy/
+  // user-added rows with no focus). We do NOT fall back to every recruiter the
+  // company has — that dumped senior recruiters onto new-grad cards and vice
+  // versa. If nothing matches this level, the card simply shows none.
   const matched = recruiters.filter((r) => {
     const f = r.role_focus;
-    return !f || f === 'generic' || f === wanted; // null = legacy, treat as generic
+    return !f || f === 'generic' || f === wanted;
   });
-  const list = matched.length > 0 ? matched : recruiters;
-  // Rank: exact-focus first, then generic/legacy — so the most relevant show up top.
-  return [...list].sort((a, b) => {
+  // Rank: exact-focus first, then generic/legacy — most relevant on top.
+  return [...matched].sort((a, b) => {
     const score = (r: Recruiter) => (r.role_focus === wanted ? 0 : 1);
     return score(a) - score(b);
   });
