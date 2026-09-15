@@ -213,17 +213,19 @@ def send_instant_alert(
             if send_ntfy(ntfy_topic, title, message, url=job.get("url"), priority="high"):
                 result["push_sent"] = True
 
-    # Send email
+    # Send email — never let an email failure affect push (push already sent
+    # above). ntfy works entirely on its own; email is best-effort.
     if email_enabled and email:
         subject = f"{alert_name}: New job at {job['company_name']}"
-        html_body = build_single_alert_email(alert_name, job)
-
-        if dry_run:
-            print(f"    [DRY RUN] Email to {email}: {subject}")
-            result["email_sent"] = True
-        else:
-            if send_email(email, subject, html_body):
+        try:
+            html_body = build_single_alert_email(alert_name, job)
+            if dry_run:
+                print(f"    [DRY RUN] Email to {email}: {subject}")
                 result["email_sent"] = True
+            elif send_email(email, subject, html_body):
+                result["email_sent"] = True
+        except Exception as e:
+            print(f"    [email] send failed (push unaffected): {e}")
 
     return result
 

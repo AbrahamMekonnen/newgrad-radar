@@ -87,11 +87,17 @@ jobs:
           # hiccups; the scrape still runs on the companies we already have.
           python import_companies.py || echo "::warning::company import failed; using existing list"
           python sync_companies.py || echo "::warning::company sync failed"
-          # Always skip notifications: no email/push provider is configured yet.
+          # Notifications ON by default: ntfy push needs no provider/keys and
+          # works on its own; email just no-ops gracefully until an email
+          # provider (BREVO/SMTP/RESEND) is configured. Pass skip_notify=true on
+          # a manual run to suppress all notifications.
           # --add-h1b-flags populates sponsorship_status (H1B sponsor / no
           # sponsor) so the Sponsorship filter works — critical for
           # international students. Without it every job stays "unknown".
-          ARGS="--skip-notify --add-h1b-flags"
+          ARGS="--add-h1b-flags"
+          if [[ "${{ inputs.skip_notify }}" == "true" ]]; then
+            ARGS="$ARGS --skip-notify"
+          fi
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
             ARGS="$ARGS --dry-run"
           fi
