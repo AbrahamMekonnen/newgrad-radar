@@ -63,8 +63,15 @@ def main() -> None:
         return
     logger.info(f"LLM providers: {llm_enrich.available_llm_providers()}")
 
-    raw = llm_enrich._generate(_PROMPT)
-    lines = _clean(llm_enrich._parse_json(raw or ""))
+    import time
+    lines: list = []
+    for attempt in range(5):
+        raw = llm_enrich._generate(_PROMPT)
+        lines = _clean(llm_enrich._parse_json(raw or ""))
+        if len(lines) >= 8:
+            break
+        logger.info(f"attempt {attempt + 1}: got {len(lines)} lines, retrying…")
+        time.sleep(3 * (attempt + 1))
     if len(lines) < 8:
         logger.error(f"generation produced too few lines ({len(lines)}); leaving existing")
         return
