@@ -49,10 +49,12 @@ const FUN_LINES = [
 ];
 
 // Deterministic per ~3-hour window so it rotates a few times a day and stays
-// stable within a window (no flicker between renders).
-function getFunLine(): string {
+// stable within a window (no flicker between renders). Uses the AI-refreshed
+// pool when available, else the baked-in fallback.
+function getFunLine(lines: string[]): string {
+  const pool = lines.length > 0 ? lines : FUN_LINES;
   const bucket = Math.floor(Date.now() / (3 * 60 * 60 * 1000));
-  return FUN_LINES[bucket % FUN_LINES.length];
+  return pool[bucket % pool.length];
 }
 
 function formatInterviewDay(date: Date): string {
@@ -80,8 +82,9 @@ function formatInterviewDay(date: Date): string {
 
 function getStatusMessage(
   applicationCount: number,
-  nextInterview?: NextInterview | null,
-  streakDays?: number
+  nextInterview: NextInterview | null | undefined,
+  streakDays: number | undefined,
+  lines: string[]
 ): { message: string; type: 'new' | 'interview' | 'active' | 'dryspell' } {
   // Has upcoming interview - highest priority
   if (nextInterview) {
@@ -95,12 +98,12 @@ function getStatusMessage(
   // No urgent interview — show a rotating fun line (changes every few hours).
   // Keep the state 'type' for styling/icon, but the copy is the fun one.
   if (applicationCount === 0) {
-    return { message: getFunLine(), type: 'new' };
+    return { message: getFunLine(lines), type: 'new' };
   }
   if (streakDays === 0) {
-    return { message: getFunLine(), type: 'dryspell' };
+    return { message: getFunLine(lines), type: 'dryspell' };
   }
-  return { message: getFunLine(), type: 'active' };
+  return { message: getFunLine(lines), type: 'active' };
 }
 
 export function HeroSection({
@@ -110,13 +113,28 @@ export function HeroSection({
   applicationCount,
 }: HeroSectionProps) {
   const [mounted, setMounted] = useState(false);
+  const [dynamicLines, setDynamicLines] = useState<string[]>([]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Pull the AI-refreshed greeting pool (falls back to the baked-in set).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/greeting-lines')
+      .then((r) => (r.ok ? r.json() : { lines: [] }))
+      .then((d) => {
+        if (!cancelled && Array.isArray(d.lines) && d.lines.length > 0) {
+          setDynamicLines(d.lines);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const greeting = getTimeOfDayGreeting();
-  const { message, type } = getStatusMessage(applicationCount, nextInterview, streakDays);
+  const { message, type } = getStatusMessage(applicationCount, nextInterview, streakDays, dynamicLines);
 
   const statusColors: Record<typeof type, string> = {
     new: 'text-primary',
