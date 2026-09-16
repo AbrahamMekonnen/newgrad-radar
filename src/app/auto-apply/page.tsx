@@ -104,7 +104,12 @@ export default function AutoApplyInboxPage() {
     }
     setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
   };
-  const readyIds = () => apps.filter((a) => (a.status ?? 'prepared') === 'prepared').map((a) => a.id);
+  const readyIds = () => apps.filter((a) => {
+    const hasMissing = (a.prepared_data || []).some((f) => f.required && f.source === 'user_needed');
+    return (a.status ?? 'prepared') === 'prepared'
+      && !hasMissing
+      && a.submit_log?.status !== 'needs_captcha';
+  }).map((a) => a.id);
 
   // Complete the missing required fields IN-APP, then finish the application:
   // merge the answers into prepared_data (source 'user'), persist, and submit.
@@ -119,11 +124,29 @@ export default function AutoApplyInboxPage() {
     const fields = (app.prepared_data || []).map((f) =>
       given[f.name] !== undefined ? { ...f, value: given[f.name], source: 'user' } : f
     );
-    setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, prepared_data: fields, ready_pct: 100 } : a)));
-    await fetch('/api/auto-apply/inbox', {
+    const learnedAnswers = Object.fromEntries(missing.map((f) => {
+      const raw = given[f.name];
+      const option = (f.values || []).find((o) => String(o.value) === String(raw));
+      return [f.label, option?.label || raw];
+    }));
+    setApps((prev) => prev.map((a) => (a.id === app.id ? {
+      ...a, prepared_data: fields, ready_pct: 100, needs_user: [],
+    } : a)));
+    const saved = await fetch('/api/auto-apply/inbox', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: app.id, prepared_data: fields, ready_pct: 100, needs_user: [] }),
+      body: JSON.stringify({
+        id: app.id, prepared_data: fields, ready_pct: 100,
+        needs_user: [], learned_answers: learnedAnswers,
+      }),
     });
+    if (!saved.ok) {
+      showToast('Could not save your answers.', 'error');
+      return;
+    }
+    if (app.submit_log?.status === 'needs_captcha') {
+      showToast('Answers saved for future applications. Use “Open & finish” to complete the captcha.', 'success');
+      return;
+    }
     await submit({ id: app.id }, [app.id]);
   };
 
@@ -169,6 +192,7 @@ export default function AutoApplyInboxPage() {
           const drafted = fields.filter((f) => f.source === 'ai_drafted' || f.source === 'ai_needed');
           const auto = fields.filter((f) => AUTO_SOURCES.has(f.source));
           const needs = fields.filter((f) => f.source === 'user_needed' && f.required);
+          const knownCaptcha = app.submit_log?.status === 'needs_captcha';
           const isOpen = openId === app.id;
           return (
             <div key={app.id} className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -294,8 +318,8 @@ export default function AutoApplyInboxPage() {
                   {/* Result of the last background submit attempt, if any */}
                   {app.submit_log?.status === 'needs_captcha' && (
                     <p className="text-sm text-amber-600 dark:text-amber-400">
-                      This form has a captcha, so it can’t be submitted from the server. Open it and
-                      finish in one tap — your answers above are ready to paste.
+                      This form requires a browser captcha. Your prepared answers are saved here;
+                      open the application and use them to finish the form.
                     </p>
                   )}
                   {(app.submit_log?.status === 'submit_failed' || app.submit_log?.status === 'incomplete') && (
@@ -306,23 +330,31 @@ export default function AutoApplyInboxPage() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {(app.status === 'submit_requested' || app.status === 'submitting' || busy.has(app.id)) ? (
+                    {knownCaptcha ? (
+                      <a href={app.job_url} target="_blank" rel="noopener noreferrer"
+                         className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium">
+                        Open &amp; finish
+                      </a>
+                    ) : (app.status === 'submit_requested' || app.status === 'submitting' || busy.has(app.id)) ? (
                       <Button disabled variant="outline" className="text-sm">Submitting…</Button>
                     ) : (
-                      <Button onClick={() => submit({ id: app.id }, [app.id])} className="text-sm">
-                        Submit for me
+                      <Button disabled={needs.length > 0}
+                        onClick={() => submit({ id: app.id }, [app.id])} className="text-sm">
+                        {needs.length > 0 ? 'Complete required answers first' : 'Submit for me'}
                       </Button>
                     )}
-                    <a href={app.job_url} target="_blank" rel="noopener noreferrer"
-                       className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 text-sm font-medium">
-                      Open application →
-                    </a>
+                    {!knownCaptcha && (
+                      <a href={app.job_url} target="_blank" rel="noopener noreferrer"
+                         className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 text-sm font-medium">
+                        Open application →
+                      </a>
+                    )}
                     <Button onClick={() => setStatus(app.id, 'applied')} variant="outline" className="text-sm">Mark applied</Button>
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    “Submit for me” sends captcha-free forms in the background. Captcha-gated forms
-                    (most of Greenhouse/Lever) stay here — open them and finish in one tap.
+                    Server submission is available only for complete, captcha-free forms.
+                    Browser-gated forms keep their prepared answers here for you to finish.
                   </p>
                 </div>
               )}

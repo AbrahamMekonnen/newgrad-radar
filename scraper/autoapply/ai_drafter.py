@@ -51,14 +51,37 @@ def draft_answers(questions: list, profile, job: dict, max_chars: int = 900) -> 
     if not labels:
         return {}
 
-    # 1) reuse anything already learned
+    # 1) Reuse the application answer library. Match exact and normalized
+    # questions, then the compatible generated-answer category.
     learned = getattr(profile, "custom_answers", None) or {}
+    normalized_learned = {
+        " ".join(re.findall(r"[a-z0-9]+", str(key).lower())): value
+        for key, value in learned.items()
+    }
+    category_aliases = {
+        "why_interested": "motivation",
+        "describe_project": "experience",
+        "tell_about_yourself": "experience",
+    }
+    try:
+        from field_knowledge_base import lookup_category
+    except Exception:
+        lookup_category = lambda _label: "custom"
+
     out, todo = {}, []
-    for l in labels:
-        if learned.get(l):
-            out[l] = learned[l]
+    for label in labels:
+        normalized = " ".join(re.findall(r"[a-z0-9]+", label.lower()))
+        category = lookup_category(label)
+        answer = (
+            learned.get(label)
+            or normalized_learned.get(normalized)
+            or learned.get(category)
+            or learned.get(category_aliases.get(category, ""))
+        )
+        if answer:
+            out[label] = answer
         else:
-            todo.append(l)
+            todo.append(label)
     if not todo:
         return out
 

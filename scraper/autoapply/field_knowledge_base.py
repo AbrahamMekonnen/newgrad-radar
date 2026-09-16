@@ -559,6 +559,54 @@ FIELD_PATTERNS = {
     },
 
     # -------------------------------------------------------------------------
+    # COMMON REQUIRED ACKNOWLEDGEMENTS AND ELIGIBILITY
+    # -------------------------------------------------------------------------
+    "age_verification": {
+        "labels": ["are you 18", "18+ years of age", "at least 18 years",
+                   "legal working age", "age of 18"],
+        "field_names": ["isAdult", "is_adult", "over18", "ageVerification"],
+        "profile_field": "is_adult", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 20,
+    },
+    "us_citizen": {
+        "labels": ["u.s. citizen", "us citizen", "united states citizen",
+                   "lawful u.s. permanent resident", "green card holder"],
+        "field_names": ["usCitizen", "us_citizen", "citizenshipStatus"],
+        "profile_field": "is_us_citizen", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 20,
+    },
+    "data_consent": {
+        "labels": ["privacy notice", "privacy policy", "processing of personal data",
+                   "data consent", "consent to the collection", "applicant privacy",
+                   "candidate privacy", "review and acknowledge"],
+        "field_names": ["privacyConsent", "privacy_consent", "dataConsent", "data_consent",
+                        "privacyPolicy"],
+        "profile_field": "background_check_consent", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 35,
+    },
+    "background_check": {
+        "labels": ["background check", "background screening", "background disclosure",
+                   "criminal background", "consent to background"],
+        "field_names": ["backgroundCheck", "background_check", "backgroundConsent"],
+        "profile_field": "background_check_consent", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 25,
+    },
+    "previous_employment": {
+        "labels": ["previously worked at", "previously worked for", "previously employed",
+                   "worked here before", "former employee"],
+        "field_names": ["previouslyEmployed", "previous_employee", "formerEmployee"],
+        "profile_field": "previously_employed_here", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 15,
+    },
+    "coding_language": {
+        "labels": ["preferred coding language", "coding language when answering",
+                   "technical interview language", "interview coding language"],
+        "field_names": ["codingLanguage", "coding_language", "preferredLanguage"],
+        "profile_field": "custom_answers", "resolution": "matched",
+        "required_at_signup": False, "frequency_pct": 10,
+    },
+
+    # -------------------------------------------------------------------------
     # EEO (Equal Employment Opportunity)
     # -------------------------------------------------------------------------
     "gender": {
@@ -626,6 +674,7 @@ FIELD_PATTERNS = {
             "where did you hear about us", "referral source",
             "how did you find us", "job source", "how did you learn about",
             "where did you find this job", "how did you discover",
+            "how did you first hear about this role", "how did you hear about this opportunity",
         ],
         "field_names": [
             "source", "howDidYouHear", "how_did_you_hear", "referralSource",

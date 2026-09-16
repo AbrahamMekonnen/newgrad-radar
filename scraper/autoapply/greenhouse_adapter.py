@@ -55,6 +55,7 @@ class Profile:
     linkedin_url: str = ""                    # 78-96% frequency
     work_authorized: Optional[bool] = None    # 80%+ - authorized to work in target country
     require_sponsorship: Optional[bool] = None  # 75%+ - will need visa sponsorship
+    work_authorization: str = ""               # raw profile choice for citizenship/visa selects
     visa_status: str = ""                     # current visa type if sponsorship needed
 
     # =========================================================================
@@ -234,6 +235,55 @@ def _decline_option(values: list[dict]) -> Optional[str]:
 
 def _yesno(values: list[dict], yes: bool) -> Optional[str]:
     return _match_option(values, "yes") if yes else _match_option(values, "no")
+
+
+def _normalized_question(text: str) -> str:
+    """Normalize labels so previously answered questions survive punctuation and
+    whitespace changes between otherwise identical ATS forms."""
+    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def _saved_answer(custom_answers: dict, label: str, category: str,
+                  values: list[dict]) -> Optional[object]:
+    """Find a learned answer and remap its human label to this form's option ID."""
+    if not custom_answers:
+        return None
+
+    normalized = _normalized_question(label)
+    answer = custom_answers.get(label) or custom_answers.get(normalized)
+    if answer is None and category != "custom":
+        answer = custom_answers.get(category)
+
+    if answer is None and normalized:
+        wanted = set(normalized.split())
+        best_score = 0.0
+        for saved_label, saved_answer in custom_answers.items():
+            saved_normalized = _normalized_question(str(saved_label))
+            if not saved_normalized:
+                continue
+            saved_tokens = set(saved_normalized.split())
+            union = wanted | saved_tokens
+            score = len(wanted & saved_tokens) / len(union) if union else 0.0
+            if score > best_score and score >= 0.86:
+                best_score, answer = score, saved_answer
+
+    if isinstance(answer, dict):
+        answer = answer.get("label") or answer.get("value")
+    if answer in (None, ""):
+        return None
+
+    if values:
+        answer_normalized = _normalized_question(str(answer))
+        for option in values:
+            option_value = option.get("value", option.get("label"))
+            if (
+                _normalized_question(str(option.get("label", ""))) == answer_normalized
+                or _normalized_question(str(option_value)) == answer_normalized
+            ):
+                return option_value
+        matched = _match_option(values, str(answer).lower())
+        return matched
+    return answer
 
 
 def _authorized_option(values: list[dict], authorized: bool) -> Optional[str]:
@@ -548,7 +598,12 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
 
     # === REFERRAL SOURCE (22% frequency) ===
     if cat == "source":
-        return (_match_option(values, p.how_heard.lower()) or p.how_heard, "matched")
+        if values:
+            value = _match_option(
+                values, p.how_heard.lower(), "careers site", "company website"
+            )
+            return (value, "matched") if value is not None else (None, "user_needed")
+        return (p.how_heard, "matched")
 
     # === WORK AUTHORIZATION (80% frequency) ===
     # Handles varied phrasings like:
@@ -557,7 +612,7 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # - "Do you have the right to work in the country?"
     if cat == "work_auth" and p.work_authorized is not None:
         v = _authorized_option(values, p.work_authorized) if values else ("Yes" if p.work_authorized else "No")
-        return (v, "matched") if v else (None, "user_needed")
+        return (v, "matched") if v is not None else (None, "user_needed")
 
     # === SPONSORSHIP (75% frequency) ===
     # Handles varied phrasings like:
@@ -567,13 +622,13 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     if cat == "sponsorship" and p.require_sponsorship is not None:
         # "will you require sponsorship?" -> Yes iff they require it.
         v = _yesno(values, p.require_sponsorship) if values else ("Yes" if p.require_sponsorship else "No")
-        return (v, "matched") if v else (None, "user_needed")
+        return (v, "matched") if v is not None else (None, "user_needed")
 
     # === PREVIOUS EMPLOYMENT (12% frequency) ===
     # "Have you previously been employed by [Company]?"
     if cat == "previous_employment" and p.previously_employed_here is not None:
         v = _yesno(values, p.previously_employed_here) if values else ("Yes" if p.previously_employed_here else "No")
-        return (v, "matched") if v else (None, "user_needed")
+        return (v, "matched") if v is not None else (None, "user_needed")
 
     # === RELOCATION ===
     if cat == "relocate" and p.willing_to_relocate is not None:
@@ -588,7 +643,7 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # "Are you at least 18 years of age?" - job applicants are almost always adults
     if cat == "age_verification":
         v = _yesno(values, p.is_adult) if values else ("Yes" if p.is_adult else "No")
-        return (v, "matched") if v else (None, "user_needed")
+        return (v, "matched") if v is not None else (None, "user_needed")
 
     # === COMPLIANCE QUESTIONS (4-8% frequency) ===
     # Government official, non-compete, conflict of interest - usually No for most applicants
@@ -606,7 +661,10 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # "Do you consent to [Company] processing your personal information?"
     # Typically must be Yes to proceed with application
     if cat == "data_consent":
-        return (_yesno(values, True) or "Yes", "matched")
+        if len(values or []) == 1:
+            return (values[0].get("value", values[0].get("label")), "matched")
+        value = _match_option(values, "acknowledge", "agree", "accept", "confirm", "yes")
+        return ((value if value is not None else "Yes"), "matched")
 
     # === IN-OFFICE ACKNOWLEDGMENT ===
     # "Are you open to working X days per week from our office?"
@@ -621,11 +679,13 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
 
     # === BACKGROUND CHECK (28-54%) ===
     if cat == "background_check":
+        if len(values or []) == 1 and p.background_check_consent:
+            return (values[0].get("value", values[0].get("label")), "matched")
         if p.can_pass_background_check is not None:
             v = _yesno(values, p.can_pass_background_check) if values else ("Yes" if p.can_pass_background_check else "No")
             return (v, "matched")
-        # Default consent to background check
-        return (_yesno(values, p.background_check_consent) or "Yes", "matched")
+        value = _match_option(values, "acknowledge", "agree", "accept", "confirm", "yes")
+        return ((value if value is not None else "Yes"), "matched")
 
     # === TRAVEL WILLINGNESS (22-36%) ===
     if cat == "travel":
@@ -653,8 +713,16 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
 
     # === US CITIZENSHIP (24-35%) ===
     if cat == "us_citizen" and p.is_us_citizen is not None:
-        v = _yesno(values, p.is_us_citizen) if values else ("Yes" if p.is_us_citizen else "No")
-        return (v, "matched")
+        auth = (p.work_authorization or "").lower()
+        if auth == "permanent_resident":
+            v = _match_option(values, "permanent resident", "green card")
+        elif p.is_us_citizen:
+            v = _match_option(values, "u.s. citizen", "us citizen", "united states citizen")
+        else:
+            v = _match_option(values, "none of the above", "no")
+        if not values:
+            v = "Yes" if p.is_us_citizen else "No"
+        return (v, "matched") if v is not None else (None, "user_needed")
 
     # === CITIZENSHIP (general) ===
     if cat == "citizenship":
@@ -677,9 +745,10 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     if cat in ("gender", "race", "veteran", "disability"):
         return (_decline_option(values), "eeo")
 
-    # === CUSTOM QUESTIONS: check learned answers ===
-    if label and p.custom_answers.get(label):
-        return (p.custom_answers[label], "profile")
+    # === LEARNED ANSWERS: exact, normalized, category, then high-overlap label ===
+    learned = _saved_answer(p.custom_answers, label, cat, values)
+    if learned is not None:
+        return (learned, "matched" if values else "profile")
 
     # === UNKNOWN FIELDS ===
     # Free-text fields -> AI can draft; Select/choice fields -> ask user

@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id, status, prepared_data, ready_pct, needs_user } = await request.json();
+  const { id, status, prepared_data, ready_pct, needs_user, learned_answers } = await request.json();
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const patch: Record<string, unknown> = {};
@@ -63,5 +63,30 @@ export async function PATCH(request: NextRequest) {
     console.error('inbox PATCH error:', error);
     return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
+
+  // Learn user-supplied answers for future forms. Store the human option label,
+  // keyed by both the original and normalized question, so ATS-specific option
+  // IDs are never reused on another company's form.
+  if (learned_answers && typeof learned_answers === 'object' && !Array.isArray(learned_answers)) {
+    const clean: Record<string, string> = {};
+    for (const [question, answer] of Object.entries(learned_answers as Record<string, unknown>).slice(0, 100)) {
+      if (typeof answer !== 'string' || !answer.trim()) continue;
+      const q = question.trim().slice(0, 1000);
+      const value = answer.trim().slice(0, 5000);
+      if (!q) continue;
+      clean[q] = value;
+      const normalized = q.toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
+      if (normalized) clean[normalized] = value;
+    }
+    if (Object.keys(clean).length) {
+      const { data: profile } = await admin()
+        .from('user_profiles').select('custom_answers').eq('user_id', user.id).maybeSingle();
+      const merged = { ...((profile?.custom_answers as Record<string, string>) || {}), ...clean };
+      const { error: learnError } = await admin()
+        .from('user_profiles').update({ custom_answers: merged }).eq('user_id', user.id);
+      if (learnError) console.error('learned answers update error:', learnError);
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

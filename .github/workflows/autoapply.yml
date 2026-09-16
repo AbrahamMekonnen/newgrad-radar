@@ -17,13 +17,13 @@ on:
         type: string
         default: "30"
       mode:
-        description: "'submit' = only drain the submit queue (skip match/prepare)"
+        description: "'prepare' = only rebuild pending cards; 'submit' = only drain the submit queue"
         type: string
         default: ""
 
 jobs:
   match:
-    if: ${{ inputs.mode != 'submit' }}
+    if: ${{ inputs.mode != 'submit' && inputs.mode != 'prepare' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -42,11 +42,11 @@ jobs:
         run: |
           cd scraper
           LIMIT="${{ inputs.per_user_limit }}"; LIMIT="${LIMIT:-30}"
-          python -m autoapply.rules --limit "$LIMIT" || echo "::warning::rules matching had errors"
+          python -m autoapply.rules --limit "$LIMIT"
 
   prepare:
     needs: match
-    if: ${{ inputs.mode != 'submit' }}
+    if: ${{ always() && needs.match.result != 'failure' && inputs.mode != 'submit' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -78,12 +78,13 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           cd scraper
-          python -m autoapply.prepare_worker --limit 100 || echo "::warning::prepare worker had errors"
+          python -m autoapply.prepare_worker --limit 100
 
   # Drain the submit queue: post CAPTCHA-FREE forms the user sent with "Submit
   # for me"; captcha-gated ones bounce back to 'prepared' with a note. Runs on
   # every trigger (schedule + dispatch) and no-ops when the queue is empty.
   submit:
+    if: ${{ inputs.mode != 'prepare' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -101,4 +102,4 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           cd scraper
-          python -m autoapply.submit_worker --limit 100 || echo "::warning::submit worker had errors"
+          python -m autoapply.submit_worker --limit 100

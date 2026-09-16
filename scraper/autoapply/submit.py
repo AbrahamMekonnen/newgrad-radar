@@ -93,14 +93,16 @@ def submit_application(ats: str, token: str, jid: str, apply_url: str,
     if not page:
         return {"status": "unsupported", "detail": f"no submit path for {ats}", "at": _now()}
 
-    gated, why = detect_captcha(page)
-    if gated:
-        return {"status": "needs_captcha", "detail": why, "page": page, "at": _now()}
-
+    # Validate completeness before captcha detection so an incomplete form never
+    # misleadingly appears ready just because the destination is also gated.
     data, missing = _form_values(fields)
     if missing:
         return {"status": "incomplete", "detail": f"unfilled required: {', '.join(missing[:6])}",
                 "at": _now()}
+
+    gated, why = detect_captcha(page)
+    if gated:
+        return {"status": "needs_captcha", "detail": why, "page": page, "at": _now()}
 
     resume = _resume_bytes(resume_url)
     files = {}

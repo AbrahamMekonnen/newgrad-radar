@@ -49,32 +49,85 @@ def _ats_job_id(url: str):
 
 
 def build_profile(client, user_id: str) -> gh.Profile:
-    """Assemble the Profile from user_profiles (+ story bank) for the LLM drafts."""
+    """Assemble the complete reusable application profile and learned answers."""
     row = (client.table("user_profiles").select("*").eq("user_id", user_id)
            .single().execute().data) or {}
+    custom = dict(row.get("custom_answers") or {})
+    authorization = row.get("work_authorization") or ""
+
+    explicit_sponsorship = row.get("require_sponsorship")
+    if explicit_sponsorship is None:
+        if authorization in ("us_citizen", "permanent_resident"):
+            explicit_sponsorship = False
+        elif authorization in ("visa_holder", "student_visa", "need_sponsorship"):
+            explicit_sponsorship = True
+
+    location = row.get("location") or ""
+    location_parts = [part.strip() for part in location.split(",")]
+    city = custom.get("city") or (location_parts[0] if location_parts else "")
+    state = custom.get("state") or (location_parts[1] if len(location_parts) > 1 else "")
+
     prof = gh.Profile(
         first_name=row.get("first_name") or "", last_name=row.get("last_name") or "",
         email=row.get("email") or "", phone=row.get("phone") or "",
-        location=row.get("location") or "", linkedin_url=row.get("linkedin_url") or "",
+        location=location, city=city, state=state,
+        zip_code=str(custom.get("zip_code") or ""),
+        country=str(custom.get("country") or "United States"),
+        linkedin_url=row.get("linkedin_url") or "",
         github_url=row.get("github_url") or "", portfolio_url=row.get("portfolio_url") or "",
         resume_url=row.get("resume_url") or "",
-        work_authorized=(None if row.get("work_authorization") is None
-                         else row.get("work_authorization") != "need_sponsorship"),
-        require_sponsorship=row.get("require_sponsorship"),
+        work_authorization=authorization,
+        work_authorized=(None if not authorization else authorization != "need_sponsorship"),
+        require_sponsorship=explicit_sponsorship,
+        is_us_citizen=(True if authorization == "us_citizen"
+                       else False if authorization in ("permanent_resident", "visa_holder", "student_visa")
+                       else None),
+        citizenship=str(custom.get("citizenship") or
+                        ("United States" if authorization == "us_citizen" else "")),
         years_experience=str(row.get("years_experience") or ""),
-        start_date=row.get("start_date") or "", salary_expectation=str(row.get("salary_expectation") or ""),
+        start_date=row.get("start_date") or "",
+        salary_expectation=str(row.get("salary_expectation") or ""),
         willing_to_relocate=row.get("willing_to_relocate"),
-        custom_answers=row.get("custom_answers") or {},
+        how_heard=str(custom.get("source") or custom.get("how_heard") or "Company website"),
+        is_adult=bool(custom.get("is_adult", True)),
+        custom_answers=custom,
     )
-    # story bank -> background for AI (best-effort; table may not exist)
+
     try:
-        stories = (client.table("user_story_bank").select("prompt,answer")
+        generated = (client.table("answer_bank")
+                     .select("question_category,answer_text,word_count_target")
+                     .eq("user_id", user_id).order("created_at", desc=True)
+                     .limit(200).execute().data) or []
+        for answer in generated:
+            value = answer.get("answer_text")
+            category = answer.get("question_category")
+            if value and category:
+                prof.custom_answers.setdefault(category, value)
+    except Exception:
+        pass
+
+    try:
+        stories = (client.table("user_story_bank").select("*")
                    .eq("user_id", user_id).limit(10).execute().data) or []
-        prof.story_bank = {s.get("prompt", ""): s.get("answer", "") for s in stories if s.get("answer")}
+        prof.story_bank = {}
+        for story in stories:
+            title = story.get("title") or story.get("story_type") or "Story"
+            actions = story.get("action") or story.get("actions") or ""
+            results = story.get("result") or story.get("results") or ""
+            if isinstance(actions, list):
+                actions = "; ".join(str(item) for item in actions)
+            if isinstance(results, list):
+                results = "; ".join(
+                    str(item.get("description") or item) if isinstance(item, dict) else str(item)
+                    for item in results
+                )
+            parts = [story.get("situation"), story.get("task"), actions, results]
+            answer = " ".join(str(part).strip() for part in parts if part)
+            if answer:
+                prof.story_bank[str(title)] = answer
     except Exception:
         prof.story_bank = {}
-    # Ground AI drafts in the applicant's real resume. Extract from the PDF once
-    # and cache it back so we only parse it a single time per user.
+
     prof.resume_text = row.get("resume_text") or ""
     if not prof.resume_text and prof.resume_url:
         try:
@@ -85,7 +138,7 @@ def build_profile(client, user_id: str) -> gh.Profile:
                 try:
                     client.table("user_profiles").update({"resume_text": txt}).eq("user_id", user_id).execute()
                 except Exception as e:
-                    logger.debug(f"resume_text cache write skipped: {e}")  # column may be pre-migration
+                    logger.debug(f"resume_text cache write skipped: {e}")
         except Exception as e:
             logger.warning(f"resume text extraction failed: {e}")
     return prof
