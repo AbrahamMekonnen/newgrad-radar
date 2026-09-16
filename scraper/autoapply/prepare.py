@@ -80,6 +80,13 @@ def prepare_application(job: dict, profile) -> dict:
     except Exception as e:
         return {"status": "form_fetch_failed", "ats": ats, "fields": [], "error": str(e)}
 
+    # A form we couldn't read (e.g. Ashby's closed GraphQL, or a posting whose
+    # form failed to parse) yields zero fields. Do NOT pass it off as a 0%-ready
+    # "prepared" application — that just clutters the inbox with useless cards.
+    if not res.get("resolved"):
+        return {"status": "form_unavailable", "ats": ats, "fields": [],
+                "message": f"could not read the {ats} application form"}
+
     # AI-draft the free-text gaps in one call, then fill them in.
     ai_fields = res["ai_needed"]
     drafts = {}

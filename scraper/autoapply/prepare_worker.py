@@ -93,8 +93,11 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
         "ats_type": ats, "ats_token": token, "ats_job_id": jid,
         "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
     }, profile)
+    # Store the real prepare status so 'form_unavailable' / 'form_fetch_failed'
+    # are diagnosable and stay OUT of the inbox (which shows only 'prepared').
+    pstatus = prepared.get("status")
     client.table("autoapply_job_queue").update({
-        "status": "prepared" if prepared.get("status") == "prepared" else "failed",
+        "status": "prepared" if pstatus == "prepared" else pstatus,
         "prepared_data": prepared.get("fields"), "ready_pct": prepared.get("ready_pct"),
         "needs_user": prepared.get("needs_user"),
         "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat(),

@@ -828,6 +828,13 @@ def lookup_field(label: str, field_name: str = "") -> tuple[str, str, str]:
     # Try label patterns
     label_lower = (label or "").lower()
 
+    # An open-ended / essay question must NEVER be matched to a short profile
+    # "identity" field just because a keyword appears inside it (e.g. "How are
+    # you using AI today in your current role?" was matching current_title and
+    # filling the user's job title into a free-text box). If the label reads as
+    # an essay, forbid the identity categories and let it fall through to AI draft.
+    essay = _is_essay_like(label_lower)
+
     # Precedence: a question that mentions sponsorship is ABOUT sponsorship, even
     # when it also says "work authorization" (e.g. "Will you now or in the future
     # require sponsorship for work authorization?"). It must resolve from
@@ -840,11 +847,44 @@ def lookup_field(label: str, field_name: str = "") -> tuple[str, str, str]:
 
     for category, pattern in _COMPILED_PATTERNS:
         if pattern.search(label_lower):
+            if essay and category in _IDENTITY_CATEGORIES:
+                continue  # long open-ended question is not a profile identity field
             info = FIELD_PATTERNS[category]
             return (category, info["profile_field"], info["resolution"])
 
     # Unknown field - determine if it needs AI or user
     return ("custom", "custom_answers", "ai_needed")
+
+
+# Short "identity"/profile-text categories that a long essay question must never
+# be mapped to (they fill a stored short value into a free-text box).
+_IDENTITY_CATEGORIES = {
+    "first_name", "last_name", "full_name", "preferred_name", "name_pronunciation",
+    "current_title", "current_company", "school", "major", "degree", "education",
+    "city", "state", "zip_code", "country", "address", "address_line1", "address_line2",
+    "linkedin", "github", "portfolio", "twitter", "phone",
+    # short numeric/scalar profile values that must not fill a free-text essay
+    "experience", "salary", "gpa", "graduation_year", "graduation_date",
+}
+
+# Signals that a label is an open-ended essay rather than a data field.
+_ESSAY_SIGNAL = re.compile(
+    r"\b(how (are|do|did|would|have|has|will) (you|your)|why (do|did|are|would|is)|"
+    r"describe|tell us|explain|walk (us|me) through|in your own words|"
+    r"what (makes|motivate|excite|interest|draw)|share (an?|your|a )|"
+    r"elaborate|give (an?|us|me) example|your thoughts|please describe|"
+    r"what has been|tell me about)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_essay_like(label_lower: str) -> bool:
+    """True when a label reads as an open-ended free-text question rather than a
+    short data field. Used to keep identity categories from grabbing essays."""
+    if _ESSAY_SIGNAL.search(label_lower):
+        return True
+    # Long questions ending in a question mark are almost always free-text.
+    return label_lower.strip().endswith("?") and len(label_lower.split()) >= 8
 
 
 def lookup_category(label: str, field_name: str = "") -> str:
