@@ -98,8 +98,15 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
     if not job:
         return False
     ats = (job.get("ats_type") or "").lower()
-    token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
-    jid = _ats_job_id(job.get("apply_url") or job.get("url") or "")
+    url = job.get("apply_url") or job.get("url") or ""
+    if ats == "workday":
+        # Workday URLs are self-contained (tenant/site/job path), so derive the
+        # token + job id from the URL instead of relying on COMPANIES.
+        from workday_adapter import parse_url as _wd_parse
+        token, jid = _wd_parse(url)
+    else:
+        token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
+        jid = _ats_job_id(url)
     if ats not in SUPPORTED or not token or not jid:
         client.table("autoapply_job_queue").update({"status": "unsupported"}).eq("id", r["id"]).execute()
         return False

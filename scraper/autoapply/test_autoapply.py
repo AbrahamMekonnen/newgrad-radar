@@ -211,6 +211,16 @@ def test_prepare_end_to_end():
         check("prepare e2e", False, str(e)[:120])
 
 
+def test_workday_url_parse():
+    """Workday token + job path are derived from the self-contained URL."""
+    import workday_adapter as wd
+    tok, path = wd.parse_url("https://snc.wd1.myworkdayjobs.com/en-US/snc/job/Lone-Tree-CO/Systems-Engineer-II_R0030601")
+    check("workday token parsed", tok == "snc:wd1:snc", f"got {tok}")
+    check("workday job path parsed", path == "Lone-Tree-CO/Systems-Engineer-II_R0030601", f"got {path}")
+    tok2, path2 = wd.parse_url("https://example.com/not-workday")
+    check("workday rejects non-workday url", tok2 is None and path2 is None)
+
+
 def test_submit_never_posts_when_gated():
     """A captcha-gated form must return needs_captcha and NEVER POST."""
     import submit as s
@@ -262,6 +272,7 @@ def main():
     print("=== UNIT ===")
     test_categorize(); test_resolve_deterministic(); test_authorized_option()
     test_ai_reuse_without_llm(); test_prepare_unsupported()
+    test_workday_url_parse()
     test_submit_never_posts_when_gated(); test_submit_payload_excludes_resume_and_unfilled()
 
     if not args.unit:

@@ -18,7 +18,7 @@ API endpoints (public, may work without auth):
 """
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 import requests
 
@@ -38,6 +38,32 @@ from field_knowledge_base import lookup_field, FIELD_PATTERNS
 WD_SUBDOMAINS = ["wd5", "wd1", "wd3", "wd2", "wd4"]
 
 
+def parse_url(url: str) -> Tuple[Optional[str], Optional[str]]:
+    """Derive (token, job_path) from a Workday job URL — Workday URLs are self-
+    contained, so we don't need a per-company token in COMPANIES.
+
+    e.g. https://snc.wd1.myworkdayjobs.com/en-US/snc/job/Lone-Tree-CO/Systems-Engineer_R123
+      -> token "snc:wd1:snc", job_path "Lone-Tree-CO/Systems-Engineer_R123"
+    """
+    from urllib.parse import urlparse
+    u = urlparse(url or "")
+    host = u.hostname or ""
+    if "myworkdayjobs" not in host:
+        return None, None
+    parts = host.split(".")
+    tenant, wd = parts[0], (parts[1] if len(parts) > 1 else "wd5")
+    segs = [s for s in u.path.split("/") if s]
+    anchor = "job" if "job" in segs else ("details" if "details" in segs else None)
+    if not anchor:
+        return None, None
+    i = segs.index(anchor)
+    site = segs[i - 1] if i >= 1 else tenant
+    job_path = "/".join(segs[i + 1:])
+    if not job_path:
+        return None, None
+    return f"{tenant}:{wd}:{site}", job_path
+
+
 def _parse_token(token: str) -> Tuple[str, str, str]:
     """Parse token into (tenant, wd_subdomain, site).
 
@@ -46,6 +72,8 @@ def _parse_token(token: str) -> Tuple[str, str, str]:
       - "adobe:wd5:external_experienced" -> (adobe, wd5, external_experienced)
       - "adobe.wd5" -> (adobe, wd5, external)
     """
+    if not token:
+        return "", "wd5", "external"
     if ":" in token:
         parts = token.split(":")
         tenant = parts[0]

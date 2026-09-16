@@ -81,7 +81,15 @@ def draft_answers(questions: list, profile, job: dict, max_chars: int = 900) -> 
         'Reply ONLY with a JSON object mapping the number (string) to the answer '
         'string, e.g. {"0":"...","1":"..."}.'
     )
-    data = llm_enrich._parse_json(llm_enrich._generate(prompt) or "")
+    # Retry a few times: under parallel prepare the free LLM tiers get briefly
+    # rate-limited and return empty, which would silently leave essays unfilled.
+    import time
+    data = {}
+    for attempt in range(3):
+        data = llm_enrich._parse_json(llm_enrich._generate(prompt) or "")
+        if isinstance(data, dict) and any(str(v).strip() for v in data.values()):
+            break
+        time.sleep(1.5 * (attempt + 1))
     if isinstance(data, dict):
         for k, v in data.items():
             try:
