@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -155,7 +156,7 @@ class ScraperConfig:
     schedule: str = 'daily'  # 'hourly', 'daily', 'weekly'
     enabled: bool = True
     rate_limit_delay: float = 2.0  # seconds between requests
-    max_retries: int = 3
+    max_retries: int = 1
     timeout: int = 300  # seconds
 
 
@@ -260,6 +261,7 @@ class InterviewQuestionOrchestrator:
             module_path='sources.devto_interviews',
             function_name='scrape_devto',
             priority=1,
+            timeout=900,
         ),
         ScraperConfig(
             name='hackernews',
@@ -268,6 +270,7 @@ class InterviewQuestionOrchestrator:
             module_path='sources.hn_interviews',
             function_name='scrape_hackernews',
             priority=1,
+            timeout=1200,
         ),
         ScraperConfig(
             name='reddit',
@@ -316,6 +319,7 @@ class InterviewQuestionOrchestrator:
             module_path='sources.interview_questions.careercup',
             function_name='scrape_careercup',
             priority=2,
+            timeout=1200,
         ),
         ScraperConfig(
             name='leetcode_discuss',
@@ -324,6 +328,7 @@ class InterviewQuestionOrchestrator:
             module_path='sources.interview_questions.leetcode_discuss',
             function_name='scrape_leetcode_discuss',
             priority=2,
+            timeout=900,
         ),
 
         # Tier 3: International sources (need translation)
@@ -376,6 +381,7 @@ class InterviewQuestionOrchestrator:
             module_path='sources.interview_questions.codestudio',
             function_name='scrape_codestudio',
             priority=4,
+            timeout=1200,
         ),
 
         # Tier 5: Niche sources
@@ -416,7 +422,7 @@ class InterviewQuestionOrchestrator:
         # Tier 6: Regional / global sources (many bot-block, but attempted).
         ScraperConfig(name='ambitionbox', source='ambitionbox', scraper_type='python',
                       module_path='sources.interview_questions.ambitionbox',
-                      function_name='scrape_ambitionbox', priority=6),
+                      function_name='scrape_ambitionbox', priority=6, timeout=1200),
         ScraperConfig(name='bayt_middleeast', source='bayt', scraper_type='python',
                       module_path='sources.interview_questions.bayt',
                       function_name='scrape_bayt_middleeast', priority=6),
@@ -453,7 +459,7 @@ class InterviewQuestionOrchestrator:
                       # run every 6h CI cycle (not the 'daily' default); the
                       # persisted CI cache keeps discovery warm so this is
                       # cheap and flood-safe.
-                      schedule='hourly'),
+                      schedule='hourly', timeout=2100),
         ScraperConfig(name='bootcamp_leaked', source='bootcamp', scraper_type='python',
                       module_path='sources.interview_questions.bootcamp_leaked',
                       function_name='scrape_bootcamp_leaked', priority=6),
@@ -768,86 +774,96 @@ class InterviewQuestionOrchestrator:
     async def _run_python_scraper(
         self, scraper: ScraperConfig, start_date: datetime
     ) -> tuple[list[dict], list[str]]:
-        """Run a Python scraper module with isolated error handling."""
+        """Run a Python scraper in a process that can be killed on timeout."""
         questions = []
         errors = []
 
-        try:
-            # Import the module dynamically
-            import importlib
-            import inspect
-            module = importlib.import_module(scraper.module_path)
-            scrape_func = getattr(module, scraper.function_name)
+        candidate_kwargs = {
+            'start_date': start_date,
+            'end_date': self.end_date,
+            'months_back': getattr(self, 'months_back', None),
+        }
+        encoded_kwargs = {
+            key: (
+                {'__scraper_type__': 'datetime', 'value': value.isoformat()}
+                if isinstance(value, datetime) else value
+            )
+            for key, value in candidate_kwargs.items()
+            if value is not None
+        }
 
-            # Scraper functions have heterogeneous signatures — pass only the
-            # kwargs each one actually declares (or everything if it takes
-            # **kwargs). Avoids "unexpected keyword argument 'start_date'".
-            candidate_kwargs = {
-                'start_date': start_date,
-                'end_date': self.end_date,
-                'months_back': getattr(self, 'months_back', None),
-            }
-            candidate_kwargs = {k: v for k, v in candidate_kwargs.items() if v is not None}
+        for attempt in range(scraper.max_retries):
+            output_path = None
+            process = None
             try:
-                sig = inspect.signature(scrape_func)
-                accepts_var_kw = any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD
-                    for p in sig.parameters.values()
+                with tempfile.NamedTemporaryFile(
+                    prefix=f'{scraper.name}-', suffix='.json', delete=False
+                ) as output_file:
+                    output_path = Path(output_file.name)
+
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    str(Path(__file__).with_name('scraper_worker.py')),
+                    '--module', scraper.module_path,
+                    '--function', scraper.function_name,
+                    '--kwargs', json.dumps(encoded_kwargs),
+                    '--output', str(output_path),
+                    cwd=Path(__file__).parent,
                 )
-                if accepts_var_kw:
-                    call_kwargs = candidate_kwargs
-                else:
-                    call_kwargs = {
-                        k: v for k, v in candidate_kwargs.items()
-                        if k in sig.parameters
-                    }
-            except (ValueError, TypeError):
-                call_kwargs = {}
+                await asyncio.wait_for(process.wait(), timeout=scraper.timeout)
 
-            # Call the scraper function with retry
-            for attempt in range(scraper.max_retries):
-                try:
-                    result = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            lambda: scrape_func(**call_kwargs),
-                        ),
-                        timeout=scraper.timeout,
+                payload = json.loads(output_path.read_text(encoding='utf-8'))
+                if process.returncode != 0 or not payload.get('ok'):
+                    detail = payload.get('error', f'exit code {process.returncode}')
+                    trace = payload.get('traceback')
+                    if trace:
+                        logger.error('%s child traceback:\n%s', scraper.name, trace)
+                    raise RuntimeError(detail)
+
+                scraper_result = payload.get('result')
+                if isinstance(scraper_result, list):
+                    questions = scraper_result
+                elif isinstance(scraper_result, dict):
+                    questions = scraper_result.get('questions', [])
+                    errors = scraper_result.get('errors', [])
+
+                questions = _explode_questions(
+                    [_question_to_dict(question) for question in questions]
+                )
+                break
+
+            except asyncio.CancelledError:
+                if process and process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                raise
+            except asyncio.TimeoutError:
+                if process and process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                message = f'Scraper timed out after {scraper.timeout}s'
+                if attempt < scraper.max_retries - 1:
+                    logger.warning(
+                        '%s; retrying (%d/%d)',
+                        message, attempt + 1, scraper.max_retries,
                     )
-
-                    if isinstance(result, list):
-                        questions = result
-                    elif isinstance(result, dict):
-                        questions = result.get('questions', [])
-                        errors = result.get('errors', [])
-
-                    # Scrapers return heterogeneous item types (dicts or
-                    # dataclass/plain objects). Normalize everything to dicts so
-                    # downstream dedup/normalize can use .get().
-                    questions = [_question_to_dict(q) for q in questions]
-                    # Explode multi-question records (questions list) into rows.
-                    questions = _explode_questions(questions)
-
-                    break  # Success, exit retry loop
-
-                except asyncio.TimeoutError:
-                    if attempt < scraper.max_retries - 1:
-                        logger.warning(f"{scraper.name} timed out, retrying ({attempt + 1}/{scraper.max_retries})")
-                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    else:
-                        errors.append(f"Scraper timed out after {scraper.max_retries} attempts")
-                except Exception as e:
-                    if attempt < scraper.max_retries - 1:
-                        logger.warning(f"{scraper.name} failed: {e}, retrying ({attempt + 1}/{scraper.max_retries})")
-                        await asyncio.sleep(2 ** attempt)
-                    else:
-                        errors.append(f"Scraper error after {scraper.max_retries} attempts: {str(e)}")
-
-        except ImportError as e:
-            errors.append(f"Module not found: {scraper.module_path} - {e}")
-        except AttributeError as e:
-            errors.append(f"Function not found: {scraper.function_name} - {e}")
-        except Exception as e:
-            errors.append(f"Unexpected error: {str(e)}")
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    errors.append(message)
+            except Exception as error:
+                if attempt < scraper.max_retries - 1:
+                    logger.warning(
+                        '%s failed: %s; retrying (%d/%d)',
+                        scraper.name, error, attempt + 1, scraper.max_retries,
+                    )
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    errors.append(
+                        f'Scraper error after {scraper.max_retries} attempt(s): {error}'
+                    )
+            finally:
+                if output_path:
+                    output_path.unlink(missing_ok=True)
 
         return questions, errors
 
@@ -875,10 +891,15 @@ class InterviewQuestionOrchestrator:
                 cwd=Path(__file__).parent,
             )
 
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=scraper.timeout,
-            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=scraper.timeout,
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.communicate()
+                raise
 
             if process.returncode != 0:
                 errors.append(f"TypeScript scraper failed: {stderr.decode()}")
@@ -939,6 +960,9 @@ class InterviewQuestionOrchestrator:
 
                 result.errors.extend(errors)
                 result.questions_found = len(questions)
+
+                if errors and not questions:
+                    raise RuntimeError('; '.join(errors))
 
                 # Deduplicate (thread-safe)
                 unique_questions, duplicates = await self._deduplicate_questions(questions)

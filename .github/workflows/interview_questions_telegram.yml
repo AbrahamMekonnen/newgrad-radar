@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
       models: read
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -75,7 +75,7 @@ jobs:
           cd scraper
           MONTHS="${{ inputs.months }}"
           MONTHS="${MONTHS:-6}"
-          python cli.py run telegram --months "$MONTHS" || echo "::warning::telegram run had errors; questions fetched before any failure were still saved incrementally"
+          python cli.py run telegram --months "$MONTHS"
 
       - name: Summary
         if: always()

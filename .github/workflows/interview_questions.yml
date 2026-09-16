@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: read
       models: read
-    timeout-minutes: 50
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -88,15 +88,14 @@ jobs:
           MONTHS="${MONTHS:-6}"
           # NOTE: telegram is excluded here and runs in its own workflow
           # (interview_questions_telegram.yml) — its wide crawl is too slow to
-          # share this 50-min job and was getting the whole run cancelled at
+          # share this 60-min job and was getting the whole run cancelled at
           # the timeout, losing everything.
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
             python cli.py run-all --months "$MONTHS" --exclude telegram --dry-run
           else
-            # Run every configured source. Don't fail the whole workflow if a
-            # few flaky sources error; the run still writes everything the
-            # working sources produced (each scraper is saved as it finishes).
-            python cli.py run-all --months "$MONTHS" --exclude telegram || echo "::warning::some sources failed; questions from working sources were still saved"
+            # Each scraper saves independently, but keep a failing exit code so
+            # timeouts and broken sources are visible in GitHub Actions.
+            python cli.py run-all --months "$MONTHS" --exclude telegram
           fi
 
       - name: Summary
