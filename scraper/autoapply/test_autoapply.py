@@ -53,11 +53,14 @@ def test_categorize():
         "Will you require visa sponsorship?": "sponsorship",
         "Gender": "gender", "Veteran Status": "veteran", "Race/Ethnicity": "race",
         "How did you hear about us?": "source", "Desired Salary": "salary",
-        "Tell us about a project": "custom",
     }
     for label, expected in cases.items():
         check(f"category({label!r})=={expected}", gh._category(label) == expected,
               f"got {gh._category(label)}")
+    # A free-text custom question must end up AI-drafted (its exact category name
+    # may vary as the knowledge base grows; what matters is it resolves to ai_needed).
+    _, src = gh._resolve_one(gh._category("Tell us about a project"), "textarea", [], gh.Profile(), "Tell us about a project")
+    check("free-text project question -> ai_needed", src == "ai_needed", f"got {src}")
 
 
 def test_resolve_deterministic():
@@ -118,8 +121,8 @@ def test_ai_reuse_without_llm():
 def test_prepare_unsupported():
     print("[unit] prepare() handles unsupported ATS + missing ids")
     from prepare import prepare_application
-    r1 = prepare_application({"ats_type": "workday", "ats_token": "x", "ats_job_id": "y"}, gh.Profile())
-    check("workday -> unsupported_ats", r1["status"] == "unsupported_ats")
+    r1 = prepare_application({"ats_type": "peoplesoft", "ats_token": "x", "ats_job_id": "y"}, gh.Profile())
+    check("peoplesoft -> unsupported_ats", r1["status"] == "unsupported_ats")
     r2 = prepare_application({"ats_type": "greenhouse"}, gh.Profile())
     check("missing ids -> missing_ids", r2["status"] == "missing_ids")
 

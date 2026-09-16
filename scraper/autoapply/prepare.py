@@ -25,9 +25,19 @@ sys.path.insert(0, str(HERE))
 
 import greenhouse_adapter as gh          # noqa: E402
 import lever_adapter as lv               # noqa: E402
+import ashby_adapter as ab               # noqa: E402
+import smartrecruiters_adapter as sr     # noqa: E402
+import bamboohr_adapter as bhr           # noqa: E402
+import jobvite_adapter as jv             # noqa: E402
+import jazzhr_adapter as jazz            # noqa: E402
+import recruitee_adapter as rec          # noqa: E402
+import breezyhr_adapter as breezy        # noqa: E402
+import icims_adapter as icims            # noqa: E402
+import taleo_adapter as taleo            # noqa: E402
+import workday_adapter as wd             # noqa: E402
 from ai_drafter import draft_answers     # noqa: E402
 
-SUPPORTED = {"greenhouse", "lever"}      # ashby pending (GraphQL op capture)
+SUPPORTED = {"greenhouse", "lever", "ashby", "smartrecruiters", "bamboohr", "jobvite", "jazzhr", "recruitee", "breezyhr", "icims", "taleo", "workday"}
 
 
 def prepare_application(job: dict, profile) -> dict:
@@ -45,6 +55,26 @@ def prepare_application(job: dict, profile) -> dict:
     try:
         if ats == "greenhouse":
             res = gh.resolve(gh.fetch_form(token, jid), profile)
+        elif ats == "ashby":
+            res = ab.resolve(ab.fetch_form(token, jid), profile)
+        elif ats == "smartrecruiters":
+            res = sr.resolve(sr.fetch_form(token, jid), profile)
+        elif ats == "bamboohr":
+            res = bhr.resolve(bhr.fetch_form(token, jid), profile)
+        elif ats == "jobvite":
+            res = jv.resolve(jv.fetch_form(token, jid), profile)
+        elif ats == "jazzhr":
+            res = jazz.resolve(jazz.fetch_form(token, jid), profile)
+        elif ats == "recruitee":
+            res = rec.resolve(rec.fetch_form(token, jid), profile)
+        elif ats == "breezyhr":
+            res = breezy.resolve(breezy.fetch_form(token, jid), profile)
+        elif ats == "icims":
+            res = icims.resolve(icims.fetch_form(token, jid), profile)
+        elif ats == "taleo":
+            res = taleo.resolve(taleo.fetch_form(token, jid), profile)
+        elif ats == "workday":
+            res = wd.resolve(wd.fetch_form(token, jid), profile)
         else:
             res = lv.resolve(lv.fetch_form(token, jid), profile)
     except Exception as e:
