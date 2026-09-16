@@ -46,11 +46,11 @@ function MyListContent({ userId }: { userId: string }) {
   const supabase = createClient();
 
   const fetchTrackedCompanies = useCallback(async () => {
-    let listData: { company_slug: string; auto_apply?: boolean; notify_enabled?: boolean; notify_mode?: NotifyMode; job_filters?: JobFilters }[] | null = null;
+    let listData: { company_slug: string; auto_apply?: boolean; notifications_enabled?: boolean; notify_mode?: NotifyMode; filters?: JobFilters }[] | null = null;
 
     const { data, error } = await supabase
       .from('user_lists')
-      .select('company_slug, auto_apply, notify_enabled, notify_mode, job_filters')
+      .select('company_slug, auto_apply, notifications_enabled, filters')
       .eq('user_id', userId);
 
     if (error) {
@@ -86,27 +86,20 @@ function MyListContent({ userId }: { userId: string }) {
 
     // Set notification state
     const notify = new Set(
-      listData.filter((item) => item.notify_enabled !== false).map((item) => item.company_slug)
+      listData.filter((item) => item.notifications_enabled !== false).map((item) => item.company_slug)
     );
     setNotifySlugs(notify);
 
     // Set company filters
     const filters: Record<string, JobFilters> = {};
     listData.forEach((item) => {
-      if (item.job_filters && Object.keys(item.job_filters).length > 0) {
-        filters[item.company_slug] = item.job_filters;
+      if (item.filters && Object.keys(item.filters).length > 0) {
+        filters[item.company_slug] = item.filters;
       }
     });
     setCompanyFilters(filters);
 
-    // Get the most common notify mode (default to instant)
-    const modes = listData.filter((item) => item.notify_mode).map((item) => item.notify_mode!);
-    if (modes.length > 0) {
-      const modeCount: Record<string, number> = {};
-      modes.forEach((m) => { modeCount[m] = (modeCount[m] || 0) + 1; });
-      const topMode = Object.entries(modeCount).sort((a, b) => b[1] - a[1])[0]?.[0] as NotifyMode;
-      if (topMode) setNotifyMode(topMode);
-    }
+    // notify_mode has no column on user_lists; it stays a UI-only preference.
 
     const { data: companiesData } = await supabase
       .from('companies')
@@ -215,10 +208,10 @@ function MyListContent({ userId }: { userId: string }) {
       });
     } else {
       let insertError = null;
-      // Default notify_enabled to true when adding a company
+      // Default notifications_enabled to true when adding a company
       const { error } = await supabase
         .from('user_lists')
-        .insert({ user_id: userId, company_slug: slug, auto_apply: false, notify_enabled: true, notify_mode: notifyMode });
+        .insert({ user_id: userId, company_slug: slug, auto_apply: false, notifications_enabled: true });
 
       if (error) {
         const { error: fallbackError } = await supabase
@@ -302,7 +295,7 @@ function MyListContent({ userId }: { userId: string }) {
     // Persist to database
     const { error } = await supabase
       .from('user_lists')
-      .update({ notify_enabled: enabled })
+      .update({ notifications_enabled: enabled })
       .eq('user_id', userId)
       .eq('company_slug', slug);
 
@@ -324,7 +317,7 @@ function MyListContent({ userId }: { userId: string }) {
     // Persist to database
     const { error } = await supabase
       .from('user_lists')
-      .update({ notify_enabled: enabled })
+      .update({ notifications_enabled: enabled })
       .eq('user_id', userId)
       .in('company_slug', slugs);
 
@@ -334,17 +327,8 @@ function MyListContent({ userId }: { userId: string }) {
   };
 
   const handleNotifyModeChange = async (mode: NotifyMode) => {
+    // notify_mode has no user_lists column; keep it as a UI-only preference for now.
     setNotifyMode(mode);
-
-    // Update all user_lists entries with the new mode
-    const { error } = await supabase
-      .from('user_lists')
-      .update({ notify_mode: mode })
-      .eq('user_id', userId);
-
-    if (error) {
-      console.log('Notify mode change: column may not exist yet, UI updated but not persisted');
-    }
   };
 
   const handleFilterClick = (slug: string) => {
@@ -373,9 +357,8 @@ function MyListContent({ userId }: { userId: string }) {
         user_id: userId,
         company_slug: slug,
         auto_apply: autoApply,
-        notify_enabled: notifyEnabled,
-        notify_mode: notifyMode,
-        job_filters: Object.keys(filters).length > 0 ? filters : null,
+        notifications_enabled: notifyEnabled,
+        filters: Object.keys(filters).length > 0 ? filters : null,
       });
 
     if (error) {
@@ -437,7 +420,7 @@ function MyListContent({ userId }: { userId: string }) {
     const updatePromises = slugs.map((slug) =>
       supabase
         .from('user_lists')
-        .update({ job_filters: Object.keys(filters).length > 0 ? filters : null })
+        .update({ filters: Object.keys(filters).length > 0 ? filters : null })
         .eq('user_id', userId)
         .eq('company_slug', slug)
     );
@@ -481,7 +464,7 @@ function MyListContent({ userId }: { userId: string }) {
     // Persist to database
     const { error } = await supabase
       .from('user_lists')
-      .update({ job_filters: filters })
+      .update({ filters: filters })
       .eq('user_id', userId)
       .eq('company_slug', slug);
 

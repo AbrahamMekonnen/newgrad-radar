@@ -166,6 +166,81 @@ def enqueue_for_user(client, user_id: str, cap_per_run: int = 30) -> int:
     return added
 
 
+def _queue_insert(client, user_id: str, j: dict) -> bool:
+    try:
+        client.table("autoapply_job_queue").insert({
+            "user_id": user_id, "job_id": j["id"], "job_title": j.get("title"),
+            "company_slug": j.get("company_slug"), "company_name": j.get("company_name"),
+            "job_url": j.get("apply_url") or j.get("url"), "ats_type": j.get("ats_type"),
+            "priority": 2, "status": "pending",
+        }).execute()
+        return True
+    except Exception as e:
+        if "23505" not in str(e):  # duplicate is fine
+            logger.debug(f"enqueue failed {j.get('id')}: {e}")
+        return False
+
+
+def _passes_company_filters(job: dict, jf: dict) -> bool:
+    """Apply the per-company watchlist job_filters (role/level), if any."""
+    if not jf:
+        return True
+    roles = jf.get("roles") or jf.get("role_types")
+    if roles and not (set(job.get("role_types") or []) & set(roles)):
+        return False
+    levels = jf.get("experience_levels")
+    if levels and job.get("experience_level") not in levels and job.get("experience_level") is not None:
+        return False
+    return True
+
+
+def enqueue_watchlist_for_user(client, user_id: str, cap_per_run: int = 30) -> int:
+    """Company-driven auto-apply: for each watchlisted company the user turned
+    auto-apply ON, queue that company's specific, preparable jobs into the SAME
+    pipeline as the saved filters — so watchlist auto-apply lands in the
+    /auto-apply inbox too (in sync), honouring per-company job_filters."""
+    prof = (client.table("user_profiles").select("auto_apply_enabled")
+            .eq("user_id", user_id).single().execute().data) or {}
+    if not prof.get("auto_apply_enabled"):
+        return 0
+    lists = (client.table("user_lists").select("company_slug, filters")
+             .eq("user_id", user_id).eq("auto_apply", True).execute().data) or []
+    if not lists:
+        return 0
+
+    existing = set()
+    for tbl in ("autoapply_job_queue", "application_logs"):
+        try:
+            rows = (client.table(tbl).select("job_id").eq("user_id", user_id).limit(5000).execute().data) or []
+            existing |= {r["job_id"] for r in rows}
+        except Exception:
+            pass
+
+    added = 0
+    for entry in lists:
+        slug, jf = entry.get("company_slug"), entry.get("filters") or {}
+        jobs = (client.table("jobs")
+                .select("id,title,company_slug,company_name,url,apply_url,ats_type,role_types,experience_level")
+                .eq("company_slug", slug).eq("is_active", True).limit(200).execute().data) or []
+        for j in jobs:
+            if added >= cap_per_run:
+                break
+            if j["id"] in existing:
+                continue
+            if (j.get("ats_type") or "").lower() not in SUPPORTED:
+                continue
+            if not apply_target_ok(j.get("ats_type"), j.get("apply_url") or j.get("url") or "", slug):
+                continue
+            if not _passes_company_filters(j, jf):
+                continue
+            if _queue_insert(client, user_id, j):
+                existing.add(j["id"])
+                added += 1
+    if added:
+        logger.info(f"user {user_id[:8]}: watchlist queued {added}")
+    return added
+
+
 def main() -> None:
     _load_env()
     ap = argparse.ArgumentParser()
@@ -177,21 +252,31 @@ def main() -> None:
     client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
     if args.user:
-        users = [args.user]
+        rule_users, watch_users = [args.user], [args.user]
     else:
-        rows = (client.table("user_profiles").select("user_id")
-                .eq("auto_apply_enabled", True).eq("auto_apply_rules_enabled", True)
-                .execute().data) or []
-        users = [r["user_id"] for r in rows]
-    logger.info(f"{len(users)} user(s) with filter-based auto-apply enabled")
+        # Filter-based auto-apply users (saved criteria).
+        rrows = (client.table("user_profiles").select("user_id")
+                 .eq("auto_apply_enabled", True).eq("auto_apply_rules_enabled", True)
+                 .execute().data) or []
+        rule_users = [r["user_id"] for r in rrows]
+        # Company-based auto-apply users (any watchlist company with auto_apply on).
+        wrows = (client.table("user_lists").select("user_id")
+                 .eq("auto_apply", True).limit(10000).execute().data) or []
+        watch_users = list({r["user_id"] for r in wrows})
+    logger.info(f"{len(rule_users)} filter-based + {len(watch_users)} watchlist auto-apply user(s)")
 
     total = 0
-    for uid in users:
+    for uid in rule_users:
         try:
             total += enqueue_for_user(client, uid, cap_per_run=args.limit)
         except Exception as e:
-            logger.warning(f"user {uid}: {e}")
-    logger.info(f"DONE: queued {total} applications across {len(users)} users")
+            logger.warning(f"user {uid} (filters): {e}")
+    for uid in watch_users:
+        try:
+            total += enqueue_watchlist_for_user(client, uid, cap_per_run=args.limit)
+        except Exception as e:
+            logger.warning(f"user {uid} (watchlist): {e}")
+    logger.info(f"DONE: queued {total} applications")
 
 
 if __name__ == "__main__":

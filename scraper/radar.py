@@ -247,7 +247,8 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
     for company_slug, jobs in jobs_by_company.items():
         # Get users tracking this company
         query_result = client.table("user_lists").select(
-            "user_id, user_preferences!inner(ntfy_topic, push_enabled, email_enabled, role_filters)"
+            "user_id, notifications_enabled, filters, "
+            "user_preferences!inner(ntfy_topic, push_enabled, email_enabled, role_filters)"
         ).eq("company_slug", company_slug).execute()
 
         # Also get user emails from auth.users via user_profiles
@@ -261,10 +262,16 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
 
         for row in query_result.data or []:
             user_id = row["user_id"]
+            # Honour the per-company watchlist toggle: if the user turned
+            # notifications OFF for this company, skip it entirely.
+            if row.get("notifications_enabled") is False:
+                continue
             prefs = row.get("user_preferences", {})
-            role_filters = prefs.get("role_filters") or []
+            # Per-company filters override the global role_filters.
+            jf = row.get("filters") or {}
+            role_filters = jf.get("roles") or jf.get("role_types") or prefs.get("role_filters") or []
 
-            # Filter jobs by role if user has filters
+            # Filter jobs by role if the user has filters
             matching_jobs = jobs
             if role_filters:
                 matching_jobs = [
