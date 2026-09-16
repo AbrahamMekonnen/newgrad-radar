@@ -58,8 +58,34 @@ def _submit_one(client, COMPANIES, r: dict, profile, dry_run: bool) -> str:
     if st == "submitted":
         patch["submitted_at"] = _now()
     _write(client, r["id"], new_status, result, patch)
+
+    # Mirror real outcomes onto the Applications page (application_logs). Only a
+    # true submit or a genuine failure is logged; needs_captcha stays a one-tap
+    # action in the inbox (it wasn't submitted), so it isn't logged as applied.
+    if st == "submitted":
+        _log_application(client, r["user_id"], r["job_id"], ats, "submitted", None, _now())
+    elif st in ("submit_failed", "incomplete"):
+        _log_application(client, r["user_id"], r["job_id"], ats, "failed",
+                         result.get("detail", "submit failed"), None)
+
     logger.info(f"  {job.get('company_name')}: {st} ({result.get('detail','')[:60]})")
     return st
+
+
+def _log_application(client, user_id, job_id, ats_type, status, error_message, submitted_at):
+    """Upsert an application_logs row so the Applications page reflects the result."""
+    try:
+        existing = (client.table("application_logs").select("id")
+                    .eq("user_id", user_id).eq("job_id", job_id).limit(1).execute().data)
+        row = {"status": status, "ats_type": ats_type, "error_message": error_message,
+               "submitted_at": submitted_at}
+        if existing:
+            client.table("application_logs").update(row).eq("id", existing[0]["id"]).execute()
+        else:
+            row.update({"user_id": user_id, "job_id": job_id})
+            client.table("application_logs").insert(row).execute()
+    except Exception as e:
+        logger.warning(f"  application_logs upsert failed for {job_id}: {e}")
 
 
 def _write(client, row_id, status, log, extra: dict | None = None):
