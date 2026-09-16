@@ -28,6 +28,7 @@ interface JobCardProps {
   onFindRecruiters?: (companySlug: string, companyName: string, jobId: string) => Promise<void>;
   autoApplyEnabled?: boolean;
   application?: ApplicationLog | null;
+  autoApplyStatus?: string | null;  // status in autoapply_job_queue, if any
   onAutoApply?: (jobId: string) => Promise<void>;
   onCancelApplication?: (jobId: string) => Promise<void>;
   saveCount?: number;
@@ -45,6 +46,7 @@ export function JobCard({
   onFindRecruiters,
   autoApplyEnabled = false,
   application,
+  autoApplyStatus,
   onAutoApply,
   onCancelApplication,
   saveCount = 0,
@@ -914,6 +916,7 @@ export function JobCard({
               jobId={job.id}
               atsType={job.ats_type || null}
               application={application}
+              queuedStatus={autoApplyStatus}
               onAutoApply={onAutoApply}
               onCancelApplication={onCancelApplication}
               onOptimizeFirst={() => setShowResumeModal(true)}

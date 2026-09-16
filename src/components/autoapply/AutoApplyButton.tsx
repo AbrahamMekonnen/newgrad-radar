@@ -21,7 +21,15 @@ interface AutoApplyButtonProps {
   disabled?: boolean;
   applicationUrl?: string;
   hideStatus?: boolean;
+  queuedStatus?: string | null;  // status in the new autoapply_job_queue, if any
 }
+
+// How each queue status reads on a job card (keeps card + Auto-Apply tab in sync).
+const QUEUED_LABEL: Record<string, string> = {
+  pending: 'Queued', processing: 'Preparing…', prepared: 'In Auto-Apply',
+  submit_requested: 'Submitting…', submitting: 'Submitting…',
+  submitted: 'Applied', applied: 'Applied',
+};
 
 /**
  * Log an application attempt to the API
@@ -66,6 +74,7 @@ export function AutoApplyButton({
   disabled = false,
   applicationUrl,
   hideStatus = false,
+  queuedStatus,
 }: AutoApplyButtonProps) {
   const [loading, setLoading] = useState(false);
 
@@ -145,6 +154,24 @@ export function AutoApplyButton({
   // If there's an existing application, show status (unless hideStatus is true)
   if (application && !hideStatus) {
     return <ApplicationStatus application={application} compact onCancel={onCancelApplication} />;
+  }
+
+  // Already in the auto-apply queue — show its live state instead of the button,
+  // so the job card mirrors the Auto-Apply tab.
+  if (queuedStatus && QUEUED_LABEL[queuedStatus]) {
+    const done = queuedStatus === 'submitted' || queuedStatus === 'applied';
+    return (
+      <a href="/auto-apply"
+         className={cn('inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border',
+           done ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700'
+                : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700')}
+         title="View in the Auto-Apply tab">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        {QUEUED_LABEL[queuedStatus]}
+      </a>
+    );
   }
 
   // Supported by the new auto-apply pipeline (12 ATS adapters).

@@ -139,6 +139,8 @@ export default function HomePage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [autoApplyEnabled, setAutoApplyEnabled] = useState(true);
   const [applications, setApplications] = useState<Map<string, ApplicationLog>>(new Map());
+  // job_id -> status in the new autoapply_job_queue, so cards mirror the Auto-Apply tab.
+  const [autoApplyStatuses, setAutoApplyStatuses] = useState<Record<string, string>>({});
   const [recruitersMap, setRecruitersMap] = useState<Map<string, Recruiter[]>>(new Map());
   // Job ids we've already fetched recruiters for — so infinite-scroll only
   // fetches the delta instead of re-querying the whole list each append.
@@ -467,6 +469,12 @@ export default function HomePage() {
         weeklyGoal: profile.weekly_goal || 10,
       });
     }
+
+    // Fetch the user's auto-apply queue state so job cards mirror the Auto-Apply tab.
+    fetch('/api/auto-apply/queue')
+      .then((r) => r.json())
+      .then((d) => setAutoApplyStatuses(d.statuses || {}))
+      .catch(() => {});
 
     // Fetch application logs
     const { data: logs } = await supabase
@@ -860,6 +868,10 @@ export default function HomePage() {
         return;
       }
       showToast(data.message || 'Added to Auto-Apply.', data.queued ? 'success' : 'info');
+      // Reflect the queued state on the card immediately (in sync with the tab).
+      if (data.queued || data.already) {
+        setAutoApplyStatuses((prev) => ({ ...prev, [jobId]: data.status || 'pending' }));
+      }
     } catch (err) {
       console.error('Unexpected error in auto-apply:', err);
       showToast('An unexpected error occurred', 'error');
@@ -1190,6 +1202,7 @@ export default function HomePage() {
                 loading={loading && jobs.length === 0}
                 autoApplyEnabled={autoApplyEnabled}
                 applications={applications}
+                autoApplyStatuses={autoApplyStatuses}
                 onAutoApply={handleAutoApply}
                 onCancelApplication={handleCancelApplication}
                 recruitersMap={recruitersMap}

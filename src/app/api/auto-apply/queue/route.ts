@@ -33,6 +33,22 @@ async function dispatchPrepare(): Promise<boolean> {
   } catch { return false; }
 }
 
+// GET: the current user's auto-apply queue state as { jobId: status }, so job
+// cards can show "In Auto-Apply" and stay in sync with the Auto-Apply tab.
+export async function GET() {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ statuses: {} });
+  const { data } = await admin()
+    .from('autoapply_job_queue')
+    .select('job_id, status')
+    .eq('user_id', user.id)
+    .limit(2000);
+  const statuses: Record<string, string> = {};
+  for (const r of data || []) statuses[r.job_id] = r.status;
+  return NextResponse.json({ statuses });
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();

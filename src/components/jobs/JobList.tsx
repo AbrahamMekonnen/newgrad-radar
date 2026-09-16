@@ -13,6 +13,7 @@ interface JobListProps {
   loading?: boolean;
   autoApplyEnabled?: boolean;
   applications?: Map<string, ApplicationLog>;
+  autoApplyStatuses?: Record<string, string>;  // job_id -> autoapply_job_queue status
   onAutoApply?: (jobId: string) => Promise<void>;
   onCancelApplication?: (jobId: string) => Promise<void>;
   recruitersMap?: Map<string, Recruiter[]>;
@@ -30,6 +31,7 @@ export function JobList({
   loading,
   autoApplyEnabled,
   applications,
+  autoApplyStatuses,
   onAutoApply,
   onCancelApplication,
   recruitersMap = new Map(),
@@ -102,6 +104,7 @@ export function JobList({
             onSave={onSaveJob}
             autoApplyEnabled={autoApplyEnabled}
             application={applications?.get(job.id)}
+            autoApplyStatus={autoApplyStatuses?.[job.id]}
             onAutoApply={onAutoApply}
             onCancelApplication={onCancelApplication}
             recruiters={recruitersForJob(recruitersMap.get(job.id) || recruitersMap.get(job.company_slug) || [], job)}
