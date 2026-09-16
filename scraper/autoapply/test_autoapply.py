@@ -211,6 +211,22 @@ def test_prepare_end_to_end():
         check("prepare e2e", False, str(e)[:120])
 
 
+def test_apply_target_validity():
+    """Only specific job URLs are queueable; board roots / blogs are rejected."""
+    from rules import apply_target_ok
+    good = [("ashby", "https://jobs.ashbyhq.com/baseten/fc6e5f2e-eb2d-4a6c-8a51-8422e8662bde", "baseten"),
+            ("greenhouse", "https://job-boards.greenhouse.io/airtable/jobs/8403127002", "airtable"),
+            ("lever", "https://jobs.lever.co/palantir/ac978161-6f46-4f6b-ad9e-a258e642751c", "palantir"),
+            ("workday", "https://snc.wd1.myworkdayjobs.com/en-US/snc/job/Loc/Eng_R123", "snc")]
+    bad = [("ashby", "https://jobs.ashbyhq.com/odyssey", "odyssey"),
+           ("ashby", "https://www.ashbyhq.com/blog/engineering/ai", "ashby"),
+           ("greenhouse", "https://boards.greenhouse.io/airtable", "airtable"),
+           ("lever", "https://jobs.lever.co/palantir", "palantir"),
+           ("workday", "https://snc.wd1.myworkdayjobs.com/en-US/snc", "snc")]
+    check("valid job URLs pass", all(apply_target_ok(a, u, s) for a, u, s in good))
+    check("board-root/blog URLs rejected", not any(apply_target_ok(a, u, s) for a, u, s in bad))
+
+
 def test_workday_url_parse():
     """Workday token + job path are derived from the self-contained URL."""
     import workday_adapter as wd
@@ -272,7 +288,7 @@ def main():
     print("=== UNIT ===")
     test_categorize(); test_resolve_deterministic(); test_authorized_option()
     test_ai_reuse_without_llm(); test_prepare_unsupported()
-    test_workday_url_parse()
+    test_workday_url_parse(); test_apply_target_validity()
     test_submit_never_posts_when_gated(); test_submit_payload_excludes_resume_and_unfilled()
 
     if not args.unit:

@@ -31,6 +31,38 @@ from prepare import SUPPORTED  # noqa: E402
 _US_HINTS = ("united states", "usa", " us", "u.s", "remote", ", ca", ", ny", ", tx",
              ", wa", ", ma", ", il", "new york", "san francisco", "seattle", "austin")
 
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+
+
+def apply_target_ok(ats: str, url: str, slug: str = "") -> bool:
+    """True only if the URL points at a SPECIFIC job we can actually prepare —
+    not a board-root, department page, or blog. This is what keeps
+    form_unavailable noise (e.g. jobs.ashbyhq.com/<org> with no job id) out of
+    the queue. Stress-testing showed these bad URLs are the real failure source.
+    """
+    ats = (ats or "").lower()
+    url = url or ""
+    if not url.startswith("http"):
+        return False
+    if ats == "workday":
+        try:
+            from workday_adapter import parse_url
+            tok, jid = parse_url(url)
+            return bool(tok and jid)
+        except Exception:
+            return False
+    if ats in ("ashby", "lever"):
+        return bool(_UUID_RE.search(url))           # both use UUID job ids
+    if ats == "greenhouse":
+        return bool(re.search(r"(gh_jid=\d{4,}|/jobs/\d{4,})", url))
+    if ats == "smartrecruiters":
+        return bool(re.search(r"/\d{6,}(?:[/?#]|$)", url))
+    # generic ATS: need a non-trivial last path segment that isn't the org slug
+    seg = [s for s in url.split("?")[0].rstrip("/").split("/") if s]
+    jid = seg[-1] if seg else ""
+    return bool(jid and jid.lower() != (slug or "").lower() and len(jid) >= 5
+                and jid not in ("jobs", "careers", "apply", "search", "job"))
+
 
 def _load_env() -> None:
     for p in (HERE.parent / ".env", HERE.parent.parent / ".env.local"):
@@ -103,7 +135,19 @@ def enqueue_for_user(client, user_id: str, cap_per_run: int = 30) -> int:
             existing |= {r[col] for r in rows}
         except Exception:
             pass
-    todo = [j for j in jobs if j["id"] not in existing][:cap_per_run]
+    # Skip jobs whose URL isn't a specific, preparable posting (board roots,
+    # department pages, blog links) — they'd only become form_unavailable noise.
+    fresh = [j for j in jobs if j["id"] not in existing]
+    todo, skipped = [], 0
+    for j in fresh:
+        if apply_target_ok(j.get("ats_type"), j.get("apply_url") or j.get("url") or "", j.get("company_slug")):
+            todo.append(j)
+        else:
+            skipped += 1
+        if len(todo) >= cap_per_run:
+            break
+    if skipped:
+        logger.info(f"  skipped {skipped} non-specific/unpreparable URLs")
 
     added = 0
     for j in todo:
