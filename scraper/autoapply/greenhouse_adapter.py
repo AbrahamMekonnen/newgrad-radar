@@ -52,6 +52,7 @@ class ResolvedField:
     category: str
     value: Optional[object] = None
     source: str = "unfilled"   # profile | matched | eeo | ai_needed | user_needed | file
+    values: list = field(default_factory=list)  # dropdown options [{label,value}]
 
 
 # ---- form fetch -------------------------------------------------------------
@@ -113,16 +114,25 @@ _CAT = [
     ("github",     r"\bgithub\b"),
     ("portfolio",  r"\bportfolio|website|personal site\b"),
     ("location",   r"\b(location|city|current location|address|zip|postal)\b"),
-    ("work_auth",  r"\b(authoriz|eligible to work|legally.*work|work permit)\b"),
-    ("sponsorship", r"\b(sponsor|visa)\b"),
+    # sponsorship BEFORE work_auth: a "sponsorship for work authorization"
+    # question is about sponsorship, not work auth. sponsor\w* so "sponsorship"
+    # matches, not just the bare word "sponsor".
+    ("sponsorship", r"\b(sponsor\w*|visa)\b"),
+    # authoriz\w* so "authorization"/"authorized" match (bare \bauthoriz\b never did).
+    ("work_auth",  r"\b(authoriz\w*|eligible to work|legally.*work|work permit)\b"),
     ("relocate",   r"\brelocat\b"),
     ("salary",     r"\b(salary|compensation|pay expectation|desired|expected comp)\b"),
-    ("start_date", r"\b(start date|available|availability|notice)\b"),
+    # "notice period", not bare "notice" — else "Privacy Notice" mis-matched here.
+    ("start_date", r"\b(start date|available|availability|notice period)\b"),
     ("source",     r"\b(how did you hear|referr|where did you)\b"),
+    # Acknowledgement / consent checkboxes — never auto-answered; the user ticks
+    # these explicitly in the completion box.
+    ("consent",    r"\b(acknowledge|consent|agree to|arbitration|privacy notice|terms|i have read)\b"),
     ("gender",     r"\bgender\b"),
     ("race",       r"\b(race|ethnic|hispanic|latino)\b"),
     ("veteran",    r"\bveteran\b"),
     ("disability", r"\bdisab\b"),
+    ("age",        r"\b(18\+|are you .*18|at least 18|age of 18)\b"),
     ("experience", r"\byears? (of )?experience\b"),
 ]
 
@@ -149,7 +159,8 @@ def resolve(questions: list[dict], p: Profile) -> dict:
         ftype = gf.get("type", "")
         values = gf.get("values", [])
         cat = _category(label)
-        rf = ResolvedField(label=label, name=name, type=ftype, required=required, category=cat)
+        rf = ResolvedField(label=label, name=name, type=ftype, required=required, category=cat,
+                           values=values or [])
 
         val, src = _resolve_one(cat, ftype, values, p, label)
         rf.value, rf.source = val, src
@@ -204,6 +215,10 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     if cat in ("gender", "race", "veteran", "disability"):
         # EEO — default to decline unless the user set a value; never block.
         return (_decline_option(values), "eeo")
+    if cat in ("consent", "age"):
+        # Legal attestations (acknowledge/agree/18+) — never auto-answered; the
+        # user ticks these once in the completion box.
+        return (None, "user_needed")
     # custom question: check learned answers first
     if label and p.custom_answers.get(label):
         return (p.custom_answers[label], "profile")

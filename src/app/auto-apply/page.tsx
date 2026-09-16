@@ -5,9 +5,18 @@ import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
+interface Opt { label: string; value: string }
 interface Field {
   label: string; name: string; type: string; value: string | null;
-  source: string; required: boolean; category?: string;
+  source: string; required: boolean; category?: string; values?: Opt[];
+}
+
+// Show the human label for a stored option value (so "1" reads as "Yes").
+function displayValue(f: Field): string {
+  const v = f.value;
+  if (v === null || v === undefined || v === '') return '—';
+  const opt = (f.values || []).find((o) => String(o.value) === String(v));
+  return opt ? opt.label : String(v);
 }
 interface SubmitLog { status?: string; detail?: string; at?: string }
 interface App {
@@ -25,6 +34,7 @@ export default function AutoApplyInboxPage() {
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
+  const [answers, setAnswers] = useState<Record<string, Record<string, string>>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
 
   const load = useCallback(async (silent = false) => {
@@ -95,6 +105,27 @@ export default function AutoApplyInboxPage() {
     setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
   };
   const readyIds = () => apps.filter((a) => (a.status ?? 'prepared') === 'prepared').map((a) => a.id);
+
+  // Complete the missing required fields IN-APP, then finish the application:
+  // merge the answers into prepared_data (source 'user'), persist, and submit.
+  // No back-and-forth to a blank ATS page for the parts we can collect here.
+  const completeAndSubmit = async (app: App, missing: Field[]) => {
+    const given = answers[app.id] || {};
+    const unanswered = missing.filter((f) => !given[f.name] || given[f.name].trim() === '');
+    if (unanswered.length) {
+      showToast(`Still need: ${unanswered.map((f) => f.label).join(', ')}`, 'error');
+      return;
+    }
+    const fields = (app.prepared_data || []).map((f) =>
+      given[f.name] !== undefined ? { ...f, value: given[f.name], source: 'user' } : f
+    );
+    setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, prepared_data: fields, ready_pct: 100 } : a)));
+    await fetch('/api/auto-apply/inbox', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: app.id, prepared_data: fields, ready_pct: 100, needs_user: [] }),
+    });
+    await submit({ id: app.id }, [app.id]);
+  };
 
   if (loading) return <div className="max-w-3xl mx-auto p-8 text-gray-500">Loading…</div>;
 
@@ -203,17 +234,61 @@ export default function AutoApplyInboxPage() {
                         {auto.map((f) => (
                           <div key={f.name} className="text-sm flex gap-2">
                             <span className="text-gray-500 dark:text-gray-400">{f.label}:</span>
-                            <span className="text-gray-800 dark:text-gray-200 truncate">{String(f.value || '—')}</span>
+                            <span className="text-gray-800 dark:text-gray-200 truncate">{displayValue(f)}</span>
                           </div>
                         ))}
                       </div>
                     </details>
                   )}
 
+                  {/* Complete the missing required fields here — no trip to a blank ATS page. */}
                   {needs.length > 0 && (
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      Needs your input on the form: {needs.map((f) => f.label).join(', ')}
-                    </p>
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-400 mb-2">
+                        Complete the rest ({needs.length}) — we finish it for you
+                      </p>
+                      <div className="space-y-3">
+                        {needs.map((f) => {
+                          const val = answers[app.id]?.[f.name] ?? '';
+                          const set = (v: string) => setAnswers((prev) => ({
+                            ...prev, [app.id]: { ...(prev[app.id] || {}), [f.name]: v },
+                          }));
+                          const inputCls = 'w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700';
+                          return (
+                            <div key={f.name}>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                {f.label}{f.required && <span className="text-red-500"> *</span>}
+                              </label>
+                              {f.category === 'consent' ? (
+                                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                  <input type="checkbox" checked={!!val}
+                                    onChange={(e) => set(e.target.checked ? (f.values?.[0]?.value ?? 'Yes') : '')} />
+                                  I have read and acknowledge this.
+                                </label>
+                              ) : (f.values && f.values.length > 0) ? (
+                                <select value={val} onChange={(e) => set(e.target.value)} className={inputCls}>
+                                  <option value="">Select…</option>
+                                  {f.values.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                              ) : f.category === 'age' ? (
+                                <select value={val} onChange={(e) => set(e.target.value)} className={inputCls}>
+                                  <option value="">Select…</option>
+                                  <option value="Yes">Yes</option>
+                                  <option value="No">No</option>
+                                </select>
+                              ) : (f.type || '').includes('textarea') ? (
+                                <textarea value={val} rows={3} onChange={(e) => set(e.target.value)} className={inputCls} />
+                              ) : (
+                                <input type="text" value={val} onChange={(e) => set(e.target.value)} className={inputCls} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <Button onClick={() => completeAndSubmit(app, needs)} className="mt-3 text-sm">
+                        Complete &amp; submit
+                      </Button>
+                    </div>
                   )}
 
                   {/* Result of the last background submit attempt, if any */}

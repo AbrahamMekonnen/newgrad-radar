@@ -66,7 +66,8 @@ def prepare_application(job: dict, profile) -> dict:
             r.value, r.source = drafts[r.label], "ai_drafted"
 
     fields = [{"label": r.label, "name": r.name, "type": r.type, "required": r.required,
-               "category": r.category, "value": r.value, "source": r.source}
+               "category": r.category, "value": r.value, "source": r.source,
+               "values": getattr(r, "values", []) or []}
               for r in res["resolved"]]
     filled = [f for f in fields if f["source"] in ("profile", "matched", "eeo", "file", "ai_drafted")]
     user_needed = [f for f in fields if f["source"] == "user_needed" and f["required"]]

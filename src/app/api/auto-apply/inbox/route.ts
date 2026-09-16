@@ -40,12 +40,14 @@ export async function PATCH(request: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id, status, prepared_data } = await request.json();
+  const { id, status, prepared_data, ready_pct, needs_user } = await request.json();
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const patch: Record<string, unknown> = {};
   if (status && ['applied', 'skipped', 'prepared'].includes(status)) patch.status = status;
   if (Array.isArray(prepared_data)) patch.prepared_data = prepared_data;
+  if (typeof ready_pct === 'number') patch.ready_pct = ready_pct;
+  if (Array.isArray(needs_user)) patch.needs_user = needs_user;
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 });
   }

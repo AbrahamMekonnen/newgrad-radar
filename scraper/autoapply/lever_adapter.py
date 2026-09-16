@@ -92,7 +92,7 @@ def resolve(fields: list[dict], p: Profile) -> dict:
         cat = _category(label)
         val, src = _resolve_one(cat, ftype, values, p, label)
         resolved.append(ResolvedField(label=label, name=name, type=ftype, required=required,
-                                      category=cat, value=val, source=src))
+                                      category=cat, value=val, source=src, values=values or []))
     filled = [r for r in resolved if r.source in ("profile", "matched", "eeo", "file")]
     total = len(resolved) or 1
     return {
