@@ -7,7 +7,8 @@ import { ApplicationStatus } from './ApplicationStatus';
 import { cn } from '@/lib/utils';
 import { ResumeScore } from '@/lib/resume-scorer';
 import { tracker, buildLogPayload, ApplicationAttempt, ErrorCategory } from '@/lib/autoapply-tracker';
-import { ATSType, getSupportedATSTypes } from '@/lib/ats-registry';
+import { ATSType } from '@/lib/ats-registry';
+import { isAutoApplySupported } from '@/lib/autoapply-support';
 
 interface AutoApplyButtonProps {
   jobId: string;
@@ -146,9 +147,8 @@ export function AutoApplyButton({
     return <ApplicationStatus application={application} compact onCancel={onCancelApplication} />;
   }
 
-  // Check if ATS is supported using registry
-  const supportedAtsTypes = getSupportedATSTypes();
-  const isSupported = atsType && supportedAtsTypes.includes(atsType as ATSType);
+  // Supported by the new auto-apply pipeline (12 ATS adapters).
+  const isSupported = isAutoApplySupported(atsType);
 
   if (!isSupported) {
     return (

@@ -833,23 +833,12 @@ export default function HomePage() {
   }, [hasMore, loading, jobs.length, handleLoadMore, showFilters]);
 
   const handleAutoApply = async (jobId: string) => {
-    // Find the job to get its URL
     const job = jobs.find((j) => j.id === jobId);
     if (!job) {
       showToast('Job not found', 'error');
       return;
     }
 
-    // Check if application already exists
-    if (applications.has(jobId)) {
-      const existingApp = applications.get(jobId);
-      showToast(`Already applied - status: ${existingApp?.status || 'unknown'}`, 'info');
-      // Still open the URL in case they want to check status
-      window.open(job.apply_url || job.url, '_blank');
-      return;
-    }
-
-    // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       showToast('Please log in to use auto-apply', 'error');
@@ -858,62 +847,19 @@ export default function HomePage() {
     }
 
     try {
-      // Insert into application_logs
-      const newLog = {
-        user_id: user.id,
-        job_id: jobId,
-        status: 'pending' as const,
-        ats_type: job.source || 'unknown',
-      };
-
-      const { data, error } = await supabase
-        .from('application_logs')
-        .insert(newLog)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating application log:', error);
-        showToast('Failed to create application log', 'error');
-        return;
-      }
-
-      // Update applications state immediately
-      setApplications((prev) => {
-        const next = new Map(prev);
-        next.set(jobId, data as ApplicationLog);
-        return next;
-      });
-
-      // Get the application URL
-      const applyUrl = job.apply_url || job.url;
-
-      // Call the auto-apply API to trigger the agent
-      const response = await fetch('/api/auto-apply', {
+      // Feed the SAME pipeline as the saved criteria: queue this job so it gets
+      // prepared (auto-filled + AI-drafted) and shows in the Auto-Apply tab.
+      const response = await fetch('/api/auto-apply/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId,
-          jobUrl: job.url,
-          applyUrl,
-        }),
+        body: JSON.stringify({ jobId }),
       });
-
+      const data = await response.json();
       if (!response.ok) {
-        const err = await response.json();
-        console.error('Auto-apply API error:', err);
-        // Still open the URL so user can apply manually
-        window.open(applyUrl, '_blank');
-        showToast(`Auto-apply unavailable - opening application page`, 'info');
+        showToast(data.error || 'Could not add to Auto-Apply', 'error');
         return;
       }
-
-      // Open the application URL in a new tab
-      window.open(applyUrl, '_blank');
-
-      // Show success toast with instructions
-      showToast(`Auto-apply started for ${job.company_name} - Track progress in Applications`, 'success');
-
+      showToast(data.message || 'Added to Auto-Apply.', data.queued ? 'success' : 'info');
     } catch (err) {
       console.error('Unexpected error in auto-apply:', err);
       showToast('An unexpected error occurred', 'error');
