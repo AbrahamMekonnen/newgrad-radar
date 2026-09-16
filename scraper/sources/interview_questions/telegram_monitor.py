@@ -1253,8 +1253,7 @@ def scrape_telegram(
             "Set TELEGRAM_API_ID and TELEGRAM_API_HASH environment variables. "
             "See https://my.telegram.org/apps to create an app."
         )
-        # Return empty list but don't crash
-        return []
+        raise RuntimeError("Telegram credentials are not configured")
 
     try:
         # Run async fetch
@@ -1276,7 +1275,7 @@ def scrape_telegram(
         )
     except Exception as e:
         logger.error(f"Error fetching Telegram messages: {e}")
-        return []
+        raise RuntimeError(f"Telegram message fetch failed: {e}") from e
 
     # Parse messages into questions
     questions = parse_telegram_messages(messages)

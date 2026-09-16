@@ -17,6 +17,10 @@ async def scrape_async(start_date=None):
     return [{"question_text": "Explain asyncio", "source": "fixture"}]
 
 
+def scrape_owns_event_loop(start_date=None):
+    return asyncio.run(scrape_async(start_date))
+
+
 def scrape_slow(start_date=None):
     time.sleep(2)
     Path(os.environ["SCRAPER_TIMEOUT_MARKER"]).write_text(

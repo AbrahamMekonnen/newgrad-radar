@@ -53,12 +53,12 @@ def _accepted_kwargs(function: Any, candidates: dict[str, Any]) -> dict[str, Any
     return {key: value for key, value in candidates.items() if key in signature.parameters}
 
 
-async def _run(module_path: str, function_name: str, kwargs: dict[str, Any]) -> Any:
+def _run(module_path: str, function_name: str, kwargs: dict[str, Any]) -> Any:
     module = importlib.import_module(module_path)
     function = getattr(module, function_name)
     result = function(**_accepted_kwargs(function, kwargs))
     if inspect.isawaitable(result):
-        result = await result
+        return asyncio.run(result)
     return result
 
 
@@ -73,7 +73,7 @@ def main() -> int:
     output_path = Path(args.output)
     try:
         kwargs = _decode_value(json.loads(args.kwargs))
-        result = asyncio.run(_run(args.module, args.function, kwargs))
+        result = _run(args.module, args.function, kwargs)
         payload = {"ok": True, "result": result}
         return_code = 0
     except Exception as error:

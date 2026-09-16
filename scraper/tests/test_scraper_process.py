@@ -51,6 +51,10 @@ class ScraperProcessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], errors)
         self.assertEqual("Explain asyncio", questions[0]["question_text"])
 
+        questions, errors = await self.run_fixture("scrape_owns_event_loop", 5)
+        self.assertEqual([], errors)
+        self.assertEqual("Explain asyncio", questions[0]["question_text"])
+
     async def test_timeout_terminates_child_process(self):
         marker = Path(tempfile.gettempdir()) / "newgrad-radar-timeout-marker.txt"
         marker.unlink(missing_ok=True)

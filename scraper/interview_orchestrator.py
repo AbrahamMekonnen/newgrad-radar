@@ -618,7 +618,7 @@ class InterviewQuestionOrchestrator:
 
     def _should_run_scraper(self, scraper: ScraperConfig) -> bool:
         """Check if scraper should run based on schedule and last run time."""
-        if self.dry_run:
+        if self.dry_run or self.only_sources:
             return True
 
         try:
