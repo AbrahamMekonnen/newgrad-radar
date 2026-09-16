@@ -9,10 +9,12 @@ interface Field {
   label: string; name: string; type: string; value: string | null;
   source: string; required: boolean; category?: string;
 }
+interface SubmitLog { status?: string; detail?: string; at?: string }
 interface App {
   id: string; job_id: string; job_title: string; company_name: string;
-  job_url: string; ats_type: string; ready_pct: number;
+  job_url: string; ats_type: string; ready_pct: number; status?: string;
   needs_user: Field[] | null; prepared_data: Field[] | null;
+  submit_log?: SubmitLog | null; submitted_at?: string | null;
 }
 
 const AUTO_SOURCES = new Set(['profile', 'matched', 'eeo', 'file']);
@@ -23,6 +25,7 @@ export default function AutoApplyInboxPage() {
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
+  const [busy, setBusy] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +62,25 @@ export default function AutoApplyInboxPage() {
 
   const copy = (text: string) => { navigator.clipboard?.writeText(text); showToast('Copied.', 'info'); };
 
+  // Queue for the background submit worker. It submits captcha-free forms and
+  // bounces captcha-gated ones back here with a note — never bypasses a captcha.
+  const submit = async (body: { id?: string; all?: boolean }, ids: string[]) => {
+    setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.add(i)); return n; });
+    try {
+      const res = await fetch('/api/auto-apply/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      showToast(data.message || 'Queued for submission.', 'info');
+      setApps((prev) => prev.map((a) => (ids.includes(a.id) ? { ...a, status: 'submit_requested' } : a)));
+      setTimeout(load, 7000); // reflect the worker's result once it runs
+    } catch {
+      showToast('Could not queue for submission.', 'error');
+    }
+    setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
+  };
+  const readyIds = () => apps.filter((a) => (a.status ?? 'prepared') === 'prepared').map((a) => a.id);
+
   if (loading) return <div className="max-w-3xl mx-auto p-8 text-gray-500">Loading…</div>;
 
   return (
@@ -66,9 +88,18 @@ export default function AutoApplyInboxPage() {
       <header className="mb-6">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ready to Submit</h1>
-          <a href="/settings/auto-apply" className="text-sm font-medium text-indigo-600 dark:text-indigo-400 shrink-0">
-            Edit criteria
-          </a>
+          <div className="flex items-center gap-3 shrink-0">
+            {readyIds().length > 0 && (
+              <button
+                onClick={() => submit({ all: true }, readyIds())}
+                className="text-sm font-medium px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">
+                Submit all ({readyIds().length})
+              </button>
+            )}
+            <a href="/settings/auto-apply" className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+              Edit criteria
+            </a>
+          </div>
         </div>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           {apps.length === 0
@@ -161,18 +192,38 @@ export default function AutoApplyInboxPage() {
                     </p>
                   )}
 
+                  {/* Result of the last background submit attempt, if any */}
+                  {app.submit_log?.status === 'needs_captcha' && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      This form has a captcha, so it can’t be submitted from the server. Open it and
+                      finish in one tap — your answers above are ready to paste.
+                    </p>
+                  )}
+                  {(app.submit_log?.status === 'submit_failed' || app.submit_log?.status === 'incomplete') && (
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Auto-submit didn’t complete ({app.submit_log?.detail}). Open the form to submit it yourself.
+                    </p>
+                  )}
+
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-2">
+                    {(app.status === 'submit_requested' || app.status === 'submitting' || busy.has(app.id)) ? (
+                      <Button disabled variant="outline" className="text-sm">Submitting…</Button>
+                    ) : (
+                      <Button onClick={() => submit({ id: app.id }, [app.id])} className="text-sm">
+                        Submit for me
+                      </Button>
+                    )}
                     <a href={app.job_url} target="_blank" rel="noopener noreferrer"
-                       className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium">
+                       className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 text-sm font-medium">
                       Open application →
                     </a>
                     <Button onClick={() => setStatus(app.id, 'applied')} variant="outline" className="text-sm">Mark applied</Button>
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Open the form, paste the drafted answers above (standard fields are already known),
-                    clear the captcha, and submit. Then mark it applied.
+                    “Submit for me” sends captcha-free forms in the background. Captcha-gated forms
+                    (most of Greenhouse/Lever) stay here — open them and finish in one tap.
                   </p>
                 </div>
               )}

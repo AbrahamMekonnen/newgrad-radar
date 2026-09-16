@@ -189,6 +189,49 @@ def test_prepare_end_to_end():
         check("prepare e2e", False, str(e)[:120])
 
 
+def test_submit_never_posts_when_gated():
+    """A captcha-gated form must return needs_captcha and NEVER POST."""
+    import submit as s
+    orig = s.detect_captcha
+    s.detect_captcha = lambda url: (True, "RECAPTCHA")
+    try:
+        r = s.submit_application("greenhouse", "airtable", "1", "", [], dry_run=False)
+    finally:
+        s.detect_captcha = orig
+    check("submit: gated -> needs_captcha, no post", r["status"] == "needs_captcha", str(r))
+
+
+def test_submit_payload_excludes_resume_and_unfilled():
+    """Payload carries filled values; resume is a file part; unfilled required -> incomplete."""
+    import submit as s
+    orig = s.detect_captcha
+    s.detect_captcha = lambda url: (False, "no captcha")
+    try:
+        fields = [
+            {"label": "Email", "name": "email", "value": "a@x.com", "source": "profile", "required": True, "category": "email"},
+            {"label": "Resume", "name": "resume", "value": "http://x/r.pdf", "source": "file", "required": True, "category": "resume"},
+            {"label": "Why", "name": "q1", "value": "hi", "source": "ai_drafted", "required": False, "category": "custom"},
+        ]
+        ok = s.submit_application("lever", "acme", "j", "", fields, dry_run=True)
+        bad = s.submit_application("lever", "acme", "j", "",
+                                   [{"label": "Email", "name": "email", "value": None,
+                                     "source": "user_needed", "required": True, "category": "email"}],
+                                   dry_run=False)
+    finally:
+        s.detect_captcha = orig
+    check("submit: dry_run excludes resume from data", ok["status"] == "dry_run" and ok["sent"]["field_count"] == 2, str(ok))
+    check("submit: unfilled required -> incomplete", bad["status"] == "incomplete", str(bad))
+
+
+def test_submit_detects_live_captcha():
+    """Live: real GH + Lever forms are correctly flagged captcha-gated."""
+    import submit as s
+    gated_gh, _ = s.detect_captcha("https://job-boards.greenhouse.io/airtable/jobs/"
+                                   + str(gh.requests.get('https://boards-api.greenhouse.io/v1/boards/airtable/jobs',
+                                                         headers=gh.UA, timeout=20).json()['jobs'][0]['id']))
+    check("submit: live Greenhouse flagged gated", gated_gh)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--unit", action="store_true", help="unit tests only")
@@ -197,12 +240,13 @@ def main():
     print("=== UNIT ===")
     test_categorize(); test_resolve_deterministic(); test_authorized_option()
     test_ai_reuse_without_llm(); test_prepare_unsupported()
+    test_submit_never_posts_when_gated(); test_submit_payload_excludes_resume_and_unfilled()
 
     if not args.unit:
         _load_env()
         has_db = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
         print("\n=== INTEGRATION ===")
-        test_greenhouse_live(); test_lever_live()
+        test_greenhouse_live(); test_lever_live(); test_submit_detects_live_captcha()
         if has_db:
             test_rules_matching_live()
         test_prepare_end_to_end()
