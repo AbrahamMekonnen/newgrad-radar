@@ -504,6 +504,7 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
         "name_pronunciation": p.name_pronunciation,
         "pronouns": p.pronouns,
         "current_employer": p.current_company,
+        "current_company": p.current_company,  # knowledge base uses this category name
         "current_title": p.current_title,
         # Education
         "education": p.education or p.education_level,

@@ -16,8 +16,15 @@ import requests
 UA = {"User-Agent": "Mozilla/5.0 (compatible; hireradar-autoapply)",
       "Content-Type": "application/json"}
 
-_ASHBY_Q = ("query ApiJobPosting($o: String!, $j: String!) { jobPosting("
-            "organizationHostedJobsPageName: $o, jobPostingId: $j) { applicationFormDefinition } }")
+# Verified against the live Ashby job board (captured from jobs.ashbyhq.com's own
+# request). The form lives at jobPosting.applicationForm.sections[].fieldEntries[],
+# and `field` is a JSON scalar holding {path,title,type,selectableValues,...}.
+# (The old `applicationFormDefinition` field was removed from Ashby's schema.)
+_ASHBY_Q = (
+    "query ApiJobPosting($o: String!, $j: String!) { "
+    "jobPosting(organizationHostedJobsPageName: $o, jobPostingId: $j) { "
+    "applicationForm { sections { title fieldEntries { isRequired isHidden field } } } } }"
+)
 
 
 # Reuse the Profile and ResolvedField from greenhouse
@@ -26,7 +33,7 @@ from field_knowledge_base import lookup_field  # noqa: E402
 
 
 def fetch_form(token: str, job_id: str) -> list[dict]:
-    """Return Ashby form fields: [{label, name, type, required, values?}]."""
+    """Return Ashby form fields: [{label, name, type, required, values}]."""
     r = requests.post(
         "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting",
         json={"operationName": "ApiJobPosting",
@@ -37,51 +44,53 @@ def fetch_form(token: str, job_id: str) -> list[dict]:
     r.raise_for_status()
 
     data = r.json()
-    defn = (((data or {}).get("data") or {}).get("jobPosting") or {}).get("applicationFormDefinition")
-    if isinstance(defn, str):
-        defn = json.loads(defn)
+    if data.get("errors"):
+        raise RuntimeError(f"ashby graphql: {data['errors'][0].get('message')}")
+    form = (((data or {}).get("data") or {}).get("jobPosting") or {}).get("applicationForm") or {}
 
     fields = []
-    for sec in (defn or {}).get("sections", []):
-        for fld in sec.get("fields", []):
-            f = fld.get("field", fld)
-            field_type = _map_type(f.get("type", ""))
-            values = _extract_values(f)
+    for sec in form.get("sections", []):
+        for fe in sec.get("fieldEntries", []):
+            if fe.get("isHidden"):
+                continue
+            f = fe.get("field") or {}          # JSON scalar: {path,title,type,selectableValues}
             fields.append({
-                "label": f.get("title") or f.get("label") or "",
+                "label": f.get("title") or f.get("humanReadablePath") or "",
                 "name": f.get("path") or f.get("id") or "",
-                "type": field_type,
-                "required": bool(f.get("isRequired")),
-                "values": values,
+                "type": _map_type(f.get("type", "")),
+                "required": bool(fe.get("isRequired")),
+                "values": _extract_values(f),
             })
     return fields
 
 
 def _map_type(ashby_type: str) -> str:
-    """Map Ashby field types to standard types."""
-    t = ashby_type.lower()
+    """Map Ashby field types (String, Email, File, Boolean, ValueSelect, ...)."""
+    t = (ashby_type or "").lower()
     if t in ("longtext", "richtext"):
         return "textarea"
-    if t in ("shorttext", "email", "phone", "url"):
+    if t in ("string", "shorttext", "email", "phone", "url", "number"):
         return "input_text"
     if t == "file":
         return "input_file"
-    if t in ("select", "dropdown", "singleselect"):
+    if t in ("valueselect", "select", "dropdown", "singleselect", "boolean", "yesno"):
         return "select"
-    if t in ("multiselect", "checkbox"):
+    if t in ("multivalueselect", "multiselect", "checkbox"):
         return "multi_value_single_select"
-    if t == "yesno":
-        return "select"
-    return t or "input_text"
+    return "input_text"
 
 
 def _extract_values(field: dict) -> list[dict]:
-    """Extract select options from Ashby field."""
+    """Extract select options. Ashby Boolean fields have no options, so we supply
+    the Yes/No pair so option-matching + the completion box work."""
     opts = field.get("selectableValues") or field.get("options") or []
-    if not opts and field.get("type") == "YesNo":
-        return [{"label": "Yes", "value": "Yes"}, {"label": "No", "value": "No"}]
-    return [{"label": o.get("label") or o.get("value") or str(o), "value": o.get("value") or o.get("label")}
-            for o in opts if isinstance(o, dict)]
+    if opts:
+        return [{"label": o.get("label") or o.get("value") or str(o),
+                 "value": o.get("value") or o.get("label")}
+                for o in opts if isinstance(o, dict)]
+    if (field.get("type") or "").lower() in ("boolean", "yesno"):
+        return [{"label": "Yes", "value": "true"}, {"label": "No", "value": "false"}]
+    return []
 
 
 def resolve(form: list[dict], p: Profile) -> dict:
@@ -97,7 +106,8 @@ def resolve(form: list[dict], p: Profile) -> dict:
         # Use central knowledge base for category detection (handles _systemfield_* paths)
         cat = lookup_field(label, name)[0]
 
-        rf = ResolvedField(label=label, name=name, type=ftype, required=required, category=cat)
+        rf = ResolvedField(label=label, name=name, type=ftype, required=required, category=cat,
+                           values=values or [])
         val, src = _resolve_one(cat, ftype, values, p, label)
         rf.value, rf.source = val, src
         resolved.append(rf)

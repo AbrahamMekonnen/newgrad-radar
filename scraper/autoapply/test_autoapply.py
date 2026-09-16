@@ -144,6 +144,25 @@ def test_greenhouse_live():
         check("greenhouse live", False, str(e)[:120])
 
 
+def test_ashby_live():
+    print("[integration] Ashby live GraphQL form fetch + resolve")
+    try:
+        import ashby_adapter as ab
+        jobs = ab.list_jobs("ramp")
+        check("ashby lists jobs", len(jobs) > 0, f"got {len(jobs)}")
+        form = ab.fetch_form("ramp", jobs[0]["id"])
+        check("ashby fetched a non-empty form", len(form) > 3, f"got {len(form)} fields")
+        p = gh.Profile(first_name="A", last_name="B", email="a@b.com", resume_url="r.pdf",
+                       work_authorized=True, require_sponsorship=False)
+        res = ab.resolve(form, p)
+        check("ashby resolve fills identity", any(r.source == "profile" for r in res["resolved"]))
+        check("ashby boolean carries yes/no options",
+              any(r.type == "select" and len(r.values) == 2 for r in res["resolved"])
+              or all(r.type != "select" for r in res["resolved"]))
+    except Exception as e:
+        check("ashby live", False, str(e)[:120])
+
+
 def test_lever_live():
     print("[integration] Lever live form parse")
     import requests
@@ -249,7 +268,7 @@ def main():
         _load_env()
         has_db = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
         print("\n=== INTEGRATION ===")
-        test_greenhouse_live(); test_lever_live(); test_submit_detects_live_captcha()
+        test_greenhouse_live(); test_lever_live(); test_ashby_live(); test_submit_detects_live_captcha()
         if has_db:
             test_rules_matching_live()
         test_prepare_end_to_end()
