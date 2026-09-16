@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
+import { INTERVIEW_SOURCE_OPTIONS } from '@/lib/interview-sources';
 
 interface InterviewQuestion {
   id: string;
@@ -399,6 +400,7 @@ function InterviewPrepContent() {
   const [selectedRole, setSelectedRole] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedSource, setSelectedSource] = useState('all');
   const [dateRange, setDateRange] = useState(6);
 
   // Keep state in sync if URL changes (client-side navigation)
@@ -440,6 +442,7 @@ function InterviewPrepContent() {
       }
       if (selectedType !== 'all') params.set('question_type', selectedType);
       if (selectedLevel) params.set('position_level', selectedLevel);
+      if (selectedSource !== 'all') params.set('source', selectedSource);
 
       const res = await fetch(`/api/interview-questions?${params}`);
       if (!res.ok) throw new Error('Failed to fetch questions');
@@ -453,7 +456,7 @@ function InterviewPrepContent() {
     } finally {
       setLoading(false);
     }
-  }, [companySearch, selectedRole, selectedType, selectedLevel, dateRange, page, urlCompany]);
+  }, [companySearch, selectedRole, selectedType, selectedLevel, selectedSource, dateRange, page, urlCompany]);
 
   useEffect(() => {
     fetchQuestions();
@@ -462,7 +465,7 @@ function InterviewPrepContent() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [companySearch, selectedRole, selectedType, selectedLevel, dateRange]);
+  }, [companySearch, selectedRole, selectedType, selectedLevel, selectedSource, dateRange]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
@@ -485,7 +488,7 @@ function InterviewPrepContent() {
 
         {/* Filters */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
             {/* Company Search */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -536,6 +539,24 @@ function InterviewPrepContent() {
               </select>
             </div>
 
+            {/* Source Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Source
+              </label>
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              >
+                {INTERVIEW_SOURCE_OPTIONS.map((source) => (
+                  <option key={source.value} value={source.value}>
+                    {source.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Date Range */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -563,6 +584,7 @@ function InterviewPrepContent() {
                   setSelectedRole('');
                   setSelectedType('all');
                   setSelectedLevel('');
+                  setSelectedSource('all');
                   setDateRange(6);
                 }}
                 className="w-full"

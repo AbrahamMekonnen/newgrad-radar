@@ -34,6 +34,7 @@ from db_optimizer import (
     get_interview_db,
     close_interview_db,
 )
+from sources.interview_questions.quality import classify_question
 
 # Configure logging
 logging.basicConfig(
@@ -941,10 +942,25 @@ class InterviewQuestionOrchestrator:
 
                 # Deduplicate (thread-safe)
                 unique_questions, duplicates = await self._deduplicate_questions(questions)
+                accepted_questions = []
+                rejected_reasons: dict[str, int] = {}
+                for question in unique_questions:
+                    decision = classify_question(
+                        question.get('question_text', ''),
+                        question.get('question_type'),
+                    )
+                    if decision.is_junk:
+                        reason = decision.reason or 'unspecified'
+                        rejected_reasons[reason] = rejected_reasons.get(reason, 0) + 1
+                    else:
+                        accepted_questions.append(question)
+                rejected = len(unique_questions) - len(accepted_questions)
+                unique_questions = accepted_questions
                 logger.info(
                     f"{scraper.name}: Found {len(questions)}, "
                     f"unique {len(unique_questions)}, "
-                    f"duplicates {duplicates}"
+                    f"duplicates {duplicates}, quality-rejected {rejected} "
+                    f"({rejected_reasons})"
                 )
 
                 # Save to database

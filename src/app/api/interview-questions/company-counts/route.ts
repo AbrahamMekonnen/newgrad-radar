@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         .from('interview_questions')
         .select('company_slug, company_name')
         .eq('is_duplicate', false)
+        .eq('is_junk', false)
         .or(`interview_date.gte.${cutoffStr},interview_date.is.null`)
         .range(start, start + PAGE - 1);
       if (error) {

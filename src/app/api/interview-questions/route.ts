@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { getInterviewSourceFilter } from '@/lib/interview-sources';
 
 const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co');
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,6 +49,7 @@ interface PostBody {
  * - company_slug: Filter by company slug
  * - position: Filter by position (partial match)
  * - question_type: Filter by question type enum
+ * - source: Filter by a curated source or source group
  * - months_back: How many months back to search (default: 5)
  * - limit: Number of results (max 100, default: 50)
  * - offset: Pagination offset (default: 0)
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
     const position = searchParams.get('position') || undefined;
     const position_level = searchParams.get('position_level') || undefined;
     const question_type = searchParams.get('question_type') as QuestionType | undefined;
+    const source = searchParams.get('source') || 'all';
     const months_back = parseInt(searchParams.get('months_back') || '6', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
@@ -72,6 +75,11 @@ export async function GET(request: NextRequest) {
         { error: `Invalid question_type. Must be one of: ${VALID_QUESTION_TYPES.join(', ')}` },
         { status: 400 }
       );
+    }
+
+    const sourceFilter = getInterviewSourceFilter(source);
+    if (sourceFilter === undefined) {
+      return NextResponse.json({ error: 'Invalid interview-question source' }, { status: 400 });
     }
 
     // Use anon key for reads (RLS allows public SELECT)
@@ -108,6 +116,7 @@ export async function GET(request: NextRequest) {
         { count: 'exact' }
       )
       .eq('is_duplicate', false)
+      .eq('is_junk', false)
       .order('interview_date', { ascending: false, nullsFirst: false })
       .order('scraped_at', { ascending: false });
 
@@ -132,6 +141,14 @@ export async function GET(request: NextRequest) {
 
     if (question_type) {
       query = query.eq('question_type', question_type);
+    }
+
+    if (sourceFilter?.mode === 'exact') {
+      query = query.eq('source_name', sourceFilter.value);
+    } else if (sourceFilter?.mode === 'any') {
+      query = query.in('source_name', [...sourceFilter.values]);
+    } else if (sourceFilter?.mode === 'prefix') {
+      query = query.like('source_name', `${sourceFilter.value}%`);
     }
 
     // Seniority filter — STRICT: when a level is chosen, return only questions
@@ -175,6 +192,7 @@ export async function GET(request: NextRequest) {
         company_slug,
         position,
         question_type,
+        source,
         months_back,
         limit,
         offset,

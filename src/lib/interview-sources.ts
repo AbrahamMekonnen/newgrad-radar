@@ -1,0 +1,72 @@
+export type InterviewSourceFilter =
+  | { mode: 'exact'; value: string }
+  | { mode: 'any'; values: readonly string[] }
+  | { mode: 'prefix'; value: string };
+
+const SOURCE_DEFINITIONS: ReadonlyArray<{
+  value: string;
+  label: string;
+  filter: InterviewSourceFilter | null;
+}> = [
+  { value: 'all', label: 'All Sources', filter: null },
+  {
+    value: 'leetcode',
+    label: 'LeetCode',
+    filter: { mode: 'any', values: ['leetcode_company_wise', 'leetcode_discuss'] },
+  },
+  {
+    value: 'hackernews',
+    label: 'Hacker News',
+    filter: { mode: 'exact', value: 'hackernews' },
+  },
+  {
+    value: 'github_gist',
+    label: 'GitHub Gists',
+    filter: { mode: 'exact', value: 'github_gist' },
+  },
+  {
+    value: 'github_guides',
+    label: 'GitHub Interview Guides',
+    filter: {
+      mode: 'any',
+      values: ['github_tech-interview-handbook', 'github_system-design-primer'],
+    },
+  },
+  {
+    value: 'telegram',
+    label: 'Telegram Communities',
+    filter: { mode: 'prefix', value: 'telegram:' },
+  },
+  { value: 'qiita', label: 'Qiita', filter: { mode: 'exact', value: 'qiita' } },
+  {
+    value: 'bootcamp_leaked',
+    label: 'Bootcamp Question Sets',
+    filter: { mode: 'exact', value: 'bootcamp_leaked' },
+  },
+  { value: 'atcoder', label: 'AtCoder', filter: { mode: 'exact', value: 'atcoder' } },
+  { value: 'blind', label: 'Blind', filter: { mode: 'exact', value: 'blind' } },
+  {
+    value: 'codeforces',
+    label: 'Codeforces',
+    filter: { mode: 'exact', value: 'codeforces' },
+  },
+  {
+    value: 'glassdoor',
+    label: 'Glassdoor',
+    filter: { mode: 'exact', value: 'glassdoor' },
+  },
+  {
+    value: 'unknown',
+    label: 'Other / Unattributed',
+    filter: { mode: 'exact', value: 'unknown' },
+  },
+];
+
+export const INTERVIEW_SOURCE_OPTIONS = SOURCE_DEFINITIONS.map(({ value, label }) => ({
+  value,
+  label,
+}));
+
+export function getInterviewSourceFilter(value: string): InterviewSourceFilter | null | undefined {
+  return SOURCE_DEFINITIONS.find((definition) => definition.value === value)?.filter;
+}
