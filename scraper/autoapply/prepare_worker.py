@@ -73,7 +73,21 @@ def build_profile(client, user_id: str) -> gh.Profile:
         prof.story_bank = {s.get("prompt", ""): s.get("answer", "") for s in stories if s.get("answer")}
     except Exception:
         prof.story_bank = {}
+    # Ground AI drafts in the applicant's real resume. Extract from the PDF once
+    # and cache it back so we only parse it a single time per user.
     prof.resume_text = row.get("resume_text") or ""
+    if not prof.resume_text and prof.resume_url:
+        try:
+            from resume_text import extract_resume_text
+            txt = extract_resume_text(prof.resume_url)
+            if txt:
+                prof.resume_text = txt
+                try:
+                    client.table("user_profiles").update({"resume_text": txt}).eq("user_id", user_id).execute()
+                except Exception as e:
+                    logger.debug(f"resume_text cache write skipped: {e}")  # column may be pre-migration
+        except Exception as e:
+            logger.warning(f"resume text extraction failed: {e}")
     return prof
 
 
