@@ -91,41 +91,77 @@ def build_profile(client, user_id: str) -> gh.Profile:
     return prof
 
 
+def _finish(client, row_id, status, reason, ats, extra=None):
+    """Write a terminal outcome + telemetry for one queued row. Best-effort: a DB
+    hiccup here must never propagate and take down the rest of the batch."""
+    log = {"status": status, "reason": reason, "ats": ats,
+           "at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    patch = {"status": status, "prepare_log": log}
+    if extra:
+        patch.update(extra)
+    try:
+        client.table("autoapply_job_queue").update(patch).eq("id", row_id).execute()
+    except Exception as e:
+        # The prepare_log column may not exist yet (pre-migration 044). Retry
+        # WITHOUT it so the row always gets a real status and is never stuck.
+        try:
+            patch.pop("prepare_log", None)
+            client.table("autoapply_job_queue").update(patch).eq("id", row_id).execute()
+        except Exception as e2:
+            logger.warning(f"  status write failed for {row_id}: {e2}")
+
+
 def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
-    """Prepare a single queued application and write it back. Returns True on success."""
-    job = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type")
-           .eq("id", r["job_id"]).single().execute().data)
-    if not job:
+    """Prepare a single queued application and write it back. FULLY ISOLATED: any
+    failure is captured on THIS row (status + prepare_log) and never raises, so
+    one bad job can't affect the rest of the batch — even other jobs on the same
+    ATS. Every row always ends with a recorded outcome we can query at scale."""
+    ats = "?"
+    try:
+        resp = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type")
+                .eq("id", r["job_id"]).limit(1).execute())
+        job = (resp.data or [None])[0] if resp else None
+        if not job:
+            _finish(client, r["id"], "job_missing", "job row not found", ats)
+            return False
+        ats = (job.get("ats_type") or "").lower()
+        url = job.get("apply_url") or job.get("url") or ""
+        if ats == "workday":
+            # Workday URLs are self-contained (tenant/site/job path).
+            from workday_adapter import parse_url as _wd_parse
+            token, jid = _wd_parse(url)
+        else:
+            token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
+            jid = _ats_job_id(url)
+        if ats not in SUPPORTED:
+            _finish(client, r["id"], "unsupported", f"{ats} not supported", ats)
+            return False
+        if not token or not jid:
+            _finish(client, r["id"], "unsupported", "missing ats token or job id", ats)
+            return False
+
+        prepared = prepare_application({
+            "ats_type": ats, "ats_token": token, "ats_job_id": jid,
+            "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
+        }, profile)
+        pstatus = prepared.get("status")
+        # 'form_unavailable' / 'form_fetch_failed' keep their real status so they
+        # stay OUT of the inbox (which shows only 'prepared') and are diagnosable.
+        _finish(client, r["id"],
+                "prepared" if pstatus == "prepared" else pstatus,
+                prepared.get("error") or prepared.get("message") or "ok", ats,
+                extra={"prepared_data": prepared.get("fields"),
+                       "ready_pct": prepared.get("ready_pct"),
+                       "needs_user": prepared.get("needs_user"),
+                       "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+        logger.info(f"  {job.get('company_name')}: {pstatus} "
+                    f"{prepared.get('ready_pct') if pstatus=='prepared' else ''}")
+        return pstatus == "prepared"
+    except Exception as e:
+        # Never let one job's crash escape into the batch. Record it and move on.
+        logger.warning(f"  prepare crashed for row {r.get('id')}: {e}")
+        _finish(client, r["id"], "error", f"{type(e).__name__}: {str(e)[:200]}", ats)
         return False
-    ats = (job.get("ats_type") or "").lower()
-    url = job.get("apply_url") or job.get("url") or ""
-    if ats == "workday":
-        # Workday URLs are self-contained (tenant/site/job path), so derive the
-        # token + job id from the URL instead of relying on COMPANIES.
-        from workday_adapter import parse_url as _wd_parse
-        token, jid = _wd_parse(url)
-    else:
-        token = (COMPANIES.get(job["company_slug"]) or {}).get("ats_token")
-        jid = _ats_job_id(url)
-    if ats not in SUPPORTED or not token or not jid:
-        client.table("autoapply_job_queue").update({"status": "unsupported"}).eq("id", r["id"]).execute()
-        return False
-    prepared = prepare_application({
-        "ats_type": ats, "ats_token": token, "ats_job_id": jid,
-        "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
-    }, profile)
-    # Store the real prepare status so 'form_unavailable' / 'form_fetch_failed'
-    # are diagnosable and stay OUT of the inbox (which shows only 'prepared').
-    pstatus = prepared.get("status")
-    client.table("autoapply_job_queue").update({
-        "status": "prepared" if pstatus == "prepared" else pstatus,
-        "prepared_data": prepared.get("fields"), "ready_pct": prepared.get("ready_pct"),
-        "needs_user": prepared.get("needs_user"),
-        "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-    }).eq("id", r["id"]).execute()
-    logger.info(f"  {job.get('company_name')}: {prepared.get('ready_pct')}% ready "
-                f"({prepared.get('ai_drafted_count')} AI-drafted)")
-    return prepared.get("status") == "prepared"
 
 
 def process_queue(limit: int, workers: int = 8) -> int:
