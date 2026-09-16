@@ -817,9 +817,10 @@ def lookup_field(label: str, field_name: str = "") -> tuple[str, str, str]:
         profile_field: Which Profile field to use (e.g., "first_name", "work_authorized")
         resolution: How to fill it ("profile", "matched", "eeo", "ai_needed", "user_needed", "file")
     """
-    # Try field name first (more specific)
+    # Try field name first (more specific). Coerce to str — some ATSes (Recruitee)
+    # use numeric field ids, which would crash a bare .lower().
     if field_name:
-        fn_lower = field_name.lower()
+        fn_lower = str(field_name).lower()
         if fn_lower in _FIELD_NAME_MAP:
             cat = _FIELD_NAME_MAP[fn_lower]
             info = FIELD_PATTERNS[cat]
