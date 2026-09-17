@@ -281,7 +281,36 @@ export interface UserProfile {
   years_experience: string | null;
   start_date: string | null;
   salary_expectation: string | null;
+  salary_type?: 'range' | 'specific' | 'negotiable' | 'market_rate';
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_target?: number | null;
+  salary_display_strategy?: 'show_range' | 'show_target' | 'show_negotiable' | 'leave_blank';
   willing_to_relocate: boolean | null;
+  preferred_name?: string | null;
+  pronouns?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  country?: string | null;
+  current_company?: string | null;
+  current_title?: string | null;
+  prior_employers?: string[];
+  default_source?: string | null;
+  referral_name?: string | null;
+  is_adult?: boolean | null;
+  bay_area_resident?: boolean | null;
+  education_school?: string | null;
+  education_degree?: string | null;
+  education_major?: string | null;
+  education_graduation_date?: string | null;
+  education_gpa?: string | null;
+  writing_sample?: string | null;
+  preferred_tone?: 'natural' | 'concise' | 'warm' | 'technical' | null;
+  proud_project?: string | null;
+  career_goals?: string | null;
   custom_answers: Record<string, string>;
 }
 

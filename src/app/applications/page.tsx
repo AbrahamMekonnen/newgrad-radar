@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
 import { AutoApplyInbox } from '@/components/autoapply/AutoApplyInbox';
+import { AlertedJobs } from '@/components/applications/AlertedJobs';
 import { useSearchParams } from 'next/navigation';
 
 
@@ -23,8 +24,9 @@ function ApplicationsContent({ userId }: { userId: string }) {
   const [savedJobs, setSavedJobs] = useState<(SavedJob & { job: Job })[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const searchParams = useSearchParams();
-  const [activeSection, setActiveSection] = useState<'saved' | 'autoapply'>(
-    searchParams.get('section') === 'autoapply' ? 'autoapply' : 'saved'
+  const requestedSection = searchParams.get('section');
+  const [activeSection, setActiveSection] = useState<'saved' | 'autoapply' | 'alerts'>(
+    requestedSection === 'autoapply' || requestedSection === 'alerts' ? requestedSection : 'saved'
   );
   const supabase = createClient();
 
@@ -154,7 +156,7 @@ function ApplicationsContent({ userId }: { userId: string }) {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900 dark:text-white">Your Applications</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Jobs you're tracking manually</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Jobs you are tracking manually</p>
             </div>
             <div className="text-right">
               <span className="text-2xl font-bold text-gray-900 dark:text-white">{savedStats.total}</span>
@@ -186,6 +188,19 @@ function ApplicationsContent({ userId }: { userId: string }) {
             </div>
             <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Live queue</span>
           </div>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('alerts')}
+          className={cn(
+            'flex-1 p-4 rounded-xl border-2 transition-all text-left',
+            activeSection === 'alerts'
+              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+              : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'
+          )}
+        >
+          <h3 className="font-semibold text-gray-900 dark:text-white">Notified Jobs</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Matches sent by push or email</p>
         </button>
       </div>
 
@@ -241,8 +256,10 @@ function ApplicationsContent({ userId }: { userId: string }) {
             </div>
           )}
         </div>
-      ) : (
+      ) : activeSection === 'autoapply' ? (
         <AutoApplyInbox embedded />
+      ) : (
+        <AlertedJobs />
       )}
     </div>
   );

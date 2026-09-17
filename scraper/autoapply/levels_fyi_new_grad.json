@@ -1,0 +1,344 @@
+{
+  "google": {
+    "company": "Google",
+    "level": "L3",
+    "base_min": 150000,
+    "base_max": 175000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "meta": {
+    "company": "Meta",
+    "level": "E3",
+    "base_min": 155000,
+    "base_max": 175000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "apple": {
+    "company": "Apple",
+    "level": "ICT2",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "amazon": {
+    "company": "Amazon",
+    "level": "SDE I",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "microsoft": {
+    "company": "Microsoft",
+    "level": "SDE 59",
+    "base_min": 125000,
+    "base_max": 150000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "netflix": {
+    "company": "Netflix",
+    "level": "New Grad",
+    "base_min": 180000,
+    "base_max": 220000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "nvidia": {
+    "company": "NVIDIA",
+    "level": "New Grad",
+    "base_min": 150000,
+    "base_max": 180000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "openai": {
+    "company": "OpenAI",
+    "level": "L3",
+    "base_min": 180000,
+    "base_max": 220000,
+    "location": "SF",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "anthropic": {
+    "company": "Anthropic",
+    "level": "New Grad",
+    "base_min": 175000,
+    "base_max": 210000,
+    "location": "SF",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "stripe": {
+    "company": "Stripe",
+    "level": "L2",
+    "base_min": 160000,
+    "base_max": 190000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "databricks": {
+    "company": "Databricks",
+    "level": "New Grad",
+    "base_min": 155000,
+    "base_max": 180000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "snowflake": {
+    "company": "Snowflake",
+    "level": "New Grad",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "coinbase": {
+    "company": "Coinbase",
+    "level": "L2",
+    "base_min": 150000,
+    "base_max": 175000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "airbnb": {
+    "company": "Airbnb",
+    "level": "L3",
+    "base_min": 155000,
+    "base_max": 180000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "uber": {
+    "company": "Uber",
+    "level": "L3",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "lyft": {
+    "company": "Lyft",
+    "level": "L3",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "doordash": {
+    "company": "DoorDash",
+    "level": "E3",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "instacart": {
+    "company": "Instacart",
+    "level": "L3",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "figma": {
+    "company": "Figma",
+    "level": "E3",
+    "base_min": 150000,
+    "base_max": 175000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "notion": {
+    "company": "Notion",
+    "level": "New Grad",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "SF",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "discord": {
+    "company": "Discord",
+    "level": "L3",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "robinhood": {
+    "company": "Robinhood",
+    "level": "New Grad",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "plaid": {
+    "company": "Plaid",
+    "level": "L2",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "ramp": {
+    "company": "Ramp",
+    "level": "New Grad",
+    "base_min": 150000,
+    "base_max": 175000,
+    "location": "NYC",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "square": {
+    "company": "Square/Block",
+    "level": "SWE I",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "anduril": {
+    "company": "Anduril",
+    "level": "New Grad",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "palantir": {
+    "company": "Palantir",
+    "level": "New Grad",
+    "base_min": 140000,
+    "base_max": 165000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "salesforce": {
+    "company": "Salesforce",
+    "level": "AMTS",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "linkedin": {
+    "company": "LinkedIn",
+    "level": "SWE",
+    "base_min": 135000,
+    "base_max": 160000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "dropbox": {
+    "company": "Dropbox",
+    "level": "L2",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "atlassian": {
+    "company": "Atlassian",
+    "level": "P2",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "datadog": {
+    "company": "Datadog",
+    "level": "New Grad",
+    "base_min": 145000,
+    "base_max": 170000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "cloudflare": {
+    "company": "Cloudflare",
+    "level": "New Grad",
+    "base_min": 135000,
+    "base_max": 160000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "twilio": {
+    "company": "Twilio",
+    "level": "L2",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "okta": {
+    "company": "Okta",
+    "level": "SWE I",
+    "base_min": 125000,
+    "base_max": 150000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "mongodb": {
+    "company": "MongoDB",
+    "level": "L2",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "hashicorp": {
+    "company": "HashiCorp",
+    "level": "P1",
+    "base_min": 130000,
+    "base_max": 155000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  },
+  "confluent": {
+    "company": "Confluent",
+    "level": "L2",
+    "base_min": 135000,
+    "base_max": 160000,
+    "location": "US Average",
+    "source": "levels.fyi",
+    "updated": "2026-09"
+  }
+}

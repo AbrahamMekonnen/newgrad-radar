@@ -24,21 +24,41 @@ sys.path.insert(0, str(HERE.parent / "sources" / "interview_questions"))
 
 
 def _background_block(profile) -> str:
-    """Compact, factual context for the model — resume + story bank + history."""
+    """Factual context plus applicant-authored material for grounded voice matching."""
     parts = []
     name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
     if name:
         parts.append(f"Applicant: {name}")
-    if getattr(profile, "years_experience", ""):
-        parts.append(f"Experience: {profile.years_experience} years")
+
+    facts = [
+        ("Current role", " at ".join(filter(None, [
+            getattr(profile, "current_title", ""), getattr(profile, "current_company", "")
+        ]))),
+        ("Education", ", ".join(filter(None, [
+            getattr(profile, "degree", ""), getattr(profile, "major", ""),
+            getattr(profile, "school", ""), getattr(profile, "graduation_year", ""),
+        ]))),
+        ("Experience", f"{getattr(profile, 'years_experience', '')} years" if getattr(profile, "years_experience", "") else ""),
+        ("Skills", ", ".join(getattr(profile, "skills_list", None) or [])),
+        ("Proud project", getattr(profile, "proud_project", "")),
+        ("Career goals", getattr(profile, "career_goals", "")),
+        ("Preferred tone", getattr(profile, "preferred_tone", "")),
+    ]
+    for label, value in facts:
+        if value:
+            parts.append(f"{label}: {value}")
+
     resume_text = getattr(profile, "resume_text", "") or ""
     if resume_text:
-        parts.append("Resume (excerpt):\n" + resume_text[:2500])
+        parts.append("Resume:\n" + resume_text[:6000])
     stories = getattr(profile, "story_bank", None) or {}
     if stories:
-        parts.append("Story bank (their own words):")
-        for q, a in list(stories.items())[:10]:
-            parts.append(f"- {q}: {a}")
+        parts.append("Story bank (applicant facts):")
+        for question, answer in list(stories.items())[:12]:
+            parts.append(f"- {question}: {answer}")
+    writing_sample = getattr(profile, "writing_sample", "") or ""
+    if writing_sample:
+        parts.append("Applicant writing sample (match its voice, not its claims):\n" + writing_sample[:1800])
     return "\n".join(parts) if parts else "(no background provided)"
 
 
@@ -92,12 +112,15 @@ def draft_answers(questions: list, profile, job: dict, max_chars: int = 900) -> 
 
     numbered = "\n".join(f"[{i}] {q}" for i, q in enumerate(todo))
     prompt = (
-        "You are helping a candidate fill a job application HONESTLY, using ONLY "
-        "the background provided — never invent employers, dates, or achievements. "
-        "Write a concise, specific, first-person answer to each numbered question, "
-        f"max ~{max_chars} characters each; for a cover letter, tailor it to the "
-        "company and role below. If the background lacks the info to answer "
-        "truthfully, return an empty string for that item.\n\n"
+        "Help this candidate answer a job application honestly. Use only supported "
+        "facts from the background; never invent employers, dates, credentials, metrics, "
+        "or achievements. Answer every question that can be answered from those facts. "
+        "Write in natural first person with specific details, varied sentence rhythm, "
+        "and contractions where they fit. Match the applicant writing sample and preferred "
+        "tone. Avoid generic corporate phrases and repeated openings. "
+        f"Keep each answer under about {max_chars} characters. Tailor cover letters and "
+        "motivation answers to the company and role. Return an empty string only when a "
+        "truthful answer is impossible from the supplied background.\n\n"
         f"COMPANY: {job.get('company_name','')}\nROLE: {job.get('job_title','')}\n\n"
         f"BACKGROUND:\n{_background_block(profile)}\n\n"
         f"QUESTIONS:\n{numbered}\n\n"

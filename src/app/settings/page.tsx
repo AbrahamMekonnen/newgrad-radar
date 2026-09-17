@@ -103,7 +103,14 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
     if (prefError) {
       setMessage({ type: 'error', text: 'Failed to save preferences' });
     } else {
-      setMessage({ type: 'success', text: 'Preferences saved!' });
+      const { error: alertError } = await supabase
+        .from('job_alerts')
+        .update({ push_enabled: preferences.push_enabled, email_enabled: preferences.email_enabled })
+        .eq('user_id', userId)
+        .eq('is_active', true);
+      setMessage(alertError
+        ? { type: 'error', text: 'Preferences saved, but existing alert channels could not be synced.' }
+        : { type: 'success', text: 'Preferences saved and active alerts updated!' });
     }
     setSaving(false);
   };

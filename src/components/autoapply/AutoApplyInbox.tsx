@@ -14,7 +14,7 @@ interface Field {
 // Show the human label for a stored option value (so "1" reads as "Yes").
 function displayValue(f: Field): string {
   const v = f.value;
-  if (v === null || v === undefined || v === '') return 'â€”';
+  if (v === null || v === undefined || v === '') return '-';
   const opt = (f.values || []).find((o) => String(o.value) === String(v));
   return opt ? opt.label : String(v);
 }
@@ -26,7 +26,7 @@ interface App {
   submit_log?: SubmitLog | null; prepare_log?: SubmitLog | null; submitted_at?: string | null;
 }
 
-const AUTO_SOURCES = new Set(['profile', 'matched', 'eeo', 'file']);
+const AUTO_SOURCES = new Set(['profile', 'matched', 'market', 'eeo', 'file']);
 
 export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   const { toasts, showToast, removeToast } = useToast();
@@ -51,7 +51,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
 
   // Poll while anything is queued/submitting so cards flip to their result on
   // their own. Stops when nothing is in flight, or after ~2.5 min (a run with
-  // no dispatch token only drains on the hourly schedule â€” no point polling on).
+  // no dispatch token only drains on the hourly schedule - no point polling on).
   const pending = apps.some((a) => ['pending', 'processing', 'submit_requested', 'submitting'].includes(a.status || ''));
   const groupFor = (a: App) => {
     if (['pending', 'processing', 'submit_requested', 'submitting'].includes(a.status || '')) return 'active';
@@ -114,7 +114,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   const copy = (text: string) => { navigator.clipboard?.writeText(text); showToast('Copied.', 'info'); };
 
   // Queue for the background submit worker. It submits captcha-free forms and
-  // bounces captcha-gated ones back here with a note â€” never bypasses a captcha.
+  // bounces captcha-gated ones back here with a note - never bypasses a captcha.
   const submit = async (body: { id?: string; all?: boolean }, ids: string[]) => {
     setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.add(i)); return n; });
     try {
@@ -131,6 +131,28 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
     }
     setBusy((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
   };
+  const openPreparedApplication = async (app: App) => {
+    setBusy((prev) => new Set(prev).add(app.id));
+    try {
+      const preparedText = (app.prepared_data || [])
+        .filter((field) => field.value !== null && field.value !== undefined && field.value !== '')
+        .map((field) => `${field.label}: ${displayValue(field)}`).join('\n');
+      if (preparedText) await navigator.clipboard?.writeText(preparedText).catch(() => undefined);
+      const response = await fetch('/api/auto-apply/handoff', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: app.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || 'Could not create browser handoff');
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      showToast('Opening the prepared form. The browser helper will fill it; answers were also copied as a fallback.', 'info');
+    } catch (error) {
+      window.open(app.job_url, '_blank', 'noopener,noreferrer');
+      showToast(error instanceof Error ? `${error.message}. Prepared answers were copied.` : 'Opened the application and copied prepared answers.', 'error');
+    } finally {
+      setBusy((prev) => { const next = new Set(prev); next.delete(app.id); return next; });
+    }
+  };
+
   const readyIds = () => apps.filter((a) => {
     const hasMissing = (a.prepared_data || []).some((f) => f.required && f.source === 'user_needed');
     return (a.status ?? 'prepared') === 'prepared'
@@ -171,13 +193,13 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       return;
     }
     if (app.submit_log?.status === 'needs_captcha') {
-      showToast('Answers saved for future applications. Use â€œOpen & finishâ€ to complete the captcha.', 'success');
+      showToast('Answers saved for future applications. Use "Open & finish" to complete the captcha.', 'success');
       return;
     }
     await submit({ id: app.id }, [app.id]);
   };
 
-  if (loading) return <div className="max-w-3xl mx-auto p-8 text-gray-500">Loadingâ€¦</div>;
+  if (loading) return <div className="max-w-3xl mx-auto p-8 text-gray-500">Loading...</div>;
 
   return (
     <div className={embedded ? "w-full" : "max-w-3xl mx-auto px-4 sm:px-6 py-8"}>
@@ -208,7 +230,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Preparing or submitting in the background â€” results will appear here automatically.
+            Preparing or submitting in the background - results will appear here automatically.
           </p>
         )}
       </header>
@@ -272,7 +294,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
 
               {isOpen && (
                 <div className="border-t border-gray-100 dark:border-slate-700 p-4 space-y-4">
-                  {/* AI-drafted answers â€” editable, the time-savers */}
+                  {/* AI-drafted answers - editable, the time-savers */}
                   {drafted.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold uppercase text-gray-400 mb-2">AI-drafted answers (review & edit)</p>
@@ -287,7 +309,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                             <textarea
                               defaultValue={f.value || ''} rows={4}
                               onChange={(e) => setEdits((prev) => ({ ...prev, [app.id]: { ...(prev[app.id] || {}), [f.name]: e.target.value } }))}
-                              placeholder={f.source === 'ai_needed' ? 'Not drafted â€” add your answer' : ''}
+                              placeholder={f.source === 'ai_needed' ? 'Not drafted - add your answer' : ''}
                               className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700"
                             />
                           </div>
@@ -297,7 +319,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                     </div>
                   )}
 
-                  {/* Auto-filled fields â€” read-only summary */}
+                  {/* Auto-filled fields - read-only summary */}
                   {auto.length > 0 && (
                     <details>
                       <summary className="text-xs font-semibold uppercase text-gray-400 cursor-pointer">
@@ -314,11 +336,11 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                     </details>
                   )}
 
-                  {/* Complete the missing required fields here â€” no trip to a blank ATS page. */}
+                  {/* Complete the missing required fields here - no trip to a blank ATS page. */}
                   {needs.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold uppercase text-gray-400 mb-2">
-                        Complete the rest ({needs.length}) â€” we finish it for you
+                        Complete the rest ({needs.length}) - we finish it for you
                       </p>
                       <div className="space-y-3">
                         {needs.map((f) => {
@@ -340,12 +362,12 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                                 </label>
                               ) : (f.values && f.values.length > 0) ? (
                                 <select value={val} onChange={(e) => set(e.target.value)} className={inputCls}>
-                                  <option value="">Selectâ€¦</option>
+                                  <option value="">Select...</option>
                                   {f.values.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                               ) : f.category === 'age' ? (
                                 <select value={val} onChange={(e) => set(e.target.value)} className={inputCls}>
-                                  <option value="">Selectâ€¦</option>
+                                  <option value="">Select...</option>
                                   <option value="Yes">Yes</option>
                                   <option value="No">No</option>
                                 </select>
@@ -367,13 +389,12 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                   {/* Result of the last background submit attempt, if any */}
                   {app.submit_log?.status === 'needs_captcha' && (
                     <p className="text-sm text-amber-600 dark:text-amber-400">
-                      This form requires a browser captcha. Your prepared answers are saved here;
-                      open the application and use them to finish the form.
+                      This form requires a browser CAPTCHA. Open it with the browser helper to fill your saved answers, then review and submit.
                     </p>
                   )}
                   {(app.submit_log?.status === 'submit_failed' || app.submit_log?.status === 'incomplete') && (
                     <p className="text-sm text-red-600 dark:text-red-400">
-                      Auto-submit didnâ€™t complete ({app.submit_log?.detail}). Open the form to submit it yourself.
+                      Auto-submit did not complete ({app.submit_log?.detail}). Open the form to submit it yourself.
                     </p>
                   )}
 
@@ -385,22 +406,21 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-2">
                     {preparing ? (
-                      <Button disabled variant="outline" className="text-sm">Preparingâ€¦</Button>
+                      <Button disabled variant="outline" className="text-sm">Preparing...</Button>
                     ) : completed ? (
                       <Button disabled variant="outline" className="text-sm">Submitted</Button>
                     ) : retryable ? (
                       <Button disabled={busy.has(app.id)} onClick={() => retryPreparation(app)} className="text-sm">
-                        {busy.has(app.id) ? 'Retryingâ€¦' : 'Retry preparation'}
+                        {busy.has(app.id) ? 'Retrying...' : 'Retry preparation'}
                       </Button>
                     ) : unavailable ? (
                       <Button disabled variant="outline" className="text-sm">Manual application needed</Button>
                     ) : knownCaptcha ? (
-                      <a href={app.job_url} target="_blank" rel="noopener noreferrer"
-                         className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium">
-                        Open &amp; finish
-                      </a>
+                      <Button disabled={busy.has(app.id)} onClick={() => openPreparedApplication(app)} className="text-sm">
+                        {busy.has(app.id) ? 'Preparing browser...' : 'Open & finish'}
+                      </Button>
                     ) : (app.status === 'submit_requested' || app.status === 'submitting' || busy.has(app.id)) ? (
-                      <Button disabled variant="outline" className="text-sm">Submittingâ€¦</Button>
+                      <Button disabled variant="outline" className="text-sm">Submitting...</Button>
                     ) : (
                       <Button disabled={needs.length > 0}
                         onClick={() => submit({ id: app.id }, [app.id])} className="text-sm">
@@ -410,15 +430,14 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                     {!knownCaptcha && (
                       <a href={app.job_url} target="_blank" rel="noopener noreferrer"
                          className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 text-sm font-medium">
-                        Open application â†’
+                        Open application
                       </a>
                     )}
                     <Button onClick={() => setStatus(app.id, 'applied')} variant="outline" className="text-sm">Mark applied</Button>
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Server submission is available only for complete, captcha-free forms.
-                    Browser-gated forms keep their prepared answers here for you to finish.
+                    Complete CAPTCHA in your browser. The autofill helper transfers prepared answers into supported ATS forms.
                   </p>
                 </div>
               )}

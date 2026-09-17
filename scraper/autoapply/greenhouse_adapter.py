@@ -87,6 +87,8 @@ class Profile:
     current_company: str = ""                 # current employer (100% Lever)
     current_title: str = ""                   # current job title
     current_salary: str = ""                  # current compensation (Workday)
+    prior_employers: list = field(default_factory=list)
+    bay_area_resident: Optional[bool] = None
     notice_period: str = ""                   # 2 weeks, 1 month, etc. (Workday)
     pronouns: str = ""                        # she/her, he/him, they/them (8-40%)
 
@@ -112,11 +114,16 @@ class Profile:
     # EXPERIENCE & PREFERENCES
     # =========================================================================
     years_experience: str = ""                # total years of experience
-    salary_expectation: str = ""              # expected compensation (12-86%)
+    salary_expectation: str = ""              # legacy free-text expected compensation
+    salary_type: str = "market_rate"          # market_rate, range, specific, negotiable
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    salary_target: Optional[int] = None
+    salary_display_strategy: str = "show_range"
     start_date: str = ""                      # "Immediately", "2 weeks", "Flexible"
     willing_to_relocate: Optional[bool] = None  # open to relocation (37-57%)
     remote_preference: str = ""               # "remote", "hybrid", "onsite", "flexible"
-    is_adult: bool = True                     # over 18 years old (41%)
+    is_adult: Optional[bool] = None           # explicitly supplied; never assume age
 
     # =========================================================================
     # WORK FLEXIBILITY (iCIMS, SmartRecruiters, Workday)
@@ -171,6 +178,10 @@ class Profile:
     # Keys: why_interested, about_me, project, career_goals, challenge,
     #       leaving_reason, strengths, work_style, achievements
     resume_text: str = ""                     # extracted resume text for AI context
+    writing_sample: str = ""                  # applicant-authored sample for voice matching
+    preferred_tone: str = "natural"           # natural, concise, warm, technical
+    proud_project: str = ""
+    career_goals: str = ""
 
     # =========================================================================
     # REFERENCES (8% frequency)
@@ -536,6 +547,53 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     - ai_needed: free-text that benefits from AI drafting (cover letter, motivation)
     - user_needed: required field we cannot auto-fill
     """
+    lo_label = (label or "").lower()
+
+    # Label-specific safe inferences run before category dispatch because ATS
+    # wording is often more precise than the broad category classifier.
+    bay_area_terms = (
+        "san francisco", "oakland", "berkeley", "san jose", "fremont",
+        "palo alto", "mountain view", "sunnyvale", "santa clara",
+        "redwood city", "san mateo", "hayward", "south san francisco",
+    )
+    if ("bay area" in lo_label or "san francisco" in lo_label) and any(
+        word in lo_label for word in ("live", "living", "residen", "located")
+    ):
+        resident = p.bay_area_resident
+        if resident is None and (p.location or p.city):
+            home = f"{p.location} {p.city}".lower()
+            resident = any(term in home for term in bay_area_terms)
+        if resident is not None:
+            value = _yesno(values, resident) if values else ("Yes" if resident else "No")
+            return (value, "matched") if value is not None else (None, "user_needed")
+
+    prior_employment_label = (
+        "previously employed" in lo_label
+        or "worked at" in lo_label
+        or ("current or former" in lo_label and any(
+            word in lo_label for word in ("employee", "intern", "vendor", "contractor", "temp")
+        ))
+    )
+    if prior_employment_label and p.previously_employed_here is not None:
+        if values and not p.previously_employed_here:
+            value = _match_option(values, "never worked", "never employed", "none of the above", "no")
+        else:
+            value = _yesno(values, p.previously_employed_here) if values else (
+                "Yes" if p.previously_employed_here else "No"
+            )
+        return (value, "matched") if value is not None else (None, "user_needed")
+
+    acknowledgment_label = any(phrase in lo_label for phrase in (
+        "acknowledge and agree", "acknowledge that i", "please review and acknowledge",
+        "privacy notice", "arbitration agreement", "background check disclosure",
+    ))
+    if acknowledgment_label and values:
+        value = _match_option(values, "acknowledge", "agree", "accept", "confirm", "yes")
+        if value is None and len(values) == 1:
+            value = values[0].get("value", values[0].get("label"))
+        if value is not None:
+            return value, "matched"
+
     # === DIRECT PROFILE MAPPINGS ===
     # These map directly from Profile fields to form values
     simple = {
@@ -600,11 +658,13 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # === REFERRAL SOURCE (22% frequency) ===
     if cat == "source":
         if values:
-            value = _match_option(
-                values, p.how_heard.lower(), "careers site", "company website"
-            )
+            wanted = [
+                (p.how_heard or "").lower(), "careers page", "careers site",
+                "company website", "website", "linkedin", "social", "other",
+            ]
+            value = _match_option(values, *(item for item in wanted if item))
             return (value, "matched") if value is not None else (None, "user_needed")
-        return (p.how_heard, "matched")
+        return (p.how_heard or "Company careers page", "matched")
 
     # === WORK AUTHORIZATION (80% frequency) ===
     # Handles varied phrasings like:
@@ -628,7 +688,10 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # === PREVIOUS EMPLOYMENT (12% frequency) ===
     # "Have you previously been employed by [Company]?"
     if cat == "previous_employment" and p.previously_employed_here is not None:
-        v = _yesno(values, p.previously_employed_here) if values else ("Yes" if p.previously_employed_here else "No")
+        if values and not p.previously_employed_here:
+            v = _match_option(values, "never worked", "never employed", "none of the above", "no")
+        else:
+            v = _yesno(values, p.previously_employed_here) if values else ("Yes" if p.previously_employed_here else "No")
         return (v, "matched") if v is not None else (None, "user_needed")
 
     # === RELOCATION ===
@@ -643,6 +706,8 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # === AGE VERIFICATION (4% frequency) ===
     # "Are you at least 18 years of age?" - job applicants are almost always adults
     if cat == "age_verification":
+        if p.is_adult is None:
+            return (None, "user_needed")
         v = _yesno(values, p.is_adult) if values else ("Yes" if p.is_adult else "No")
         return (v, "matched") if v is not None else (None, "user_needed")
 

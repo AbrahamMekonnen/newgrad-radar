@@ -16,6 +16,7 @@ import argparse
 import logging
 import datetime as dt
 import time
+import copy
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -65,15 +66,15 @@ def build_profile(client, user_id: str) -> gh.Profile:
 
     location = row.get("location") or ""
     location_parts = [part.strip() for part in location.split(",")]
-    city = custom.get("city") or (location_parts[0] if location_parts else "")
-    state = custom.get("state") or (location_parts[1] if len(location_parts) > 1 else "")
+    city = row.get("city") or custom.get("city") or (location_parts[0] if location_parts else "")
+    state = row.get("state") or custom.get("state") or (location_parts[1] if len(location_parts) > 1 else "")
 
     prof = gh.Profile(
         first_name=row.get("first_name") or "", last_name=row.get("last_name") or "",
         email=row.get("email") or "", phone=row.get("phone") or "",
         location=location, city=city, state=state,
-        zip_code=str(custom.get("zip_code") or ""),
-        country=str(custom.get("country") or "United States"),
+        zip_code=str(row.get("zip_code") or custom.get("zip_code") or ""),
+        country=str(row.get("country") or custom.get("country") or "United States"),
         linkedin_url=row.get("linkedin_url") or "",
         github_url=row.get("github_url") or "", portfolio_url=row.get("portfolio_url") or "",
         resume_url=row.get("resume_url") or "",
@@ -88,12 +89,54 @@ def build_profile(client, user_id: str) -> gh.Profile:
         years_experience=str(row.get("years_experience") or ""),
         start_date=row.get("start_date") or "",
         salary_expectation=str(row.get("salary_expectation") or ""),
+        salary_type=str(row.get("salary_type") or "market_rate"),
+        salary_min=row.get("salary_min"), salary_max=row.get("salary_max"),
+        salary_target=row.get("salary_target"),
+        salary_display_strategy=str(row.get("salary_display_strategy") or "show_range"),
         willing_to_relocate=row.get("willing_to_relocate"),
-        how_heard=str(custom.get("source") or custom.get("how_heard") or "Company website"),
-        is_adult=bool(custom.get("is_adult", True)),
+        current_company=str(row.get("current_company") or custom.get("current_company") or ""),
+        current_title=str(row.get("current_title") or custom.get("current_title") or ""),
+        prior_employers=list(row.get("prior_employers") or []),
+        bay_area_resident=row.get("bay_area_resident"),
+        preferred_name=str(row.get("preferred_name") or ""),
+        pronouns=str(row.get("pronouns") or ""),
+        address_line1=str(row.get("address_line1") or ""),
+        address_line2=str(row.get("address_line2") or ""),
+        how_heard=str(row.get("default_source") or custom.get("source") or custom.get("how_heard") or "Company website"),
+        referral_name=str(row.get("referral_name") or ""),
+        is_adult=(row.get("is_adult") if row.get("is_adult") is not None else custom.get("is_adult")),
+        writing_sample=str(row.get("writing_sample") or ""),
+        preferred_tone=str(row.get("preferred_tone") or "natural"),
+        proud_project=str(row.get("proud_project") or ""),
+        career_goals=str(row.get("career_goals") or ""),
         custom_answers=custom,
         auto_submit=bool(row.get("auto_submit", False)),
     )
+
+    try:
+        education = (client.table("user_education").select("*")
+                     .eq("user_id", user_id).order("is_primary", desc=True)
+                     .order("display_order").limit(1).execute().data or [])
+        if education:
+            ed = education[0]
+            prof.school = ed.get("school_name") or ""
+            prof.education = ed.get("degree_name") or ed.get("degree_type") or ""
+            prof.education_level = ed.get("degree_type") or ""
+            prof.degree = ed.get("degree_name") or ""
+            prof.major = ed.get("major") or ""
+            prof.graduation_date = ed.get("end_date") or ""
+            prof.graduation_year = str(prof.graduation_date)[:4]
+            prof.gpa = str(ed.get("gpa") or "") if ed.get("show_gpa", True) else ""
+    except Exception:
+        education = []
+    if not education:
+        prof.school = str(row.get("education_school") or "")
+        prof.degree = str(row.get("education_degree") or "")
+        prof.education = prof.degree
+        prof.major = str(row.get("education_major") or "")
+        prof.graduation_date = str(row.get("education_graduation_date") or "")
+        prof.graduation_year = prof.graduation_date[:4]
+        prof.gpa = str(row.get("education_gpa") or "")
 
     try:
         generated = (client.table("answer_bank")
@@ -173,7 +216,7 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
     ATS. Every row always ends with a recorded outcome we can query at scale."""
     ats = "?"
     try:
-        resp = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type")
+        resp = (client.table("jobs").select("id,url,apply_url,company_slug,company_name,title,ats_type,salary_min,salary_max,tier,location")
                 .eq("id", r["job_id"]).limit(1).execute())
         job = (resp.data or [None])[0] if resp else None
         if not job:
@@ -195,10 +238,23 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
             _finish(client, r["id"], "unsupported", "missing ats token or job id", ats)
             return False
 
+        job_profile = copy.deepcopy(profile)
+        company = str(job.get("company_name") or "").strip().lower()
+        history = " ".join([
+            job_profile.current_company,
+            " ".join(str(x) for x in job_profile.prior_employers),
+            job_profile.resume_text,
+        ]).lower()
+        if company and history:
+            job_profile.previously_employed_here = company in history
+
         prepared = prepare_application({
             "ats_type": ats, "ats_token": token, "ats_job_id": jid,
-            "company_name": job.get("company_name", ""), "job_title": job.get("title", ""),
-        }, profile)
+            "company_name": job.get("company_name", ""), "company_slug": job.get("company_slug", ""),
+            "job_title": job.get("title", ""), "title": job.get("title", ""),
+            "salary_min": job.get("salary_min"), "salary_max": job.get("salary_max"),
+            "tier": job.get("tier"), "location": job.get("location"),
+        }, job_profile)
         pstatus = prepared.get("status")
         # 'form_unavailable' / 'form_fetch_failed' keep their real status so they
         # stay OUT of the inbox (which shows only 'prepared') and are diagnosable.

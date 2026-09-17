@@ -13,6 +13,7 @@ import field_knowledge_base as kb
 import greenhouse_adapter as gh
 import prepare_worker
 import submit
+from salary_market import market_salary, salary_answer
 
 
 class _Result:
@@ -107,6 +108,44 @@ class AutoApplyRegressionTests(unittest.TestCase):
                 sponsorship_profile, "Will you require sponsorship?",
             ),
         )
+
+    def test_market_salary_prefers_posted_then_levels_data(self):
+        profile = gh.Profile(salary_type="market_rate", salary_display_strategy="show_range")
+        posted = market_salary({"salary_min": 130000, "salary_max": 160000}, profile)
+        self.assertEqual("job posting", posted["source"])
+        self.assertEqual("$130,000 - $160,000 base", salary_answer("Expected salary", "text", posted, profile))
+        levels = market_salary({"company_slug": "palantir", "title": "Software Engineer"}, profile)
+        self.assertEqual("levels.fyi", levels["source"])
+        self.assertGreater(levels["max"], levels["min"])
+
+    def test_safe_option_inferences(self):
+        source_profile = gh.Profile(how_heard="Company careers page")
+        self.assertEqual(
+            ("career-id", "matched"),
+            gh._resolve_one("source", "select", [{"label": "Verkada Careers Page", "value": "career-id"}], source_profile, "How did you hear about this role?"),
+        )
+        former_profile = gh.Profile(previously_employed_here=False)
+        self.assertEqual(
+            ("never-id", "matched"),
+            gh._resolve_one("custom", "select", [{"label": "Never worked at Alphabet", "value": "never-id"}], former_profile, "Are you a current or former Alphabet employee, intern, vendor, contractor, or temp?"),
+        )
+        bay_profile = gh.Profile(location="Oakland, CA")
+        self.assertEqual(
+            ("yes-id", "matched"),
+            gh._resolve_one("in_office", "select", [{"label": "Yes", "value": "yes-id"}, {"label": "No", "value": "no-id"}], bay_profile, "Do you currently live in/around the SF Bay Area?"),
+        )
+        self.assertEqual(
+            ("ack-id", "matched"),
+            gh._resolve_one("custom", "select", [{"label": "I acknowledge the above policies", "value": "ack-id"}], gh.Profile(), "By submitting, I acknowledge and agree to these interview guidelines."),
+        )
+
+    def test_age_is_never_assumed(self):
+        value, source = gh._resolve_one(
+            "age_verification", "select", [{"label": "Yes", "value": "yes"}, {"label": "No", "value": "no"}],
+            gh.Profile(), "Are you 18 or older?",
+        )
+        self.assertIsNone(value)
+        self.assertEqual("user_needed", source)
 
     def test_learned_answer_remaps_to_current_option_id(self):
         profile = gh.Profile(custom_answers={

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { cn } from '@/lib/utils';
-import { useDebouncedCallback, useBatchedState } from '@/lib/hooks';
+import { useBatchedState } from '@/lib/hooks';
 
 interface ProfileFormProps {
   profile: UserProfile;
@@ -88,7 +88,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Stable callback for field changes (memoized to prevent child re-renders)
-  const handleChange = useCallback((field: keyof UserProfile, value: string | boolean | null) => {
+  const handleChange = useCallback((field: keyof UserProfile, value: UserProfile[keyof UserProfile]) => {
     batchFormUpdate({ [field]: value } as Partial<UserProfile>);
   }, [batchFormUpdate]);
 
@@ -186,6 +186,44 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             placeholder="San Francisco, CA"
             className="md:col-span-2"
           />
+        </div>
+      </section>
+
+      {/* Application identity and address */}
+      <section>
+        <h2 className="text-lg font-medium text-gray-900 mb-1">Application Identity</h2>
+        <p className="text-sm text-gray-500 mb-4">Used only when an application asks for these details.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DebouncedInput field="preferred_name" label="Preferred Name" value={formData.preferred_name || ''} onChange={handleChange} />
+          <DebouncedInput field="pronouns" label="Pronouns" value={formData.pronouns || ''} onChange={handleChange} placeholder="e.g., she/her" />
+          <DebouncedInput field="address_line1" label="Street Address" value={formData.address_line1 || ''} onChange={handleChange} className="md:col-span-2" />
+          <DebouncedInput field="address_line2" label="Apartment / Suite" value={formData.address_line2 || ''} onChange={handleChange} className="md:col-span-2" />
+          <DebouncedInput field="city" label="City" value={formData.city || ''} onChange={handleChange} />
+          <DebouncedInput field="state" label="State / Province" value={formData.state || ''} onChange={handleChange} />
+          <DebouncedInput field="zip_code" label="ZIP / Postal Code" value={formData.zip_code || ''} onChange={handleChange} />
+          <DebouncedInput field="country" label="Country" value={formData.country || ''} onChange={handleChange} />
+        </div>
+      </section>
+
+      {/* Employment and education */}
+      <section>
+        <h2 className="text-lg font-medium text-gray-900 mb-1">Background</h2>
+        <p className="text-sm text-gray-500 mb-4">This lets the agent answer employment and education questions without guessing.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DebouncedInput field="current_company" label="Current Company" value={formData.current_company || ''} onChange={handleChange} />
+          <DebouncedInput field="current_title" label="Current Title" value={formData.current_title || ''} onChange={handleChange} />
+          <Input
+            label="Prior Employers"
+            value={(formData.prior_employers || []).join(', ')}
+            onChange={(e) => handleChange('prior_employers', e.target.value.split(',').map((v) => v.trim()).filter(Boolean))}
+            placeholder="Company A, Company B"
+            className="md:col-span-2"
+          />
+          <DebouncedInput field="education_school" label="School" value={formData.education_school || ''} onChange={handleChange} />
+          <DebouncedInput field="education_degree" label="Degree" value={formData.education_degree || ''} onChange={handleChange} placeholder="B.S." />
+          <DebouncedInput field="education_major" label="Major" value={formData.education_major || ''} onChange={handleChange} />
+          <DebouncedInput field="education_graduation_date" label="Graduation Date" type="date" value={formData.education_graduation_date || ''} onChange={handleChange} />
+          <DebouncedInput field="education_gpa" label="GPA (optional)" value={formData.education_gpa || ''} onChange={handleChange} />
         </div>
       </section>
 
@@ -352,6 +390,34 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Default answer source</label>
+              <select value={formData.default_source || 'Company careers page'}
+                onChange={(e) => handleChange('default_source', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option>Company careers page</option><option>LinkedIn</option><option>Referral</option><option>Social media</option><option>Other</option>
+              </select>
+            </div>
+            <DebouncedInput field="referral_name" label="Referrer Name (if any)" value={formData.referral_name || ''} onChange={handleChange} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Are you 18 or older?</label>
+              <select value={formData.is_adult == null ? '' : String(formData.is_adult)}
+                onChange={(e) => handleChange('is_adult', e.target.value === '' ? null : e.target.value === 'true')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Not answered</option><option value="true">Yes</option><option value="false">No</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Do you live in the SF Bay Area?</label>
+              <select value={formData.bay_area_resident == null ? '' : String(formData.bay_area_resident)}
+                onChange={(e) => handleChange('bay_area_resident', e.target.value === '' ? null : e.target.value === 'true')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Infer from address</option><option value="true">Yes</option><option value="false">No</option>
+              </select>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Years of Experience
@@ -378,19 +444,65 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             onChange={handleChange}
           />
 
-          <DebouncedInput
-            field="salary_expectation"
-            label="Salary Expectation"
-            value={formData.salary_expectation || ''}
-            onChange={handleChange}
-            placeholder="e.g., $120,000 - $150,000"
-          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Salary strategy</label>
+            <select value={formData.salary_type || 'market_rate'}
+              onChange={(e) => handleChange('salary_type', e.target.value as UserProfile['salary_type'])}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="market_rate">Use job and company market data (recommended)</option>
+              <option value="range">Use my range</option><option value="specific">Use my target</option>
+              <option value="negotiable">Say negotiable</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">Posted salary ranges are used first, then company market data, then your fallback.</p>
+          </div>
+          {formData.salary_type === 'range' && (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Minimum salary" type="number" value={formData.salary_min ?? ''}
+                onChange={(e) => handleChange('salary_min', e.target.value ? Number(e.target.value) : null)} />
+              <Input label="Maximum salary" type="number" value={formData.salary_max ?? ''}
+                onChange={(e) => handleChange('salary_max', e.target.value ? Number(e.target.value) : null)} />
+            </div>
+          )}
+          {formData.salary_type === 'specific' && (
+            <Input label="Target salary" type="number" value={formData.salary_target ?? ''}
+              onChange={(e) => handleChange('salary_target', e.target.value ? Number(e.target.value) : null)} />
+          )}
 
           <Checkbox
             label="Willing to Relocate"
             checked={formData.willing_to_relocate ?? false}
             onChange={(checked) => handleChange('willing_to_relocate', checked)}
           />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-gray-900 mb-1">AI Writing Context</h2>
+        <p className="text-sm text-gray-500 mb-4">Give the agent facts and a sample of your voice so open-ended answers sound like you.</p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Proudest project or accomplishment</label>
+            <textarea rows={4} value={formData.proud_project || ''} onChange={(e) => handleChange('proud_project', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="What you built, why it mattered, and the result" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Career goals and roles you want</label>
+            <textarea rows={3} value={formData.career_goals || ''} onChange={(e) => handleChange('career_goals', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Writing sample</label>
+            <textarea rows={5} value={formData.writing_sample || ''} onChange={(e) => handleChange('writing_sample', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Paste a paragraph you wrote naturally. The agent uses its style, not its facts." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Preferred tone</label>
+            <select value={formData.preferred_tone || 'natural'} onChange={(e) => handleChange('preferred_tone', e.target.value as UserProfile['preferred_tone'])}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="natural">Natural</option><option value="concise">Concise</option>
+              <option value="warm">Warm</option><option value="technical">Technical</option>
+            </select>
+          </div>
         </div>
       </section>
 

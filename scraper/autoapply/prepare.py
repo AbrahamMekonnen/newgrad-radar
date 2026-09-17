@@ -36,6 +36,7 @@ import icims_adapter as icims            # noqa: E402
 import taleo_adapter as taleo            # noqa: E402
 import workday_adapter as wd             # noqa: E402
 from ai_drafter import draft_answers     # noqa: E402
+from salary_market import market_salary, salary_answer  # noqa: E402
 
 SUPPORTED = {"greenhouse", "lever", "ashby", "smartrecruiters", "bamboohr", "jobvite", "jazzhr", "recruitee", "breezyhr", "icims", "taleo", "workday"}
 
@@ -87,6 +88,16 @@ def prepare_application(job: dict, profile) -> dict:
         return {"status": "form_unavailable", "ats": ats, "fields": [],
                 "message": f"could not read the {ats} application form"}
 
+    # Salary answers are job-specific: posted range, then Levels.fyi, then a
+    # role/tier market band. A stale fixed profile number must not be reused.
+    salary_info = market_salary(job, profile)
+    for resolved_field in res["resolved"]:
+        if resolved_field.category == "salary":
+            resolved_field.value = salary_answer(
+                resolved_field.label, resolved_field.type, salary_info, profile
+            )
+            resolved_field.source = "market"
+
     # AI-draft the free-text gaps in one call, then fill them in.
     ai_fields = res["ai_needed"]
     drafts = {}
@@ -101,12 +112,15 @@ def prepare_application(job: dict, profile) -> dict:
     for r in res["resolved"]:
         if r.source == "ai_needed" and drafts.get(r.label):
             r.value, r.source = drafts[r.label], "ai_drafted"
+        elif r.source == "ai_needed" and r.required:
+            r.source = "user_needed"
 
     fields = [{"label": r.label, "name": r.name, "type": r.type, "required": r.required,
                "category": r.category, "value": r.value, "source": r.source,
+               "provenance": salary_info["source"] if r.category == "salary" else None,
                "values": getattr(r, "values", []) or []}
               for r in res["resolved"]]
-    filled = [f for f in fields if f["source"] in ("profile", "matched", "eeo", "file", "ai_drafted")]
+    filled = [f for f in fields if f["source"] in ("profile", "matched", "market", "eeo", "file", "ai_drafted")]
     user_needed = [f for f in fields if f["source"] == "user_needed" and f["required"]]
     total = len(fields) or 1
 

@@ -56,6 +56,11 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
         years_experience: null,
         start_date: null,
         salary_expectation: null,
+        salary_type: 'market_rate',
+        salary_min: null,
+        salary_max: null,
+        salary_target: null,
+        salary_display_strategy: 'show_range',
         willing_to_relocate: null,
         custom_answers: {},
       });

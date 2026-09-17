@@ -6,6 +6,7 @@ Integrates with ntfy.sh for push notifications and email providers.
 
 from datetime import datetime, timezone
 from typing import Optional
+import os
 
 from db import get_client
 from notify import send_ntfy
@@ -50,7 +51,7 @@ def get_instant_alerts(job_ids: list[str]) -> dict[str, list[dict]]:
     result = client.table("alert_matches").select(
         "id, alert_id, job_id, "
         "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
-        "jobs!inner(id, title, company_name, company_slug, location, url, tier, role_types)"
+        "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
     ).in_("job_id", job_ids).eq(
         "delivery_status", "pending"
     ).eq(
@@ -119,7 +120,7 @@ def get_digest_alerts(mode: str = "daily") -> dict[str, list[dict]]:
     result = client.table("alert_matches").select(
         "id, alert_id, job_id, "
         "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
-        "jobs!inner(id, title, company_name, company_slug, location, url, tier, role_types)"
+        "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
     ).eq(
         "delivery_status", "pending"
     ).eq(
@@ -201,6 +202,9 @@ def send_instant_alert(
     """
     result = {"push_sent": False, "email_sent": False}
 
+    app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
+    history_url = f"{app_url}/applications?section=alerts"
+
     # Send push notification
     if push_enabled and ntfy_topic:
         title = f"{alert_name}: {job['company_name']}"
@@ -210,7 +214,7 @@ def send_instant_alert(
             print(f"    [DRY RUN] Push to {ntfy_topic}: {title}")
             result["push_sent"] = True
         else:
-            if send_ntfy(ntfy_topic, title, message, url=job.get("url"), priority="high"):
+            if send_ntfy(ntfy_topic, title, message, url=history_url, priority="high"):
                 result["push_sent"] = True
 
     # Send email — never let an email failure affect push (push already sent
@@ -248,6 +252,8 @@ def send_digest_notifications(
         Dict with push_count and email_count
     """
     result = {"push_count": 0, "email_count": 0}
+    app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
+    history_url = f"{app_url}/applications?section=alerts"
 
     if not matches:
         return result
@@ -282,7 +288,7 @@ def send_digest_notifications(
             print(f"    [DRY RUN] Digest push to {ntfy_topic}: {title}")
             result["push_count"] = 1
         else:
-            if send_ntfy(ntfy_topic, title, message, priority="default"):
+            if send_ntfy(ntfy_topic, title, message, url=history_url, priority="default"):
                 result["push_count"] = 1
 
     # Send detailed email digest
@@ -299,6 +305,46 @@ def send_digest_notifications(
                 result["email_count"] = 1
 
     return result
+
+
+def queue_auto_apply_matches(alerts_by_user: dict[str, list[dict]], dry_run: bool = False) -> int:
+    """Queue matched jobs for users who enabled Auto-Apply. Delivery remains independent."""
+    if dry_run or not alerts_by_user:
+        return 0
+    client = get_client()
+    queued = 0
+    supported = {"greenhouse", "lever", "ashby", "workday"}
+    for user_id, matches in alerts_by_user.items():
+        try:
+            profile_rows = (client.table("user_profiles")
+                            .select("auto_apply_enabled,auto_submit")
+                            .eq("user_id", user_id).limit(1).execute().data) or []
+            profile = profile_rows[0] if profile_rows else {}
+            if not profile.get("auto_apply_enabled"):
+                continue
+            for match in matches:
+                job = match.get("job") or {}
+                ats = str(job.get("ats_type") or "").lower()
+                job_url = job.get("apply_url") or job.get("url")
+                if ats not in supported or not job_url:
+                    continue
+                existing = (client.table("autoapply_job_queue").select("id")
+                            .eq("user_id", user_id).eq("job_id", match["job_id"])
+                            .limit(1).execute().data) or []
+                if existing:
+                    continue
+                client.table("autoapply_job_queue").insert({
+                    "user_id": user_id, "job_id": match["job_id"],
+                    "job_title": job.get("title") or "Untitled",
+                    "company_slug": job.get("company_slug") or "unknown",
+                    "company_name": job.get("company_name") or "Unknown",
+                    "job_url": job_url, "ats_type": ats, "status": "pending", "priority": 3,
+                    "answers": {"submit_after_prepare": bool(profile.get("auto_submit")), "origin": "job_alert"},
+                }).execute()
+                queued += 1
+        except Exception as exc:
+            print(f"    [auto-apply] queueing failed for user {user_id}: {exc}")
+    return queued
 
 
 # ============================================
@@ -365,6 +411,7 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
         "push_sent": 0,
         "email_sent": 0,
         "matches_delivered": 0,
+        "auto_apply_queued": 0,
     }
 
     if not new_jobs:
@@ -382,6 +429,7 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
         return stats
 
     print(f"  Processing instant alerts for {len(alerts_by_user)} users...")
+    stats["auto_apply_queued"] = queue_auto_apply_matches(alerts_by_user, dry_run)
 
     delivered_match_ids = []
 
@@ -438,6 +486,7 @@ def process_digest_alerts(mode: str = "daily", dry_run: bool = False) -> dict:
         "email_sent": 0,
         "total_jobs": 0,
         "matches_delivered": 0,
+        "auto_apply_queued": 0,
     }
 
     try:
@@ -451,6 +500,7 @@ def process_digest_alerts(mode: str = "daily", dry_run: bool = False) -> dict:
         return stats
 
     print(f"  Processing {mode} digest for {len(alerts_by_user)} users...")
+    stats["auto_apply_queued"] = queue_auto_apply_matches(alerts_by_user, dry_run)
 
     delivered_match_ids = []
 
@@ -497,6 +547,8 @@ def build_single_alert_email(alert_name: str, job: dict) -> str:
     Returns:
         HTML email body string
     """
+    app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
+    history_url = f"{app_url}/applications?section=alerts"
     role_badges = ""
     for role in job.get("role_types", []):
         role_badges += f'<span style="display: inline-block; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px;">{role}</span>'
@@ -542,15 +594,15 @@ def build_single_alert_email(alert_name: str, job: dict) -> str:
                     {role_badges}
                 </div>
                 <div style="text-align: center;">
-                    <a href="{job.get('url', '#')}" style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 16px;">
-                        Apply Now
+                    <a href="{history_url}" style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                        View in Applications
                     </a>
                 </div>
             </div>
             <div style="background: #f9f9f9; padding: 16px; text-align: center; color: #666; font-size: 12px;">
                 <p style="margin: 0 0 8px;">This job matched your alert: <strong>{alert_name}</strong></p>
-                <a href="https://newgradradar.com/alerts" style="color: #666;">Manage Alerts</a> |
-                <a href="https://newgradradar.com/settings" style="color: #666;">Unsubscribe</a>
+                <a href="{app_url}/alerts" style="color: #666;">Manage Alerts</a> |
+                <a href="{app_url}/settings" style="color: #666;">Unsubscribe</a>
             </div>
         </div>
     </body>
@@ -568,6 +620,8 @@ def build_digest_alert_email(jobs_by_alert: dict[str, list[dict]], mode: str) ->
     Returns:
         HTML email body string
     """
+    app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
+    history_url = f"{app_url}/applications?section=alerts"
     mode_label = "Daily" if mode == "daily" else "Weekly"
     total_jobs = sum(len(jobs) for jobs in jobs_by_alert.values())
     total_alerts = len(jobs_by_alert)
@@ -639,14 +693,14 @@ def build_digest_alert_email(jobs_by_alert: dict[str, list[dict]], mode: str) ->
                 </div>
                 {alert_sections}
                 <div style="margin-top: 24px; text-align: center;">
-                    <a href="https://newgradradar.com" style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">
-                        View All Jobs
+                    <a href="{history_url}" style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                        View Notified Jobs
                     </a>
                 </div>
             </div>
             <div style="background: #f9f9f9; padding: 16px; text-align: center; color: #666; font-size: 12px;">
-                <a href="https://newgradradar.com/alerts" style="color: #666;">Manage Alerts</a> |
-                <a href="https://newgradradar.com/settings" style="color: #666;">Unsubscribe</a>
+                <a href="{app_url}/alerts" style="color: #666;">Manage Alerts</a> |
+                <a href="{app_url}/settings" style="color: #666;">Unsubscribe</a>
             </div>
         </div>
     </body>
