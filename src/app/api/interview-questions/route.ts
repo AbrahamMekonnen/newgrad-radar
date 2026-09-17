@@ -27,6 +27,17 @@ type Difficulty = (typeof VALID_DIFFICULTIES)[number];
 
 const VALID_POSITION_LEVELS = ['intern', 'new_grad', 'junior', 'mid', 'senior', 'staff', 'principal'] as const;
 
+function isLikelyEnglish(text: string): boolean {
+  const letters = Array.from(text).filter((char) => /\p{L}/u.test(char));
+  if (letters.length === 0) return false;
+  const latin = letters.filter((char) => /\p{Script=Latin}/u.test(char)).length;
+  return latin / letters.length >= 0.8;
+}
+
+function normalizeQuestion(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 interface PostBody {
   company_slug?: string;
   company_name: string;
@@ -113,7 +124,7 @@ export async function GET(request: NextRequest) {
         scraped_at,
         created_at
       `,
-        { count: 'exact' }
+        { count: 'planned' }
       )
       .eq('is_duplicate', false)
       .eq('is_junk', false)
@@ -172,8 +183,10 @@ export async function GET(request: NextRequest) {
       query = query.ilike('company_name', `%${search}%`);
     }
 
-    // Pagination
-    query = query.range(offset, offset + limit - 1);
+    // Pull a wider window so language and duplicate cleanup can still return a
+    // full page. The database flags remain the first line of defense.
+    const rawOffset = offset * 3;
+    query = query.range(rawOffset, rawOffset + (limit * 3) - 1);
 
     const { data, error, count } = await query;
 
@@ -185,8 +198,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const seen = new Set<string>();
+    const questions = (data || []).filter((question) => {
+      if (!isLikelyEnglish(question.question_text || '')) return false;
+      const key = (question.company_name || '').toLowerCase() + ':' + normalizeQuestion(question.question_text || '');
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit);
+
     return NextResponse.json({
-      questions: data || [],
+      questions,
       total: count || 0,
       params: {
         company_slug,
@@ -197,7 +219,7 @@ export async function GET(request: NextRequest) {
         limit,
         offset,
       },
-      hasMore: (count || 0) > offset + limit,
+      hasMore: questions.length === limit && (count || 0) > rawOffset + questions.length,
     });
   } catch (error) {
     console.error('[interview-questions] GET error:', error);

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { AutoApplyInbox } from '@/components/autoapply/AutoApplyInbox';
 import { AlertedJobs } from '@/components/applications/AlertedJobs';
 import { useSearchParams } from 'next/navigation';
+import { recordApplicationActivity } from '@/hooks/useStreak';
 
 
 export default function ApplicationsPage() {
@@ -87,7 +88,9 @@ function ApplicationsContent({ userId }: { userId: string }) {
     if (error) {
       console.error('Error updating status:', error);
       fetchSavedJobs();
+      return;
     }
+    if (status === 'applied') recordApplicationActivity();
   };
 
   const handleNotesUpdate = async (id: string, notes: string) => {

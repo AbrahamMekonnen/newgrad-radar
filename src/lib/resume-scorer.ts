@@ -162,29 +162,31 @@ export function scoreResume(resume: ResumeData, job: JobRequirements): ResumeSco
   });
 
   // Calculate scores
-  const requiredTotal = job.requiredSkills.length || 1;
-  const niceTotal = job.niceToHaveSkills.length || 1;
-  const techTotal = job.techStack.length || 1;
-  const keywordTotal = job.keywords.length || 1;
+  const requiredTotal = job.requiredSkills.length;
+  const niceTotal = job.niceToHaveSkills.length;
+  const techTotal = job.techStack.length;
+  const keywordTotal = job.keywords.length;
 
+  // Normalize across the dimensions that actually exist. Previously every role
+  // with no nice-to-have list had a hard 70% ceiling for skill match.
+  const requiredRatio = requiredTotal ? presentRequired.length / requiredTotal : null;
+  const niceRatio = niceTotal ? presentNice.length / niceTotal : null;
   const skillMatch = Math.round(
-    (presentRequired.length / requiredTotal) * 70 +
-    (presentNice.length / niceTotal) * 30
+    requiredRatio !== null && niceRatio !== null
+      ? (requiredRatio * 70) + (niceRatio * 30)
+      : (requiredRatio ?? niceRatio ?? 0) * 100
   );
+  const experienceMatch = Math.round(techTotal ? (presentTech.length / techTotal) * 100 : skillMatch);
+  const keywordMatch = Math.round(keywordTotal ? (presentKeywords.length / keywordTotal) * 100 : skillMatch);
 
-  const experienceMatch = Math.round(
-    (presentTech.length / techTotal) * 100
-  );
-
-  const keywordMatch = Math.round(
-    (presentKeywords.length / keywordTotal) * 100
-  );
-
-  // Overall score: weighted average
+  const dimensions = [
+    { score: skillMatch, weight: 0.5, available: requiredTotal + niceTotal > 0 },
+    { score: experienceMatch, weight: 0.3, available: techTotal > 0 },
+    { score: keywordMatch, weight: 0.2, available: keywordTotal > 0 },
+  ].filter((dimension) => dimension.available);
+  const totalWeight = dimensions.reduce((sum, dimension) => sum + dimension.weight, 0) || 1;
   const overall = Math.round(
-    skillMatch * 0.5 +
-    experienceMatch * 0.3 +
-    keywordMatch * 0.2
+    dimensions.reduce((sum, dimension) => sum + dimension.score * dimension.weight, 0) / totalWeight
   );
 
   // Generate specific, actionable skill suggestions
@@ -439,6 +441,11 @@ export async function extractJobRequirements(
   };
 
   const defaults = roleDefaults[roleType] || roleDefaults.swe;
+  const detectedTech = description ? extractTechFromText(description) : [];
+  const titleKeywords = jobTitle
+    .toLowerCase()
+    .split(/[^a-z0-9+#.]+/)
+    .filter((word) => word.length > 2 && !['the', 'and', 'for', 'with'].includes(word));
 
   // Tier-specific additions
   const tierAdditions: Record<string, string[]> = {
@@ -455,7 +462,7 @@ export async function extractJobRequirements(
     description,
     requiredSkills: [...(defaults.requiredSkills || []), ...(tierAdditions[tier] || [])],
     niceToHaveSkills: [],
-    techStack: defaults.techStack || [],
-    keywords: defaults.keywords || [],
+    techStack: [...new Set([...(defaults.techStack || []), ...detectedTech])],
+    keywords: [...new Set([...(defaults.keywords || []), ...titleKeywords])],
   };
 }

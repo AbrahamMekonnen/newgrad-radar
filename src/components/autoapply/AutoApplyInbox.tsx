@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { recordApplicationActivity } from '@/hooks/useStreak';
 
 interface Opt { label: string; value: string }
 interface Field {
@@ -74,10 +75,16 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
     setApps((prev) => status === 'skipped'
       ? prev.filter((a) => a.id !== id)
       : prev.map((a) => (a.id === id ? { ...a, status: 'applied' } : a))); // optimistic
-    await fetch('/api/auto-apply/inbox', {
+    const response = await fetch('/api/auto-apply/inbox', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status }),
     });
+    if (!response.ok) {
+      await load(true);
+      showToast('Could not update the application status.', 'error');
+      return;
+    }
+    if (status === 'applied') recordApplicationActivity();
     showToast(status === 'applied' ? 'Marked as applied.' : 'Skipped.', 'success');
   };
 

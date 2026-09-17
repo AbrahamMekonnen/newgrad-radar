@@ -100,17 +100,38 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
   }, [fetchResume]);
 
   const handleSave = async () => {
-    setSaving(true);
     setMessage(null);
 
+    const missing: string[] = [];
+    if (!resume.name.trim()) missing.push('full name');
+    if (!resume.email.trim()) {
+      missing.push('email');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resume.email.trim())) {
+      setActiveSection('contact');
+      setMessage({ type: 'error', text: 'Enter a valid email address before saving.' });
+      return;
+    }
+    const hasContent = resume.education.length > 0 || resume.experience.length > 0
+      || resume.projects.length > 0 || resume.skills.length > 0;
+    if (!hasContent) missing.push('at least one education, experience, project, or skills entry');
+    if (missing.length > 0) {
+      setActiveSection(missing.some((field) => field === 'full name' || field === 'email') ? 'contact' : activeSection);
+      setMessage({ type: 'error', text: 'Complete ' + missing.join(' and ') + ' before saving.' });
+      return;
+    }
+
+    setSaving(true);
     try {
-      // Check if base resume already exists
-      const { data: existing } = await supabase
+      // Check if base resume already exists. maybeSingle treats a missing row
+      // as the expected first-save case instead of an error.
+      const { data: existing, error: lookupError } = await supabase
         .from('user_resumes')
         .select('id')
         .eq('user_id', userId)
         .eq('name', 'Base Resume')
-        .single();
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
 
       const resumeRecord = {
         user_id: userId,
@@ -139,7 +160,17 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
 
       setMessage({ type: 'success', text: 'Resume saved!' });
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to save resume' });
+      const detail = err && typeof err === 'object' && 'message' in err
+        ? String((err as { message?: unknown }).message || '')
+        : '';
+      const text = /relation .*user_resumes.* does not exist|schema cache/i.test(detail)
+        ? 'Resume storage is not configured yet. Run the latest Supabase migrations and try again.'
+        : /row-level security|permission denied/i.test(detail)
+          ? 'Your session cannot save this resume. Sign out, sign back in, and try again.'
+          : detail
+            ? 'Could not save resume: ' + detail
+            : 'Could not save resume. Check your connection and try again.';
+      setMessage({ type: 'error', text });
       console.error(err);
     } finally {
       setSaving(false);
@@ -244,7 +275,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="min-h-screen max-w-4xl mx-auto px-4 py-6 text-gray-900 dark:text-gray-100">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-gray-200 rounded w-1/3" />
           <div className="h-64 bg-gray-200 rounded" />
@@ -262,19 +293,19 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
   ] as const;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="min-h-screen max-w-4xl mx-auto px-4 py-6 text-gray-900 dark:text-gray-100">
       <div className="mb-6">
         <Link
           href="/settings"
-          className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-flex items-center gap-1"
+          className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 mb-2 inline-flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Back to Settings
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">Resume Builder</h1>
-        <p className="text-gray-600 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Resume Builder</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">
           Build your base resume. AI will tweak it for each job application.
         </p>
       </div>
@@ -289,7 +320,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
               'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
               activeSection === section.id
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-300 dark:hover:bg-slate-700'
             )}
           >
             {section.label}
@@ -306,11 +337,11 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         ))}
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-6">
         {/* Contact Section */}
         {activeSection === 'contact' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-medium text-gray-900">Contact Information</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Contact Information</h2>
             <div className="grid md:grid-cols-2 gap-4">
               <Input
                 label="Full Name"
@@ -363,18 +394,18 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         {activeSection === 'education' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Education</h2>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">Education</h2>
               <Button variant="outline" size="sm" onClick={addEducation}>+ Add Education</Button>
             </div>
 
             {resume.education.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No education added yet. Click &quot;Add Education&quot; to start.</p>
+              <p className="text-gray-500 dark:text-gray-400 text-center py-8">No education added yet. Click &quot;Add Education&quot; to start.</p>
             ) : (
               <div className="space-y-6">
                 {resume.education.map((edu, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-4">
+                  <div key={index} className="p-4 border border-gray-200 dark:border-slate-700 dark:bg-slate-800/50 rounded-lg space-y-4">
                     <div className="flex justify-between items-start">
-                      <span className="text-sm font-medium text-gray-500">Education #{index + 1}</span>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Education #{index + 1}</span>
                       <button onClick={() => removeEducation(index)} className="text-red-500 hover:text-red-700 text-sm">
                         Remove
                       </button>
@@ -422,18 +453,18 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         {activeSection === 'experience' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Experience</h2>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">Experience</h2>
               <Button variant="outline" size="sm" onClick={addExperience}>+ Add Experience</Button>
             </div>
 
             {resume.experience.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No experience added yet. Click &quot;Add Experience&quot; to start.</p>
+              <p className="text-gray-500 dark:text-gray-400 text-center py-8">No experience added yet. Click &quot;Add Experience&quot; to start.</p>
             ) : (
               <div className="space-y-6">
                 {resume.experience.map((exp, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-4">
+                  <div key={index} className="p-4 border border-gray-200 dark:border-slate-700 dark:bg-slate-800/50 rounded-lg space-y-4">
                     <div className="flex justify-between items-start">
-                      <span className="text-sm font-medium text-gray-500">Experience #{index + 1}</span>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Experience #{index + 1}</span>
                       <button onClick={() => removeExperience(index)} className="text-red-500 hover:text-red-700 text-sm">
                         Remove
                       </button>
@@ -465,7 +496,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Bullet Points</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bullet Points</label>
                       {exp.bullets.map((bullet, bulletIndex) => (
                         <div key={bulletIndex} className="flex gap-2 mb-2">
                           <span className="text-gray-400 mt-2">•</span>
@@ -476,7 +507,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                               newBullets[bulletIndex] = e.target.value;
                               updateExperience(index, 'bullets', newBullets);
                             }}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm resize-none bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             rows={2}
                             placeholder="Describe your accomplishment..."
                           />
@@ -495,7 +526,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                       ))}
                       <button
                         onClick={() => updateExperience(index, 'bullets', [...exp.bullets, ''])}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                       >
                         + Add bullet point
                       </button>
@@ -511,18 +542,18 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         {activeSection === 'projects' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Projects</h2>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">Projects</h2>
               <Button variant="outline" size="sm" onClick={addProject}>+ Add Project</Button>
             </div>
 
             {resume.projects.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No projects added yet. Click &quot;Add Project&quot; to start.</p>
+              <p className="text-gray-500 dark:text-gray-400 text-center py-8">No projects added yet. Click &quot;Add Project&quot; to start.</p>
             ) : (
               <div className="space-y-6">
                 {resume.projects.map((proj, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-4">
+                  <div key={index} className="p-4 border border-gray-200 dark:border-slate-700 dark:bg-slate-800/50 rounded-lg space-y-4">
                     <div className="flex justify-between items-start">
-                      <span className="text-sm font-medium text-gray-500">Project #{index + 1}</span>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Project #{index + 1}</span>
                       <button onClick={() => removeProject(index)} className="text-red-500 hover:text-red-700 text-sm">
                         Remove
                       </button>
@@ -548,7 +579,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Bullet Points</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bullet Points</label>
                       {proj.bullets.map((bullet, bulletIndex) => (
                         <div key={bulletIndex} className="flex gap-2 mb-2">
                           <span className="text-gray-400 mt-2">•</span>
@@ -559,7 +590,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                               newBullets[bulletIndex] = e.target.value;
                               updateProject(index, 'bullets', newBullets);
                             }}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm resize-none bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             rows={2}
                             placeholder="Describe what you built..."
                           />
@@ -578,7 +609,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                       ))}
                       <button
                         onClick={() => updateProject(index, 'bullets', [...proj.bullets, ''])}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                       >
                         + Add bullet point
                       </button>
@@ -594,13 +625,13 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         {activeSection === 'skills' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Technical Skills</h2>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">Technical Skills</h2>
               <Button variant="outline" size="sm" onClick={addSkillCategory}>+ Add Category</Button>
             </div>
 
             {resume.skills.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">No skills added yet.</p>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">No skills added yet.</p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {['Languages', 'Frameworks', 'Tools', 'Libraries'].map(cat => (
                     <button
@@ -609,7 +640,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                         ...prev,
                         skills: [...prev.skills, { category: cat, items: [] }],
                       }))}
-                      className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm hover:bg-blue-100"
+                      className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 rounded-lg text-sm hover:bg-blue-100 dark:hover:bg-blue-900/50"
                     >
                       + {cat}
                     </button>
@@ -619,7 +650,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
             ) : (
               <div className="space-y-4">
                 {resume.skills.map((skill, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3">
+                  <div key={index} className="p-4 border border-gray-200 dark:border-slate-700 dark:bg-slate-800/50 rounded-lg space-y-3">
                     <div className="flex justify-between items-start">
                       <Input
                         label="Category"
@@ -633,14 +664,14 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
                       </button>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Skills (comma-separated)
                       </label>
                       <input
                         type="text"
                         value={skill.items.join(', ')}
                         onChange={e => updateSkillCategory(index, 'items', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                         placeholder="Python, JavaScript, TypeScript, Go"
                       />
                     </div>
@@ -657,7 +688,7 @@ function ResumeBuilderContent({ userId }: { userId: string }) {
         {message && (
           <span className={cn(
             'text-sm',
-            message.type === 'success' ? 'text-green-600' : 'text-red-600'
+            message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
           )}>
             {message.text}
           </span>

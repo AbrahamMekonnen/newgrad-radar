@@ -47,6 +47,7 @@ export function InterviewQuestionCard({
 }: InterviewQuestionCardProps) {
   const [localUpvoted, setLocalUpvoted] = useState(hasUpvoted);
   const [localUpvotes, setLocalUpvotes] = useState(question.upvotes);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const handleUpvote = () => {
     if (onUpvote) {
@@ -82,11 +83,12 @@ export function InterviewQuestionCard({
       <div className="flex items-start gap-3">
         {/* Company logo/initial */}
         <div className="flex-shrink-0">
-          {question.company_logo ? (
+          {question.company_logo && !logoFailed ? (
             <img
               src={question.company_logo}
               alt={question.company}
               className="w-10 h-10 rounded-lg object-contain bg-gray-100 dark:bg-slate-700"
+              onError={() => setLogoFailed(true)}
             />
           ) : (
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">

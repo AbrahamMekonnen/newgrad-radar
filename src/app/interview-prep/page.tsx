@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
-import { INTERVIEW_SOURCE_OPTIONS } from '@/lib/interview-sources';
+import { INTERVIEW_SOURCE_OPTIONS, hasVerifiedInterviewSource } from '@/lib/interview-sources';
 
 interface InterviewQuestion {
   id: string;
@@ -120,6 +120,11 @@ function QuestionCard({ question }: { question: InterviewQuestion }) {
     : null;
 
   const typeLabel = question.question_type.replace(/_/g, ' ');
+  const sourceVerified = question.is_verified
+    && hasVerifiedInterviewSource(question.source_name, question.source_url);
+  const safeSourceUrl = question.source_url && /^https?:\/\//i.test(question.source_url)
+    ? question.source_url
+    : null;
   const difficultyColor = DIFFICULTY_COLORS[question.difficulty] || DIFFICULTY_COLORS.medium;
   const typeColor = TYPE_COLORS[question.question_type] || TYPE_COLORS.other;
 
@@ -141,9 +146,11 @@ function QuestionCard({ question }: { question: InterviewQuestion }) {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full capitalize', typeColor)}>
-            {typeLabel}
-          </span>
+          {question.question_type !== 'other' && (
+            <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full capitalize', typeColor)}>
+              {typeLabel}
+            </span>
+          )}
           {question.difficulty !== 'unknown' && (
             <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', difficultyColor)}>
               {question.difficulty}
@@ -160,8 +167,8 @@ function QuestionCard({ question }: { question: InterviewQuestion }) {
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-center gap-3">
           {formattedDate && <span>{formattedDate}</span>}
-          {question.source_name && <span className="capitalize">{question.source_name.replace(/_/g, ' ')}</span>}
-          {question.is_verified && (
+          {question.source_name && question.source_name !== 'unknown' && <span className="capitalize">{question.source_name.replace(/_/g, ' ')}</span>}
+          {sourceVerified && (
             <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -170,9 +177,9 @@ function QuestionCard({ question }: { question: InterviewQuestion }) {
             </span>
           )}
         </div>
-        {question.source_url && (
+        {safeSourceUrl && (
           <a
-            href={question.source_url}
+            href={safeSourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 dark:text-blue-400 hover:underline"
@@ -444,15 +451,51 @@ function InterviewPrepContent() {
       if (selectedLevel) params.set('position_level', selectedLevel);
       if (selectedSource !== 'all') params.set('source', selectedSource);
 
-      const res = await fetch(`/api/interview-questions?${params}`);
-      if (!res.ok) throw new Error('Failed to fetch questions');
+      const endpoint = `/api/interview-questions?${params}`;
+      const cacheKey = `interview-prep:${endpoint}`;
 
-      const data = await res.json();
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const cachedData = JSON.parse(cached);
+          setQuestions(cachedData.questions || []);
+          setTotal(cachedData.total || 0);
+          setHasMore(cachedData.hasMore || false);
+          setLoading(false);
+        }
+      } catch {
+        // A corrupt cache should never prevent a fresh request.
+      }
+
+      let data: { questions?: InterviewQuestion[]; total?: number; hasMore?: boolean } | null = null;
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 12000);
+        try {
+          const res = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload.error || 'Interview questions are temporarily unavailable.');
+          data = payload;
+          break;
+        } catch (requestError) {
+          lastError = requestError instanceof Error ? requestError : new Error('Request failed');
+          if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 500));
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      }
+
+      if (!data) throw lastError || new Error('Interview questions are temporarily unavailable.');
       setQuestions(data.questions || []);
       setTotal(data.total || 0);
       setHasMore(data.hasMore || false);
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load questions');
+      const timedOut = err instanceof DOMException && err.name === 'AbortError';
+      setError(timedOut
+        ? 'Interview questions took too long to load. Please try again.'
+        : err instanceof Error ? err.message : 'Failed to load questions');
     } finally {
       setLoading(false);
     }

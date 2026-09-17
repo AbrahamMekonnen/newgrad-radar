@@ -16,6 +16,8 @@ import { ResumeData } from '@/lib/resume-templates';
 import { ResumeScore, scoreResume, extractJobRequirements } from '@/lib/resume-scorer';
 import { createClient } from '@/lib/supabase/client';
 import { InterviewPrepBadge } from '@/components/interview';
+import { Modal } from '@/components/ui/Modal';
+import { recordApplicationActivity } from '@/hooks/useStreak';
 
 interface JobCardProps {
   job: Job & { ats_type?: string | null; apply_url?: string | null };
@@ -58,6 +60,9 @@ export function JobCard({
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAppliedConfirmation, setShowAppliedConfirmation] = useState(false);
+  const [trackingApplication, setTrackingApplication] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [userResume, setUserResume] = useState<ResumeData | null>(null);
   const [hasResume, setHasResume] = useState(false);
   const [needsResumeUpload, setNeedsResumeUpload] = useState(false);
@@ -360,7 +365,7 @@ export function JobCard({
           job.company_name,
           job.tier,
           job.role_types?.[0] || 'swe',
-          undefined
+          job.description
         );
         const score = scoreResume(resumeData, jobReqs);
         setResumeScore(score);
@@ -372,7 +377,7 @@ export function JobCard({
     };
 
     checkResumeAndScore();
-  }, [isLoggedIn, supabase, job.title, job.company_name, job.tier, job.role_types]);
+  }, [isLoggedIn, supabase, job.title, job.company_name, job.tier, job.role_types, job.description]);
 
   // Generate direct application URL based on ATS type
   const getApplyUrl = (url: string, source?: string): string => {
@@ -391,11 +396,60 @@ export function JobCard({
     return url;
   };
 
-  // Use stored apply_url if different from url, otherwise generate it
-  const applyUrl = (job.apply_url && job.apply_url !== job.url)
-    ? job.apply_url
-    : getApplyUrl(job.url, job.source);
+  // Workday records sometimes retain a careers landing page in url while
+  // source_url contains the direct job route. Prefer the most specific target.
+  const directWorkdayUrl = [job.apply_url, job.url, job.source_url].find((candidate) =>
+    Boolean(candidate && /\.myworkdayjobs\.com\/.+\/(job|details)\//i.test(candidate))
+  );
+  const baseApplyUrl = directWorkdayUrl
+    || (job.apply_url && job.apply_url !== job.url ? job.apply_url : job.url);
+  const applyUrl = getApplyUrl(baseApplyUrl, job.source);
 
+  const openApplication = () => {
+    window.open(applyUrl, '_blank', 'noopener,noreferrer');
+    if (isLoggedIn) {
+      setTrackingError(null);
+      setShowAppliedConfirmation(true);
+    }
+  };
+
+  const confirmApplied = async () => {
+    setTrackingApplication(true);
+    setTrackingError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Your session expired. Sign in again to track this application.');
+
+      const { data: existing, error: lookupError } = await supabase
+        .from('saved_jobs')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('job_id', job.id)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+
+      const appliedAt = new Date().toISOString();
+      const result = existing?.id
+        ? await supabase.from('saved_jobs').update({ status: 'applied', applied_at: appliedAt }).eq('id', existing.id)
+        : await supabase.from('saved_jobs').insert({
+            user_id: user.id,
+            job_id: job.id,
+            status: 'applied',
+            applied_at: appliedAt,
+          });
+      if (result.error) throw result.error;
+
+      recordApplicationActivity();
+      setShowAppliedConfirmation(false);
+    } catch (error) {
+      const detail = error && typeof error === 'object' && 'message' in error
+        ? String((error as { message?: unknown }).message || '')
+        : '';
+      setTrackingError(detail || 'Could not track this application. Please try again.');
+    } finally {
+      setTrackingApplication(false);
+    }
+  };
 
   const handleApplyClick = () => {
     if (needsResumeUpload && !aiUnavailable) {
@@ -406,15 +460,16 @@ export function JobCard({
     if (hasResume && userResume) {
       setShowResumeModal(true);
     } else {
-      // Not logged in, AI unavailable, or no resume features - just open the application URL directly
-      window.open(applyUrl, '_blank');
+      // Not logged in, AI unavailable, or no resume features.
+      openApplication();
     }
   };
 
   const handleApplyWithResume = (resume: ResumeData, versionName: string) => {
     // In production: save the resume version to DB, track which version was used
     console.log('Applying with resume version:', versionName);
-    window.open(applyUrl, '_blank');
+    setShowResumeModal(false);
+    openApplication();
   };
 
   const tier = job.tier as Tier;
@@ -474,7 +529,7 @@ export function JobCard({
 
           {/* Job title - enhanced */}
           <a
-            href={job.url}
+            href={applyUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="block mt-0.5 text-base sm:text-lg font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 line-clamp-2 break-words transition-colors duration-200"
@@ -979,6 +1034,29 @@ export function JobCard({
           </Button>
         </div>
       </div>
+
+      <Modal
+        isOpen={showAppliedConfirmation}
+        onClose={() => setShowAppliedConfirmation(false)}
+        title="Did you apply?"
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+          Confirm only after you submitted the application for {job.title} at {job.company_name}.
+        </p>
+        {trackingError && (
+          <p className="mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-700 dark:text-red-300">
+            {trackingError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowAppliedConfirmation(false)} disabled={trackingApplication}>
+            Not yet
+          </Button>
+          <Button variant="primary" onClick={confirmApplied} disabled={trackingApplication}>
+            {trackingApplication ? 'Saving...' : 'Yes, I applied'}
+          </Button>
+        </div>
+      </Modal>
 
       {/* Add Recruiter Modal */}
       <AddRecruiterModal

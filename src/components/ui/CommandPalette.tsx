@@ -73,14 +73,6 @@ const BriefcaseIcon = () => (
 const RECENT_SEARCHES_KEY = 'command-palette-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
-// Global shortcuts (Cmd/Ctrl + Shift + key) - work anywhere on site
-const GLOBAL_SHORTCUTS: Record<string, string> = {
-  'd': '/',              // Cmd+Shift+D → Dashboard
-  'a': '/applications',  // Cmd+Shift+A → Applications
-  'w': '/my-list',       // Cmd+Shift+W → Watchlist
-  't': '/settings',      // Cmd+Shift+T → Settings
-};
-
 // Helper to get initial recent searches from localStorage
 function getInitialRecentSearches(): string[] {
   if (typeof window === 'undefined') return [];
@@ -159,7 +151,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'View applications',
       description: 'See all your applications',
       icon: <EyeIcon />,
-      shortcut: '⌘⇧A',
       section: 'actions',
       action: () => navigateTo('/applications'),
     });
@@ -169,7 +160,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'Browse all jobs',
       description: 'See all available positions',
       icon: <BriefcaseIcon />,
-      shortcut: '⌘⇧D',
       section: 'actions',
       action: () => navigateTo('/'),
     });
@@ -180,7 +170,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'Go to Dashboard',
       description: 'View all jobs',
       icon: <HomeIcon />,
-      shortcut: '⌘⇧D',
       section: 'navigation',
       action: () => navigateTo('/'),
     });
@@ -190,7 +179,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'Go to Applications',
       description: 'Track your applications',
       icon: <BookmarkIcon />,
-      shortcut: '⌘⇧A',
       section: 'navigation',
       action: () => navigateTo('/applications'),
     });
@@ -200,7 +188,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'Go to Watchlist',
       description: 'Your tracked companies',
       icon: <BriefcaseIcon />,
-      shortcut: '⌘⇧W',
       section: 'navigation',
       action: () => navigateTo('/my-list'),
     });
@@ -210,7 +197,6 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
       label: 'Go to Settings',
       description: 'Notification preferences',
       icon: <CogIcon />,
-      shortcut: '⌘⇧T',
       section: 'navigation',
       action: () => navigateTo('/settings'),
     });
@@ -297,7 +283,8 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
     }
   }, [selectedIndex, flatItems]);
 
-  // Global keyboard listener for Cmd+K, ESC, and Cmd+Shift+X shortcuts
+  // Cmd/Ctrl+K is the only global shortcut. Browser-reserved combinations
+  // such as Cmd+Shift+W and Cmd+Shift+T remain available to the browser.
   useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       // Open command palette with Cmd+K or Ctrl+K
@@ -315,34 +302,14 @@ export function CommandPalette({ jobs = [] }: CommandPaletteProps) {
         return;
       }
 
-      // Global navigation shortcuts: Cmd+Shift+D/S/M/T (work anywhere)
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
-        const key = event.key.toLowerCase();
-        const path = GLOBAL_SHORTCUTS[key];
-        if (path) {
-          event.preventDefault();
-          setIsOpen(false);
-          setQuery('');
-          router.push(path);
-        }
-      }
     };
 
     document.addEventListener('keydown', handleGlobalKeyDown);
     return () => document.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isOpen, router]);
+  }, [isOpen]);
 
   // Handle keyboard navigation and shortcuts within palette
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-
-    // Check for Cmd/Ctrl + Shift + letter shortcuts (same as global)
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && key.length === 1 && GLOBAL_SHORTCUTS[key]) {
-      event.preventDefault();
-      navigateTo(GLOBAL_SHORTCUTS[key]);
-      return;
-    }
-
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();

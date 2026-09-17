@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { MobileNav } from './MobileNav';
@@ -32,6 +32,7 @@ export function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   const { days: streakDays } = useStreak();
 
@@ -46,6 +47,22 @@ export function Navbar() {
 
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setShowDropdown(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowDropdown(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showDropdown]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -131,7 +148,7 @@ export function Navbar() {
               <ThemeToggle />
               {user && <NotificationBell userId={user.id} />}
               {user ? (
-                <div className="relative flex items-center gap-2">
+                <div ref={userMenuRef} className="relative flex items-center gap-2">
                   {/* Streak Badge - only show if streak > 0 */}
                   {streakDays > 0 && (
                     <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 text-orange-600 dark:text-orange-400 rounded-full text-sm font-medium border border-orange-200 dark:border-orange-800/50">

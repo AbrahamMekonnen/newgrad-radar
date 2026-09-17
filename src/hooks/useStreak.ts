@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const STORAGE_KEY = 'newgrad-radar-streak';
+const STREAK_UPDATED_EVENT = 'newgrad-radar-streak-updated';
 
 export interface StreakData {
   /** Last date an application was submitted (ISO string) */
@@ -121,6 +122,7 @@ function saveStreakData(data: StreakData): void {
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent(STREAK_UPDATED_EVENT, { detail: data }));
   } catch {
     console.warn('Failed to save streak data to localStorage');
   }
@@ -142,6 +144,34 @@ function saveStreakData(data: StreakData): void {
  * );
  * ```
  */
+export function recordApplicationActivity(): void {
+  const previous = loadStreakData();
+  const today = new Date();
+  const todayIso = today.toISOString();
+  let next: StreakData;
+
+  if (!previous.lastApplicationDate) {
+    next = {
+      lastApplicationDate: todayIso,
+      streakCount: 1,
+      longestStreak: Math.max(previous.longestStreak, 1),
+      totalApplications: previous.totalApplications + 1,
+    };
+  } else {
+    const difference = daysBetween(new Date(previous.lastApplicationDate), today);
+    const streakCount = difference === 0
+      ? Math.max(previous.streakCount, 1)
+      : difference === 1 ? previous.streakCount + 1 : 1;
+    next = {
+      lastApplicationDate: difference === 0 ? previous.lastApplicationDate : todayIso,
+      streakCount,
+      longestStreak: Math.max(previous.longestStreak, streakCount),
+      totalApplications: previous.totalApplications + 1,
+    };
+  }
+  saveStreakData(next);
+}
+
 export function useStreak(): UseStreakReturn {
   const [streakData, setStreakData] = useState<StreakData>(DEFAULT_STREAK_DATA);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -151,6 +181,19 @@ export function useStreak(): UseStreakReturn {
     const data = loadStreakData();
     setStreakData(data);
     setIsInitialized(true);
+
+    const refresh = () => {
+      const next = loadStreakData();
+      setStreakData((previous) =>
+        JSON.stringify(previous) === JSON.stringify(next) ? previous : next
+      );
+    };
+    window.addEventListener('storage', refresh);
+    window.addEventListener(STREAK_UPDATED_EVENT, refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener(STREAK_UPDATED_EVENT, refresh);
+    };
   }, []);
 
   // Save to localStorage whenever data changes (after initialization)

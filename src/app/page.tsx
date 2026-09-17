@@ -172,7 +172,7 @@ export default function HomePage() {
   const supabase = createClient();
 
   // Streak hook for logged-in users
-  const { days: streakDays, incrementStreak } = useStreak();
+  const { days: streakDays } = useStreak();
 
   // Real-time updates with useSupabaseRealtime hook
   const {
@@ -422,11 +422,28 @@ export default function HomePage() {
     // Clear any previous error on successful fetch
     setFetchError(null);
 
+    const compareCompanies = (a: Job, b: Job) =>
+      a.company_name.localeCompare(b.company_name, undefined, { sensitivity: 'base', numeric: true });
+    const dedupeJobs = (items: Job[]) => {
+      const seen = new Set<string>();
+      return items.filter((item) => {
+        const key = [
+          item.company_name, item.title, item.location || '', item.apply_url || item.url,
+        ].map((value) => value.toLowerCase().replace(/\s+/g, ' ').trim()).join('|');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
     if (reset) {
-      setJobs(data || []);
+      const nextJobs = dedupeJobs(data || []);
+      setJobs(sortBy === 'company' ? [...nextJobs].sort(compareCompanies) : nextJobs);
       setPage(0);
     } else {
-      setJobs((prev) => [...prev, ...(data || [])]);
+      setJobs((prev) => {
+        const combined = dedupeJobs([...prev, ...(data || [])]);
+        return sortBy === 'company' ? combined.sort(compareCompanies) : combined;
+      });
     }
 
     setHasMore((data?.length || 0) === PAGE_SIZE);
@@ -805,8 +822,6 @@ export default function HomePage() {
         // Server confirmed - update actual state and clear optimistic
         confirmSave(jobId);
         setSavedJobIds((prev) => new Set(prev).add(jobId));
-        // Increment streak when user saves a job
-        incrementStreak();
       } catch {
         revertSave(jobId);
         showToast('Failed to save job', 'error');
