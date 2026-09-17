@@ -112,8 +112,8 @@ jobs:
             python enrich_jobs.py --limit 400 || echo "::warning::job enrichment had errors"
             # As soon as new jobs land, match them to users' auto-apply criteria
             # and prepare the applications — no waiting for a separate schedule.
-            python -m autoapply.rules --limit 30 || echo "::warning::auto-apply matching had errors"
-            python -m autoapply.prepare_worker --limit 100 || echo "::warning::auto-apply prepare had errors"
+            python -m autoapply.rules --limit 30
+            python -m autoapply.prepare_worker --limit 100
           fi
 
       - name: Summary
