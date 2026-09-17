@@ -234,7 +234,7 @@ def merge_arrays(existing: list | None, new: list | None) -> list:
     return list(seen.keys())
 
 
-def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
+def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list[dict]]:
     """Insert or update jobs.
 
     Args:
@@ -242,10 +242,10 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
         dry_run: If True, don't actually write to database
 
     Returns:
-        Tuple of (new_count, updated_count)
+        Tuple of (new_count, updated_count, newly_inserted_jobs)
     """
     if not jobs:
-        return 0, 0
+        return 0, 0, []
 
     # US-only: drop postings that are clearly outside the US before writing.
     before = len(jobs)
@@ -254,12 +254,12 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
     if dropped:
         print(f"  Filtered out {dropped} non-US jobs ({len(jobs)} US jobs remain)")
     if not jobs:
-        return 0, 0
+        return 0, 0, []
 
     if dry_run:
         # In dry run mode, just count what would be new
         # We can't check existing without connecting
-        return len(jobs), 0
+        return len(jobs), 0, list(jobs)
 
     client = get_client()
 
@@ -342,15 +342,21 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int]:
             ) if job.get(k) is not None},
         })
 
+    candidate_new_ids = {record["id"] for record in records if record["id"] not in existing_ids}
+    successful_ids: set[str] = set()
     CHUNK = 500
     for i in range(0, len(records), CHUNK):
         chunk = records[i:i + CHUNK]
         try:
             client.table("jobs").upsert(chunk, on_conflict="id").execute()
+            successful_ids.update(record["id"] for record in chunk)
         except Exception as ce:
             print(f"Error upserting jobs chunk {i // CHUNK}: {ce}")
 
-    return new_count, updated_count
+    successful_new_ids = successful_ids & candidate_new_ids
+    successful_updated_ids = successful_ids - candidate_new_ids
+    newly_inserted = [job for job in jobs if job["id"] in successful_new_ids]
+    return len(successful_new_ids), len(successful_updated_ids), newly_inserted
 
 
 def mark_inactive(active_ids: set[str], dry_run: bool = False) -> int:

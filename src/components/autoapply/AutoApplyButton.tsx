@@ -161,11 +161,11 @@ export function AutoApplyButton({
   if (queuedStatus && QUEUED_LABEL[queuedStatus]) {
     const done = queuedStatus === 'submitted' || queuedStatus === 'applied';
     return (
-      <a href="/auto-apply"
+      <a href="/applications?section=autoapply"
          className={cn('inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border',
            done ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700'
                 : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700')}
-         title="View in the Auto-Apply tab">
+         title="View in Applications → Auto-Apply">
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>

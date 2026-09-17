@@ -56,6 +56,7 @@ class Profile:
     work_authorized: Optional[bool] = None    # 80%+ - authorized to work in target country
     require_sponsorship: Optional[bool] = None  # 75%+ - will need visa sponsorship
     work_authorization: str = ""               # raw profile choice for citizenship/visa selects
+    auto_submit: bool = False                    # submit complete captcha-free forms after preparation
     visa_status: str = ""                     # current visa type if sponsorship needed
 
     # =========================================================================

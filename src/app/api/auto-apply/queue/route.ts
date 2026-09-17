@@ -25,7 +25,7 @@ async function dispatchPrepare(): Promise<boolean> {
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref: 'main' }),
+        body: JSON.stringify({ ref: 'main', inputs: { mode: 'queue' } }),
         signal: AbortSignal.timeout(8000),
       }
     );
@@ -73,16 +73,26 @@ export async function POST(request: NextRequest) {
 
   // Already queued/prepared/applied? Don't duplicate.
   const { data: existing } = await db.from('autoapply_job_queue')
-    .select('id, status').eq('user_id', user.id).eq('job_id', jobId).limit(1).maybeSingle();
+    .select('id, status, answers').eq('user_id', user.id).eq('job_id', jobId).limit(1).maybeSingle();
   if (existing) {
+    if (['error', 'form_fetch_failed'].includes(existing.status)) {
+      const { error: retryError } = await db.from('autoapply_job_queue').update({
+        status: 'pending', prepare_log: null, submit_log: null,
+      }).eq('id', existing.id).eq('user_id', user.id);
+      if (retryError) return NextResponse.json({ error: 'Could not retry preparation' }, { status: 500 });
+      const triggered = await dispatchPrepare();
+      return NextResponse.json({ queued: 1, retried: true, triggered,
+        message: triggered ? 'Retrying preparation now.' : 'Queued for the next preparation run.' });
+    }
     return NextResponse.json({ queued: 0, already: true, status: existing.status,
-      message: 'Already in your Auto-Apply queue — see the Auto-Apply tab.' });
+      message: 'Already in your Auto-Apply queue — see it under Applications → Auto-Apply.' });
   }
 
   const { error } = await db.from('autoapply_job_queue').insert({
     user_id: user.id, job_id: jobId, job_title: job.title,
     company_slug: job.company_slug, company_name: job.company_name,
     job_url: url, ats_type: job.ats_type, status: 'pending', priority: 2,
+    answers: { submit_after_prepare: true, origin: 'job_card' },
   });
   if (error) {
     console.error('queue insert error:', error);
@@ -94,7 +104,7 @@ export async function POST(request: NextRequest) {
     queued: 1,
     triggered,
     message: triggered
-      ? 'Added to Auto-Apply — preparing it now. Check the Auto-Apply tab in a minute.'
-      : 'Added to Auto-Apply — it will be prepared on the next run (Auto-Apply tab).',
+      ? 'Added to Auto-Apply — preparing it now. Track it under Applications → Auto-Apply.'
+      : 'Added to Auto-Apply — it will be prepared on the next run under Applications → Auto-Apply.',
   });
 }

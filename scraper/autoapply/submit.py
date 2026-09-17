@@ -48,6 +48,20 @@ def detect_captcha(page_url: str) -> tuple[bool, str]:
         return True, f"page fetch failed ({e}) — treated as gated, not submitting"
     if r.status_code >= 400:
         return True, f"page {r.status_code} — treated as gated"
+    # Reuse the shared CAPTCHA inspector for accurate type/sitekey detection.
+    # Solver routines are intentionally not invoked here; guarded forms are
+    # handed back to the authenticated user's browser for completion.
+    try:
+        from captcha_solver import detect_captcha_type, extract_sitekey
+        captcha_type = detect_captcha_type(r.text)
+        if captcha_type != "unknown":
+            sitekey = extract_sitekey(r.text, captcha_type)
+            detail = f"{captcha_type} detected"
+            if sitekey:
+                detail += " (sitekey present)"
+            return True, detail
+    except Exception:
+        pass
     m = _CAPTCHA_RE.search(r.text)
     return (bool(m), m.group(0) if m else "no captcha markers found")
 

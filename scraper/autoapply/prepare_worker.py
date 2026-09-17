@@ -15,6 +15,7 @@ import sys
 import argparse
 import logging
 import datetime as dt
+import time
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -91,6 +92,7 @@ def build_profile(client, user_id: str) -> gh.Profile:
         how_heard=str(custom.get("source") or custom.get("how_heard") or "Company website"),
         is_adult=bool(custom.get("is_adult", True)),
         custom_answers=custom,
+        auto_submit=bool(row.get("auto_submit", False)),
     )
 
     try:
@@ -200,12 +202,17 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
         pstatus = prepared.get("status")
         # 'form_unavailable' / 'form_fetch_failed' keep their real status so they
         # stay OUT of the inbox (which shows only 'prepared') and are diagnosable.
-        _finish(client, r["id"],
-                "prepared" if pstatus == "prepared" else pstatus,
+        needs_user = prepared.get("needs_user") or []
+        complete = pstatus == "prepared" and not needs_user and prepared.get("ready_pct") == 100
+        submit_after_prepare = bool((r.get("answers") or {}).get("submit_after_prepare"))
+        final_status = "submit_requested" if complete and (profile.auto_submit or submit_after_prepare) else (
+            "prepared" if pstatus == "prepared" else pstatus
+        )
+        _finish(client, r["id"], final_status,
                 prepared.get("error") or prepared.get("message") or "ok", ats,
                 extra={"prepared_data": prepared.get("fields"),
                        "ready_pct": prepared.get("ready_pct"),
-                       "needs_user": prepared.get("needs_user"),
+                       "needs_user": needs_user,
                        "prepared_at": dt.datetime.now(dt.timezone.utc).isoformat()})
         logger.info(f"  {job.get('company_name')}: {pstatus} "
                     f"{prepared.get('ready_pct') if pstatus=='prepared' else ''}")
@@ -216,6 +223,23 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
         _finish(client, r["id"], "error", f"{type(e).__name__}: {str(e)[:200]}", ats)
         return False
 
+
+def _prepare_with_retries(client, companies, row: dict, profile, attempts: int = 3) -> bool:
+    """Retry transient fetch/network failures while preserving terminal form outcomes."""
+    for attempt in range(1, attempts + 1):
+        if _prepare_one(client, companies, row, profile):
+            return True
+        try:
+            state = (client.table("autoapply_job_queue").select("status")
+                     .eq("id", row["id"]).single().execute().data or {}).get("status")
+        except Exception:
+            state = "error"
+        if state not in ("error", "form_fetch_failed") or attempt == attempts:
+            return False
+        delay = 2 ** (attempt - 1)
+        logger.warning(f"  retrying row {row.get('id')} after {state} ({attempt}/{attempts})")
+        time.sleep(delay)
+    return False
 
 def process_queue(limit: int, workers: int = 8) -> int:
     """Prepare pending applications IN PARALLEL (each is an independent form fetch
@@ -244,7 +268,7 @@ def process_queue(limit: int, workers: int = 8) -> int:
 
     done = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(_prepare_one, client, COMPANIES, r, prof_cache[r["user_id"]]): r for r in rows}
+        futs = {ex.submit(_prepare_with_retries, client, COMPANIES, r, prof_cache[r["user_id"]]): r for r in rows}
         for fut in as_completed(futs):
             try:
                 if fut.result():

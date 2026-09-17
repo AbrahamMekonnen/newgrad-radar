@@ -118,20 +118,24 @@ export function useThrottledCallback<T extends (...args: unknown[]) => unknown>(
 export function useBatchedState<T extends object>(
   initialState: T,
   batchDelay: number = 16 // ~1 frame at 60fps
-): [T, (updates: Partial<T>) => void, () => void] {
+): [T, (updates: Partial<T>) => void, () => T] {
   const [state, setState] = useState<T>(initialState);
+  const stateRef = useRef<T>(initialState);
   const pendingUpdates = useRef<Partial<T>>({});
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flushUpdates = useCallback(() => {
+  const flushUpdates = useCallback((): T => {
     if (Object.keys(pendingUpdates.current).length > 0) {
-      setState(prev => ({ ...prev, ...pendingUpdates.current }));
+      const next = { ...stateRef.current, ...pendingUpdates.current };
+      stateRef.current = next;
+      setState(next);
       pendingUpdates.current = {};
     }
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
+    return stateRef.current;
   }, []);
 
   const batchedSetter = useCallback(

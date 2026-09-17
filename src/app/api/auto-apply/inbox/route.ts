@@ -24,12 +24,12 @@ export async function GET() {
 
   const { data } = await admin()
     .from('autoapply_job_queue')
-    .select('id, job_id, job_title, company_name, company_slug, job_url, ats_type, status, ready_pct, needs_user, prepared_data, prepared_at, submit_log, submitted_at')
+    .select('id, job_id, job_title, company_name, company_slug, job_url, ats_type, status, ready_pct, needs_user, prepared_data, prepared_at, submit_log, submitted_at, created_at, updated_at, prepare_log')
     .eq('user_id', user.id)
-    // 'prepared' = ready to review; 'submit_requested'/'submitting' = queued for
-    // the background submit worker (kept visible so they don't vanish).
-    .in('status', ['prepared', 'submit_requested', 'submitting'])
-    .order('ready_pct', { ascending: false })
+    // Keep the full lifecycle visible so the Applications page can live-track
+    // queued, preparing, ready, failed, and completed applications.
+    .neq('status', 'skipped')
+    .order('created_at', { ascending: false })
     .limit(200);
 
   return NextResponse.json({ applications: data || [] });

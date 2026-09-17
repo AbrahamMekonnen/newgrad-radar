@@ -17,13 +17,13 @@ on:
         type: string
         default: "30"
       mode:
-        description: "'prepare' = only rebuild pending cards; 'submit' = only drain the submit queue"
+        description: "'prepare' = rebuild only; 'queue' = prepare then submit eligible cards; 'submit' = submit only"
         type: string
         default: ""
 
 jobs:
   match:
-    if: ${{ inputs.mode != 'submit' && inputs.mode != 'prepare' }}
+    if: ${{ inputs.mode != 'submit' && inputs.mode != 'prepare' && inputs.mode != 'queue' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -84,7 +84,8 @@ jobs:
   # for me"; captcha-gated ones bounce back to 'prepared' with a note. Runs on
   # every trigger (schedule + dispatch) and no-ops when the queue is empty.
   submit:
-    if: ${{ inputs.mode != 'prepare' }}
+    needs: prepare
+    if: ${{ always() && inputs.mode != 'prepare' && needs.prepare.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

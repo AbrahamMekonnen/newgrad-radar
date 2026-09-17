@@ -120,6 +120,17 @@ class AutoApplyRegressionTests(unittest.TestCase):
         self.assertEqual("option-42", value)
         self.assertEqual("matched", source)
 
+    def test_shared_captcha_detector_is_used_for_typed_handoff(self):
+        class Response:
+            status_code = 200
+            text = '<div class="h-captcha" data-sitekey="site-key"></div>'
+
+        with patch.object(submit.requests, "get", return_value=Response()):
+            gated, detail = submit.detect_captcha("https://example.test/apply")
+
+        self.assertTrue(gated)
+        self.assertIn("hcaptcha", detail)
+        self.assertIn("sitekey present", detail)
     def test_incomplete_form_is_reported_before_captcha(self):
         fields = [{
             "name": "required_question", "label": "Required question",

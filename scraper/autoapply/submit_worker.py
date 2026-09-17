@@ -121,7 +121,14 @@ def process_submits(limit: int, workers: int = 6, dry_run: bool = True) -> dict:
                 st = fut.result()
             except Exception as e:
                 st = "error"
-                logger.warning(f"  row {futs[fut].get('id')} failed: {e}")
+                row = futs[fut]
+                detail = f"{type(e).__name__}: {str(e)[:200]}"
+                logger.warning(f"  row {row.get('id')} failed: {detail}")
+                try:
+                    _write(client, row["id"], "prepared",
+                           {"status": "submit_failed", "detail": detail, "at": _now()})
+                except Exception as write_error:
+                    logger.warning(f"  could not release submit row {row.get('id')}: {write_error}")
             tally[st] = tally.get(st, 0) + 1
     logger.info(f"DONE: {tally}")
     return tally

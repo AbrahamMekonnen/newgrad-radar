@@ -96,13 +96,13 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
     e.preventDefault();
 
     // Flush any pending batched updates before saving
-    flushFormUpdates();
+    const latestFormData = flushFormUpdates();
 
     setSaving(true);
     setMessage(null);
 
     try {
-      await onSave(formData);
+      await onSave(latestFormData);
       setMessage({ type: 'success', text: 'Profile saved successfully!' });
     } catch {
       setMessage({ type: 'error', text: 'Failed to save profile' });
@@ -123,11 +123,11 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         resume_url: url,
         resume_filename: file.name,
       });
-      flushFormUpdates();
+      const latestFormData = flushFormUpdates();
 
       // Auto-save the profile with new resume
       const updatedProfile = {
-        ...formData,
+        ...latestFormData,
         resume_url: url,
         resume_filename: file.name,
       };

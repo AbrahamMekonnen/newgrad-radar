@@ -1226,14 +1226,14 @@ def run_recruiter_enrichment(
     return enriched
 
 
-def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, int, list[dict]]:
+def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, int, list[dict], list[dict]]:
     """Normalize -> filter -> dedup -> classify -> upsert ONE batch of raw jobs.
 
     Saving per source-group (rather than all-at-end) means a timeout or crash
     mid-run keeps everything already fetched — no total loss. Upserts are
     idempotent (keyed by job id), so cross-group duplicates are harmless.
 
-    Returns (new_count, updated_count, classified_jobs).
+    Returns (new_count, updated_count, classified_jobs, newly_inserted_jobs).
     """
     normalized = []
     for job in raw_jobs:
@@ -1258,7 +1258,7 @@ def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, in
                 seen[jid]["source"] = f"{es},{ns}"
     deduped = list(seen.values())
     if not deduped:
-        return 0, 0, []
+        return 0, 0, [], []
 
     classified = classify_jobs(deduped)
     if getattr(args, "add_h1b_flags", False):
@@ -1266,8 +1266,8 @@ def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, in
     if getattr(args, "enrich_recruiters", False):
         classified = run_recruiter_enrichment(classified, args.recruiter_data, dry_run)
 
-    new_count, updated_count = upsert_jobs(classified, dry_run)
-    return new_count, updated_count, classified
+    new_count, updated_count, newly_inserted = upsert_jobs(classified, dry_run)
+    return new_count, updated_count, classified, newly_inserted
 
 
 def main():
@@ -1416,6 +1416,7 @@ def main():
     new_count = 0
     updated_count = 0
     classified: list[dict] = []
+    newly_inserted_jobs: list[dict] = []
     active_ids: set = set()
     groups_ok = True  # False if any enabled group failed -> skip mark_inactive
 
@@ -1425,7 +1426,7 @@ def main():
             return
         print(f"\n--- Processing {label}: {len(jobs)} raw jobs ---")
         try:
-            n, u, saved = process_and_save(jobs, args, dry_run)
+            n, u, saved, inserted = process_and_save(jobs, args, dry_run)
         except Exception as e:
             print(f"  ERROR processing {label}: {e} (other groups already saved)")
             groups_ok = False
@@ -1433,6 +1434,7 @@ def main():
         new_count += n
         updated_count += u
         classified.extend(saved)
+        newly_inserted_jobs.extend(inserted)
         active_ids.update(j["id"] for j in saved)
         print(f"  {label}: saved {n} new, {u} updated (running total: {new_count} new)")
 
@@ -1478,7 +1480,7 @@ def main():
 
         # Get the actual new jobs (not just count)
         # We need to compare against what was in DB before
-        new_jobs = classified[:new_count]  # Approximation - newest jobs first
+        new_jobs = newly_inserted_jobs
 
         # Notify users tracking specific companies (My List)
         print("  Notifying tracked company users...")
