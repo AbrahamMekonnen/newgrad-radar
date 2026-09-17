@@ -3,7 +3,15 @@ name: Deliver Job Alerts
 on:
   schedule:
     - cron: "*/15 * * * *"
+    - cron: "0 16 * * *"
+    - cron: "0 16 * * 1"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Alert delivery queue to drain"
+        type: choice
+        options: [instant, daily, weekly]
+        default: instant
 
 jobs:
   deliver:
@@ -17,11 +25,23 @@ jobs:
           cache: "pip"
           cache-dependency-path: scraper/requirements-scrape.txt
       - run: cd scraper && pip install -r requirements-scrape.txt
-      - name: Deliver pending instant alerts
+      - name: Deliver pending alerts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           PYTHONUTF8: "1"
-        run: cd scraper && python alert_worker.py
+          DISPATCH_MODE: ${{ inputs.mode }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          MODE="$DISPATCH_MODE"
+          if [ -z "$MODE" ]; then
+            case "$SCHEDULE" in
+              "0 16 * * *") MODE="daily" ;;
+              "0 16 * * 1") MODE="weekly" ;;
+              *) MODE="instant" ;;
+            esac
+          fi
+          cd scraper
+          python alert_worker.py --mode "$MODE"

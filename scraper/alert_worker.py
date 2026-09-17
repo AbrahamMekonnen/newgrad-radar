@@ -1,6 +1,7 @@
 """Deliver pending smart job alerts created by the database insert trigger."""
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 
@@ -17,16 +18,23 @@ def load_env() -> None:
 
 
 def main() -> None:
-    load_env()
-    from db import get_client
-    from alerts import process_instant_alerts
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("instant", "daily", "weekly"), default="instant")
+    args = parser.parse_args()
 
-    rows = (get_client().table("alert_matches").select("job_id")
-            .eq("delivery_status", "pending").eq("delivery_mode", "instant")
-            .limit(500).execute().data) or []
-    job_ids = list(dict.fromkeys(row["job_id"] for row in rows))
-    result = process_instant_alerts([{"id": job_id} for job_id in job_ids], dry_run=False)
-    print(f"Alert delivery complete: {result}")
+    load_env()
+    from alerts import process_digest_alerts, process_instant_alerts
+    from db import get_client
+
+    if args.mode in ("daily", "weekly"):
+        result = process_digest_alerts(args.mode, dry_run=False)
+    else:
+        rows = (get_client().table("alert_matches").select("job_id")
+                .eq("delivery_status", "pending").eq("delivery_mode", "instant")
+                .limit(500).execute().data) or []
+        job_ids = list(dict.fromkeys(row["job_id"] for row in rows))
+        result = process_instant_alerts([{"id": job_id} for job_id in job_ids], dry_run=False)
+    print(f"Alert delivery complete ({args.mode}): {result}")
 
 
 if __name__ == "__main__":
