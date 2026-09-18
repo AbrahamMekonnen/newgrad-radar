@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fills prepared HireRadar application answers in hosted ATS forms for your final review and submission.",
   "host_permissions": [
     "https://*.vercel.app/*", "https://newgradradar.com/*", "http://localhost:*/*"

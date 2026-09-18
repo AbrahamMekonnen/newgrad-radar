@@ -181,6 +181,8 @@
       const response = await fetch(origin + '/api/auto-apply/handoff?token=' + encodeURIComponent(token));
       if (!response.ok) throw new Error('Prepared answers expired. Open the application from HireRadar again.');
       const data = await response.json();
+      data.handoffOrigin = origin;
+      data.handoffToken = token;
       sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
       return data;
     }
@@ -196,6 +198,61 @@
     return !current.size || !expected.length || expected.some((id) => current.has(id));
   };
 
+  const isSuccessPage = () => {
+    const activeSubmit = [...document.querySelectorAll('button, input[type="submit"]')]
+      .some((item) => {
+        const text = normalize(item.textContent || item.value);
+        return !item.disabled && ['submit application', 'submit', 'apply'].includes(text);
+      });
+    if (activeSubmit) return false;
+    const signalText = [
+      document.title,
+      ...[...document.querySelectorAll('h1, h2, [role="status"], [role="alert"]')]
+        .map((item) => item.textContent || ''),
+    ].map(normalize).join(' ');
+    return [
+      'thank you for applying',
+      'application has been submitted',
+      'application submitted',
+      'we have received your application',
+      'your application was received',
+    ].some((phrase) => signalText.includes(phrase));
+  };
+
+  const persist = (data) => sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
+
+  const reportSuccess = async (data) => {
+    if (data.reported || !data.handoffOrigin || !data.handoffToken) return;
+    const response = await fetch(data.handoffOrigin + '/api/auto-apply/handoff', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: data.handoffToken, status: 'submitted' }),
+    });
+    if (!response.ok) throw new Error('The ATS accepted the application, but HireRadar could not update its status.');
+    data.reported = true;
+    persist(data);
+  };
+
+  const submitPreparedForm = (data) => {
+    if (!data.autoSubmitRequested || data.submitStarted) return false;
+    const form = document.querySelector('form');
+    if (form?.checkValidity && !form.checkValidity()) {
+      banner('HireRadar filled the prepared answers, but the ATS still reports a required field. Review it before submitting.', true);
+      return false;
+    }
+    const controls = [...document.querySelectorAll('button, input[type="submit"]')];
+    const submit = controls.find((item) => {
+      const text = normalize(item.textContent || item.value);
+      return text === 'submit application' || text === 'submit' || text === 'apply';
+    });
+    if (!submit || submit.disabled) return false;
+    data.submitStarted = true;
+    persist(data);
+    banner('HireRadar filled every required field and is submitting the application…');
+    submit.click();
+    return true;
+  };
+
   (async () => {
     try {
       const data = await loadPayload();
@@ -207,14 +264,28 @@
       const run = async () => {
         if (running) return;
         running = true;
+        if (isSuccessPage()) {
+          try {
+            await reportSuccess(data);
+            banner('Application submitted successfully. HireRadar marked it as Submitted.');
+          } catch (error) {
+            banner(error.message || 'Could not update the submitted status.', true);
+          }
+          running = false;
+          return;
+        }
         for (const field of fields) {
           if (completed.has(field.name)) continue;
           if (await fill(field)) completed.add(field.name);
         }
         const remaining = fields.length - completed.size;
-        banner(remaining
-          ? 'HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…'
-          : 'HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
+        if (remaining) {
+          banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
+        } else if (!submitPreparedForm(data)) {
+          banner(data.autoSubmitRequested
+            ? 'HireRadar filled every prepared field. Review the ATS field highlighted as incomplete, then submit.'
+            : 'HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
+        }
         running = false;
       };
 
