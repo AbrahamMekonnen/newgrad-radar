@@ -22,6 +22,16 @@ const STATUS_COLORS: Record<string, string> = {
   offer: '#10B981',
 };
 
+const CONFIRMED_APPLICATION_STATUSES = new Set([
+  'applied',
+  'submitted',
+  'in_review',
+  'interview_scheduled',
+  'interviewing',
+  'rejected',
+  'offer',
+]);
+
 const TIER_COLORS: Record<string, string> = {
   faang: '#9333EA',
   ai: '#EF4444',
@@ -187,15 +197,22 @@ function AnalyticsContent({ userId }: { userId: string }) {
     );
   }
 
-  // Calculate stats (application_logs uses: submitted, in_review, interview_scheduled, rejected, offer)
-  const offers = applications.filter(a => a.status === 'offer').length;
-  const currentlyInterviewing = applications.filter(a => ['interviewing', 'interview_scheduled'].includes(a.status)).length;
-  const rejected = applications.filter(a => a.status === 'rejected').length;
+  const confirmedApplications = applications.filter((application) =>
+    CONFIRMED_APPLICATION_STATUSES.has(application.status)
+  );
+  const failedAttempts = applications.filter((application) => application.status === 'failed').length;
 
+  // Attempts and failures remain visible operational history, but do not count as applications.
+  const offers = confirmedApplications.filter(a => a.status === 'offer').length;
+  const currentlyInterviewing = confirmedApplications.filter(a => ['interviewing', 'interview_scheduled'].includes(a.status)).length;
+  const rejected = confirmedApplications.filter(a => a.status === 'rejected').length;
+
+  const awaitingResponse = confirmedApplications.filter(a =>
+    ['applied', 'submitted', 'in_review'].includes(a.status)
+  ).length;
   const stats = {
-    total: applications.length,
-    pending: applications.filter(a => a.status === 'pending').length,
-    submitted: applications.filter(a => ['applied', 'submitted', 'in_review'].includes(a.status)).length,
+    total: confirmedApplications.length,
+    submitted: confirmedApplications.length,
     // "Got interviews" = currently interviewing + offers (you can't get an offer without interviewing)
     interviewing: currentlyInterviewing + offers,
     rejected,
@@ -214,8 +231,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   // Status breakdown for pie chart
   const statusData = [
-    { name: 'Pending', value: stats.pending, color: STATUS_COLORS.pending },
-    { name: 'Processing', value: stats.submitted, color: STATUS_COLORS.submitted },
+    { name: 'Submitted', value: awaitingResponse, color: STATUS_COLORS.submitted },
     { name: 'Interviewing', value: stats.interviewing, color: STATUS_COLORS.interview_scheduled },
     { name: 'Rejected', value: stats.rejected, color: STATUS_COLORS.rejected },
     { name: 'Offers', value: stats.offers, color: STATUS_COLORS.offer },
@@ -223,7 +239,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   // Tier breakdown for bar chart
   const tierCounts: Record<string, number> = {};
-  applications.forEach(a => {
+  confirmedApplications.forEach(a => {
     const tier = a.job?.tier || 'unknown';
     tierCounts[tier] = (tierCounts[tier] || 0) + 1;
   });
@@ -243,7 +259,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   const dailyData = dateRange.map(date => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    const dayApps = applications.filter(a =>
+    const dayApps = confirmedApplications.filter(a =>
       format(new Date(a.created_at), 'yyyy-MM-dd') === dateStr
     );
     return {
@@ -255,7 +271,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   // Success rate by tier
   const tierStats: Record<string, { total: number; responses: number; interviews: number; offers: number }> = {};
-  applications.forEach(a => {
+  confirmedApplications.forEach(a => {
     const tier = a.job?.tier || 'unknown';
     if (!tierStats[tier]) {
       tierStats[tier] = { total: 0, responses: 0, interviews: 0, offers: 0 };
@@ -286,7 +302,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   // Source breakdown for pie chart
   const sourceCounts: Record<string, number> = {};
-  applications.forEach(a => {
+  confirmedApplications.forEach(a => {
     const source = a.job?.source || 'unknown';
     sourceCounts[source] = (sourceCounts[source] || 0) + 1;
   });
@@ -301,7 +317,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
 
   // Source response rates (which sources get best response rates)
   const sourceStats: Record<string, { total: number; responses: number; interviews: number }> = {};
-  applications.forEach(a => {
+  confirmedApplications.forEach(a => {
     const source = a.job?.source || 'unknown';
     if (!sourceStats[source]) {
       sourceStats[source] = { total: 0, responses: 0, interviews: 0 };
@@ -358,6 +374,12 @@ function AnalyticsContent({ userId }: { userId: string }) {
         <StatCard label="Response Rate" value={`${responseRate}%`} color="gray" />
       </div>
 
+      {failedAttempts > 0 && (
+        <p className="-mt-5 mb-8 text-sm text-gray-500 dark:text-gray-400">
+          {failedAttempts} automation attempt{failedAttempts === 1 ? '' : 's'} failed and are excluded from application totals.
+        </p>
+      )}
+
       {/* Source Stats */}
       {sourceData.length > 0 && (
         <SourceStats
@@ -366,7 +388,7 @@ function AnalyticsContent({ userId }: { userId: string }) {
         />
       )}
 
-      {applications.length === 0 ? (
+      {confirmedApplications.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />

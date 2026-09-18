@@ -517,22 +517,28 @@ export default function HomePage() {
       let weeklyProgress = 0;
       let nextInterviewDate: string | undefined;
 
-      logs.forEach((log) => {
-        const createdAt = new Date(log.created_at);
+      const confirmedStatuses = new Set([
+        'applied', 'submitted', 'in_review', 'interview_scheduled',
+        'interviewing', 'rejected', 'offer',
+      ]);
 
-        // Active applications (pending, submitted, or in_review)
-        if (['pending', 'submitted', 'in_review'].includes(log.status)) {
+      logs.forEach((log) => {
+        const isConfirmedApplication = confirmedStatuses.has(log.status);
+        const applicationDate = new Date(log.submitted_at || log.created_at);
+
+        // Active means a confirmed application still awaiting a final outcome.
+        if (['applied', 'submitted', 'in_review', 'interview_scheduled', 'interviewing'].includes(log.status)) {
           activeCount++;
         }
 
-        // Applications this week
-        if (createdAt >= weekStart) {
+        // Queued work and failed automation attempts never count toward goals.
+        if (isConfirmedApplication && applicationDate >= weekStart) {
           activeThisWeek++;
           weeklyProgress++;
         }
 
         // Processing (awaiting response)
-        if (log.status === 'submitted' || log.status === 'in_review') {
+        if (['applied', 'submitted', 'in_review'].includes(log.status)) {
           processingCount++;
         }
 
@@ -1237,7 +1243,7 @@ export default function HomePage() {
                       <span className="text-sm">Loading more jobs…</span>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-400 dark:text-gray-500">You've reached the end — that's all the jobs for these filters.</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">You&apos;ve reached the end — that&apos;s all the jobs for these filters.</p>
                   )}
                 </div>
               )}

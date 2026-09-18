@@ -48,7 +48,10 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
     } catch { /* ignore */ }
     if (!silent) setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   // Poll while anything is queued/submitting so cards flip to their result on
   // their own. Stops when nothing is in flight, or after ~2.5 min (a run with
@@ -72,20 +75,26 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   }, [pending, load]);
 
   const setStatus = async (id: string, status: 'applied' | 'skipped') => {
-    setApps((prev) => status === 'skipped'
-      ? prev.filter((a) => a.id !== id)
-      : prev.map((a) => (a.id === id ? { ...a, status: 'applied' } : a))); // optimistic
+    const confirmedSubmitted = status === 'applied'
+      ? window.confirm('Confirm only if the ATS showed a success or thank-you page after submission. Did you submit this application?')
+      : false;
+    if (status === 'applied' && !confirmedSubmitted) return;
+
     const response = await fetch('/api/auto-apply/inbox', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, confirmedSubmitted }),
     });
     if (!response.ok) {
       await load(true);
       showToast('Could not update the application status.', 'error');
       return;
     }
+
+    setApps((prev) => status === 'skipped'
+      ? prev.filter((a) => a.id !== id)
+      : prev.map((a) => (a.id === id ? { ...a, status: 'applied', submitted_at: new Date().toISOString() } : a)));
     if (status === 'applied') recordApplicationActivity();
-    showToast(status === 'applied' ? 'Marked as applied.' : 'Skipped.', 'success');
+    showToast(status === 'applied' ? 'Submission confirmed and counted.' : 'Skipped.', 'success');
   };
 
   const retryPreparation = async (app: App) => {
@@ -151,7 +160,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || 'Could not create browser handoff');
       window.open(data.url, '_blank', 'noopener,noreferrer');
-      showToast('Opening the prepared form. The browser helper will fill it; answers were also copied as a fallback.', 'info');
+      showToast('Opening the ATS form. Review every field and submit in the browser; prepared answers were copied as a fallback.', 'info');
     } catch (error) {
       window.open(app.job_url, '_blank', 'noopener,noreferrer');
       showToast(error instanceof Error ? `${error.message}. Prepared answers were copied.` : 'Opened the application and copied prepared answers.', 'error');
@@ -284,7 +293,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                   <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
                     app.ready_pct >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
                       : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400')}>
-                    {app.ready_pct}% filled
+                    {app.ready_pct}% prepared
                   </span>
                   {drafted.length > 0 && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
@@ -440,7 +449,11 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                         Open application
                       </a>
                     )}
-                    <Button onClick={() => setStatus(app.id, 'applied')} variant="outline" className="text-sm">Mark applied</Button>
+                    {!completed && (
+                      <Button onClick={() => setStatus(app.id, 'applied')} variant="outline" className="text-sm">
+                        I submitted it
+                      </Button>
+                    )}
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">

@@ -40,11 +40,35 @@ export async function PATCH(request: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id, status, prepared_data, ready_pct, needs_user, learned_answers } = await request.json();
+  const { id, status, prepared_data, ready_pct, needs_user, learned_answers, confirmedSubmitted } = await request.json();
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  if (status === 'applied' && confirmedSubmitted !== true) {
+    return NextResponse.json({ error: 'Explicit submission confirmation required' }, { status: 400 });
+  }
+
+  const db = admin();
+  const { data: queueRow } = await db
+    .from('autoapply_job_queue')
+    .select('job_id')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!queueRow) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
   if (status && ['applied', 'skipped', 'prepared'].includes(status)) patch.status = status;
+  if (status === 'applied') {
+    const confirmedAt = new Date().toISOString();
+    patch.submitted_at = confirmedAt;
+    patch.submit_log = {
+      status: 'user_confirmed',
+      detail: 'User confirmed the ATS displayed a successful submission.',
+      at: confirmedAt,
+    };
+  } else if (status === 'prepared' || status === 'skipped') {
+    patch.submitted_at = null;
+  }
   if (Array.isArray(prepared_data)) patch.prepared_data = prepared_data;
   if (typeof ready_pct === 'number') patch.ready_pct = ready_pct;
   if (Array.isArray(needs_user)) patch.needs_user = needs_user;
@@ -53,7 +77,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Scope the update to this user's own row.
-  const { error } = await admin()
+  const { error } = await db
     .from('autoapply_job_queue')
     .update(patch)
     .eq('id', id)
@@ -62,6 +86,32 @@ export async function PATCH(request: NextRequest) {
   if (error) {
     console.error('inbox PATCH error:', error);
     return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+  }
+
+  // A manual browser application becomes a real application only after this
+  // explicit confirmation. saved_jobs then synchronizes application_logs via
+  // the database trigger used by the rest of the dashboard.
+  if (status === 'applied') {
+    const { error: syncError } = await db.from('saved_jobs').upsert({
+      user_id: user.id,
+      job_id: queueRow.job_id,
+      status: 'applied',
+      applied_at: patch.submitted_at,
+      updated_at: patch.submitted_at,
+    }, { onConflict: 'user_id,job_id' });
+    if (syncError) {
+      console.error('manual submission sync error:', syncError);
+      await db.from('autoapply_job_queue').update({
+        status: 'prepared',
+        submitted_at: null,
+        submit_log: {
+          status: 'sync_failed',
+          detail: 'Submission confirmation could not be synchronized.',
+          at: new Date().toISOString(),
+        },
+      }).eq('id', id).eq('user_id', user.id);
+      return NextResponse.json({ error: 'Could not synchronize submission confirmation' }, { status: 500 });
+    }
   }
 
   // Learn user-supplied answers for future forms. Store the human option label,

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
@@ -40,6 +39,9 @@ interface GeneratedAnswer {
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
+  source_type: 'bank' | 'company';
+  storage_category: string;
+  variant_ids: Partial<Record<AnswerLength, string>>;
 }
 
 // Define answer categories
@@ -163,39 +165,127 @@ function AnswerBankContent({ userId }: { userId: string }) {
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showCompanyAnswers, setShowCompanyAnswers] = useState(false);
-  const supabase = createClient();
+
+  const categoryFor = (category: string): string => {
+    if (['why_company', 'why_role'].includes(category)) return 'motivation';
+    if (['challenging_project', 'problem_solving', 'strengths', 'achievement'].includes(category)) return 'experience';
+    if (['teamwork', 'conflict_resolution'].includes(category)) return 'teamwork';
+    if (category === 'leadership') return 'leadership';
+    if (['failure_learning', 'weaknesses', 'career_goals'].includes(category)) return 'growth';
+    return 'values';
+  };
+
+  const questionFor = (category: string): string => ({
+    why_company: 'Why do you want to work at this company?',
+    why_role: 'Why are you interested in this role?',
+    challenging_project: 'Describe your most challenging project',
+    teamwork: 'Describe your experience working in a team',
+    conflict_resolution: 'Describe a time you resolved a conflict',
+    failure_learning: 'Describe a failure and what you learned from it',
+    leadership: 'Describe a time you led a project or initiative',
+    problem_solving: 'Describe a difficult problem you solved',
+    strengths: 'What are your greatest strengths?',
+    weaknesses: 'What is an area you are improving?',
+    career_goals: 'Where do you see yourself in 5 years?',
+    achievement: 'What is your proudest accomplishment?',
+    generic: 'Reusable application answer',
+  }[category] || 'Reusable application answer');
+
+  const qualityForText = (text: string): number => {
+    const length = text.trim().length;
+    if (!length) return 0;
+    if (length >= 300) return 95;
+    if (length >= 150) return 85;
+    if (length >= 75) return 75;
+    return 60;
+  };
 
   const fetchAnswers = useCallback(async () => {
     setLoading(true);
+    setMessage(null);
     try {
-      const { data, error } = await supabase
-        .from('generated_answers')
-        .select('*')
-        .eq('user_id', userId)
-        .order('category_id', { ascending: true })
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        // Table might not exist yet
-        if (error.code === '42P01') {
-          setAnswers([]);
-        } else {
-          console.error('Error fetching answers:', error);
-          setMessage({ type: 'error', text: 'Failed to load answers' });
-        }
-      } else {
-        setAnswers(data || []);
+      const [bankResponse, companyResponse] = await Promise.all([
+        fetch('/api/answers?limit=200'),
+        fetch('/api/answers/company?limit=200'),
+      ]);
+      if (!bankResponse.ok) {
+        const body = await bankResponse.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to load answer bank');
       }
+      if (!companyResponse.ok) {
+        const body = await companyResponse.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to load company answers');
+      }
+
+      const bankBody = await bankResponse.json();
+      const companyBody = await companyResponse.json();
+      const groupedBankAnswers = new Map<string, GeneratedAnswer>();
+      for (const row of (bankBody.answers || []) as Record<string, unknown>[]) {
+        const text = String(row.answer_text || '');
+        const category = String(row.question_category || 'generic');
+        const wordCount = Number(row.word_count_target || 150);
+        const length: AnswerLength = wordCount <= 100 ? 'short' : wordCount <= 200 ? 'standard' : 'long';
+        const key = `${String(row.story_id || row.id)}:${category}`;
+        const existing = groupedBankAnswers.get(key) || {
+          id: String(row.id),
+          user_id: userId,
+          category_id: categoryFor(category),
+          question: questionFor(category),
+          answers: { short: '', standard: '', long: '' },
+          company_slug: null,
+          company_name: null,
+          times_used: 0,
+          quality_score: 0,
+          last_used_at: null,
+          created_at: String(row.created_at || new Date().toISOString()),
+          updated_at: String(row.updated_at || row.created_at || new Date().toISOString()),
+          source_type: 'bank' as const,
+          storage_category: category,
+          variant_ids: {},
+        };
+        existing.answers[length] = text;
+        existing.variant_ids[length] = String(row.id);
+        existing.times_used += Number(row.times_used || 0);
+        existing.quality_score = Math.max(existing.quality_score, qualityForText(text));
+        if (row.last_used_at) existing.last_used_at = String(row.last_used_at);
+        groupedBankAnswers.set(key, existing);
+      }
+      const bankAnswers = Array.from(groupedBankAnswers.values());
+      const companyAnswers: GeneratedAnswer[] = (companyBody.answers || []).map((row: Record<string, unknown>) => {
+        const short = String(row.why_company_short || '');
+        const standard = String(row.why_company_standard || '');
+        const long = String(row.why_company_long || '');
+        return {
+          id: String(row.id),
+          user_id: userId,
+          category_id: 'motivation',
+          question: `Why do you want to work at ${String(row.company_name || 'this company')}?`,
+          answers: { short, standard, long },
+          company_slug: row.company_slug ? String(row.company_slug) : null,
+          company_name: row.company_name ? String(row.company_name) : null,
+          times_used: Number(row.times_used || 0),
+          quality_score: Math.round((qualityForText(short) + qualityForText(standard) + qualityForText(long)) / 3),
+          last_used_at: row.last_used_at ? String(row.last_used_at) : null,
+          created_at: String(row.created_at || row.generated_at || new Date().toISOString()),
+          updated_at: String(row.updated_at || row.generated_at || new Date().toISOString()),
+          source_type: 'company',
+          storage_category: 'why_company',
+          variant_ids: {},
+        };
+      });
+      setAnswers([...companyAnswers, ...bankAnswers]);
     } catch (err) {
-      console.error('Error:', err);
-      // Gracefully handle missing table
+      console.error('Error loading answers:', err);
       setAnswers([]);
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load answers' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [userId, supabase]);
+  }, [userId]);
 
   useEffect(() => {
-    fetchAnswers();
+    const timer = window.setTimeout(() => void fetchAnswers(), 0);
+    return () => window.clearTimeout(timer);
   }, [fetchAnswers]);
 
   const handleEdit = (answer: GeneratedAnswer) => {
@@ -204,84 +294,101 @@ function AnswerBankContent({ userId }: { userId: string }) {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingAnswer) return;
-
+    if (!editingAnswer || !editText.trim()) return;
     setSaving(true);
     setMessage(null);
-
-    const updatedAnswers = {
-      ...editingAnswer.answers,
-      [selectedLength]: editText,
-    };
-
-    const { error } = await supabase
-      .from('generated_answers')
-      .update({
-        answers: updatedAnswers,
-        quality_score: calculateQualityScore(updatedAnswers),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', editingAnswer.id)
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('Error saving answer:', error);
-      setMessage({ type: 'error', text: 'Failed to save answer' });
-    } else {
-      setMessage({ type: 'success', text: 'Answer saved successfully' });
-      setAnswers((prev) =>
-        prev.map((a) =>
-          a.id === editingAnswer.id
-            ? { ...a, answers: updatedAnswers, quality_score: calculateQualityScore(updatedAnswers) }
-            : a
-        )
-      );
+    try {
+      const response = editingAnswer.source_type === 'company'
+        ? await fetch('/api/answers/company', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: editingAnswer.id,
+              [`why_company_${selectedLength}`]: editText.trim(),
+            }),
+          })
+        : editingAnswer.variant_ids[selectedLength]
+          ? await fetch(`/api/answers/${editingAnswer.variant_ids[selectedLength]}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ answer_text: editText.trim() }),
+            })
+          : new Response(JSON.stringify({ error: `Generate the ${selectedLength} variation before editing it.` }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to save answer');
+      }
+      const updatedAnswers = {
+        ...editingAnswer.answers,
+        [selectedLength]: editText.trim(),
+      };
+      setAnswers((prev) => prev.map((answer) => answer.id === editingAnswer.id
+        ? { ...answer, answers: updatedAnswers, quality_score: qualityForText(editText) }
+        : answer));
       setEditingAnswer(null);
+      setMessage({ type: 'success', text: 'Answer saved successfully' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save answer' });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleRegenerate = async (answerId: string) => {
+    const answer = answers.find((item) => item.id === answerId);
+    if (!answer) return;
     setRegenerating(answerId);
     setMessage(null);
-
     try {
-      const response = await fetch('/api/generate-answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answerId, userId }),
-      });
-
+      const response = answer.source_type === 'company'
+        ? await fetch('/api/answers/company', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              company_slug: answer.company_slug,
+              company_name: answer.company_name,
+              regenerate: true,
+            }),
+          })
+        : await fetch('/api/answers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              categories: [answer.storage_category],
+              word_counts: [selectedLength === 'short' ? 75 : selectedLength === 'long' ? 350 : 150],
+            }),
+          });
       if (!response.ok) {
-        throw new Error('Failed to regenerate answer');
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to regenerate answer');
       }
-
-      const { answer: regeneratedAnswer } = await response.json();
-      setAnswers((prev) =>
-        prev.map((a) => (a.id === answerId ? { ...a, ...regeneratedAnswer } : a))
-      );
-      setMessage({ type: 'success', text: 'Answer regenerated successfully' });
+      await fetchAnswers();
+      setMessage({ type: 'success', text: 'Answer variations refreshed' });
     } catch (err) {
-      console.error('Error regenerating answer:', err);
-      setMessage({ type: 'error', text: 'Failed to regenerate answer' });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to regenerate answer' });
+    } finally {
+      setRegenerating(null);
     }
-    setRegenerating(null);
   };
 
-  const calculateQualityScore = (answers: { short: string; standard: string; long: string }): number => {
-    let score = 0;
-    const lengths = { short: 50, standard: 200, long: 500 };
-
-    Object.entries(answers).forEach(([key, text]) => {
-      if (text && text.trim().length > 0) {
-        const minLength = lengths[key as keyof typeof lengths];
-        const actualLength = text.trim().length;
-        const completeness = Math.min(actualLength / minLength, 1);
-        score += completeness * 33.33;
-      }
-    });
-
-    return Math.round(score);
+  const handleGenerateAnswers = async () => {
+    setMessage(null);
+    try {
+      const response = await fetch('/api/answers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word_counts: [75, 150, 350] }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Failed to generate answers');
+      await fetchAnswers();
+      setMessage({ type: 'success', text: 'Answer bank generated from your saved stories' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to generate answers' });
+    }
   };
 
   // Calculate stats
@@ -475,7 +582,7 @@ function AnswerBankContent({ userId }: { userId: string }) {
               : 'Generate answers by using the auto-apply feature or create them manually below.'}
           </p>
           {!showCompanyAnswers && (
-            <Button onClick={() => {/* TODO: Open answer generator */}}>
+            <Button onClick={handleGenerateAnswers}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
