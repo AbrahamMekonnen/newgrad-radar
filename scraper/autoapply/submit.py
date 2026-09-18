@@ -1,17 +1,10 @@
-"""Direct HTTP submission for CAPTCHA-FREE application forms only.
+"""Candidate application submission routing.
 
-This NEVER solves or bypasses a captcha. Before submitting anything it does a
-preflight GET of the real application page and looks for reCAPTCHA / hCaptcha.
-If any is present it returns status 'needs_captcha' and does NOT post — the job
-stays a one-tap-open in the user's inbox, which they finish in their own browser
-(where the invisible captcha naturally passes for a real human).
-
-Only forms with no captcha at all (older embedded Greenhouse boards, some
-non-GH/Lever ATSes) are actually submitted here. That is a deliberately small
-set; see docs — the modern Greenhouse host and Lever both gate every submit.
-
-    from autoapply.submit import submit_application
-    result = submit_application(ats, token, jid, apply_url, fields, resume_bytes)
+Greenhouse hosted forms always return browser_required because the official
+submission API requires the employer's private Job Board API key. Other ATS
+forms receive a preflight CAPTCHA check and are posted only when the adapter has
+a legitimate candidate submission path. CAPTCHA solving or evasion is never
+invoked here.
 """
 from __future__ import annotations
 
@@ -98,7 +91,7 @@ def submit_application(ats: str, token: str, jid: str, apply_url: str,
     """Submit ONE prepared application over HTTP if the form has no captcha.
 
     Returns {status, detail, http_status?, sent?} where status is one of:
-      needs_captcha | submitted | submit_failed | incomplete | unsupported
+      browser_required | needs_captcha | submitted | submit_failed | incomplete | unsupported
     dry_run=True (default) does everything except the final POST — it returns
     what WOULD be sent, so a real application is never fired accidentally.
     """
@@ -113,6 +106,17 @@ def submit_application(ats: str, token: str, jid: str, apply_url: str,
     if missing:
         return {"status": "incomplete", "detail": f"unfilled required: {', '.join(missing[:6])}",
                 "at": _now()}
+
+    # Greenhouse's public form schema is readable, but its documented submission
+    # API requires the employer's private Job Board API key. Candidate-side code
+    # must use the human browser, where invisible reCAPTCHA runs at submission.
+    if ats == "greenhouse":
+        return {
+            "status": "browser_required",
+            "detail": "Greenhouse hosted form requires in-browser review and submission",
+            "page": page,
+            "at": _now(),
+        }
 
     gated, why = detect_captcha(page)
     if gated:

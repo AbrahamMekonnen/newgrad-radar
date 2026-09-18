@@ -238,7 +238,7 @@ def test_workday_url_parse():
 
 
 def test_submit_never_posts_when_gated():
-    """A captcha-gated form must return needs_captcha and NEVER POST."""
+    """A hosted Greenhouse form must require the browser and NEVER POST."""
     import submit as s
     orig = s.detect_captcha
     s.detect_captcha = lambda url: (True, "RECAPTCHA")
@@ -246,7 +246,7 @@ def test_submit_never_posts_when_gated():
         r = s.submit_application("greenhouse", "airtable", "1", "", [], dry_run=False)
     finally:
         s.detect_captcha = orig
-    check("submit: gated -> needs_captcha, no post", r["status"] == "needs_captcha", str(r))
+    check("submit: Greenhouse -> browser_required, no post", r["status"] == "browser_required", str(r))
 
 
 def test_submit_payload_excludes_resume_and_unfilled():

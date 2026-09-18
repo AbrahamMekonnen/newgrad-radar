@@ -120,7 +120,7 @@ def prepare_application(job: dict, profile) -> dict:
                "provenance": salary_info["source"] if r.category == "salary" else None,
                "values": getattr(r, "values", []) or []}
               for r in res["resolved"]]
-    filled = [f for f in fields if f["source"] in ("profile", "matched", "market", "eeo", "file", "ai_drafted")]
+    filled = [f for f in fields if f["source"] in ("profile", "matched", "market", "eeo", "file", "ai_drafted", "conditional")]
     user_needed = [f for f in fields if f["source"] == "user_needed" and f["required"]]
     total = len(fields) or 1
 

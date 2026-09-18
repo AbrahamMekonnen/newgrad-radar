@@ -3,8 +3,8 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 
 // Queue prepared application(s) for background submission. The submit worker
-// only actually posts CAPTCHA-FREE forms; captcha-gated ones bounce back to
-// 'prepared' with a note so they stay one-tap-open in the inbox. Submission is
+// posts only when the ATS exposes a legitimate candidate submission endpoint.
+// Hosted forms return to the inbox for browser handoff and final review. Submission is
 // real + irreversible, so it fires only on rows the user explicitly sends here.
 const REPO = process.env.GITHUB_REPO || 'AbrahamMekonnen/newgrad-radar';
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     message: queued === 0
       ? 'Nothing to submit.'
       : triggered
-        ? `Submitting ${queued} in the background — captcha-free forms go through; the rest stay here to finish in one tap.`
+        ? `Checking ${queued} applications — hosted forms return here ready for browser review and submission.`
         : `Queued ${queued} for the next submit pass.`,
   });
 }

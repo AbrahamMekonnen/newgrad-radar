@@ -72,6 +72,21 @@ class AutoApplyRegressionTests(unittest.TestCase):
         self.assertEqual("Seattle", profile.city)
         self.assertEqual("WA", profile.state)
 
+    def test_resume_education_enrichment_is_conservative(self):
+        profile = gh.Profile(
+            resume_text=(
+                "Education Eastern Mennonite University Harrisonburg, VA "
+                "Bachelor of Science in Computer Science, Minor in Business; "
+                "Aug. 2022 - May 2026 Experience Software Engineer"
+            )
+        )
+        updates = prepare_worker._infer_education_from_resume(profile)
+        self.assertEqual("Eastern Mennonite University", profile.school)
+        self.assertEqual("Bachelor of Science in Computer Science", profile.degree)
+        self.assertEqual("Computer Science", profile.major)
+        self.assertEqual("2026", profile.graduation_year)
+        self.assertEqual(profile.school, updates["education_school"])
+
     def test_common_questions_are_categorized_and_resolved(self):
         self.assertEqual(
             "age_verification",
@@ -158,6 +173,112 @@ class AutoApplyRegressionTests(unittest.TestCase):
         )
         self.assertEqual("option-42", value)
         self.assertEqual("matched", source)
+
+    def test_accenture_compliance_fields_are_not_identity_fields(self):
+        current_gov = (
+            "Are you a current employee of the U.S. Government or any state "
+            "or local government?"
+        )
+        conditional = (
+            "If yes, please list the full name of the employee(s) and your "
+            "relationship to them."
+        )
+        self.assertEqual("government_employment", gh._category(current_gov, "question_1"))
+        self.assertEqual("conditional_detail", gh._category(conditional, "question_2"))
+
+        questions = [
+            {
+                "label": "State", "required": True,
+                "fields": [{"name": "state", "type": "select", "values": [
+                    {"label": "California", "value": "ca-id"},
+                    {"label": "Washington", "value": "wa-id"},
+                ]}],
+            },
+            {
+                "label": current_gov, "required": True,
+                "fields": [{"name": "question_1", "type": "select", "values": [
+                    {"label": "Yes", "value": "yes-id"},
+                    {"label": "No", "value": "no-id"},
+                ]}],
+            },
+            {
+                "label": conditional, "required": False,
+                "fields": [{"name": "question_2", "type": "input_text", "values": []}],
+            },
+            {
+                "label": "Please indicate your citizenship status",
+                "required": True,
+                "fields": [{"name": "question_3", "type": "select", "values": [
+                    {"label": "U.S. Citizen", "value": "citizen-id"},
+                    {"label": "Permanent Resident", "value": "pr-id"},
+                ]}],
+            },
+        ]
+        result = gh.resolve(
+            questions,
+            gh.Profile(state="CA", work_authorization="us_citizen", is_us_citizen=True),
+        )
+        fields = {field.name: field for field in result["resolved"]}
+        self.assertEqual("ca-id", fields["state"].value)
+        self.assertEqual("user_needed", fields["question_1"].source)
+        self.assertIsNone(fields["question_1"].value)
+        self.assertEqual("conditional", fields["question_2"].source)
+        self.assertIsNone(fields["question_2"].value)
+        self.assertEqual("citizen-id", fields["question_3"].value)
+        self.assertEqual(["question_1"], [field.name for field in result["user_needed"]])
+
+    def test_greenhouse_fetch_includes_hosted_form_sections(self):
+        payload = {
+            "questions": [{"label": "First Name", "required": True, "fields": [
+                {"name": "first_name", "type": "input_text", "values": []}
+            ]}],
+            "location_questions": [
+                {"label": "Longitude", "required": True, "fields": [
+                    {"name": "longitude", "type": "input_hidden", "values": []}
+                ]},
+                {"label": "Location", "required": True, "fields": [
+                    {"name": "location", "type": "input_text", "values": []}
+                ]},
+            ],
+            "education": "education_required",
+            "compliance": [{"questions": [
+                {"label": "Gender", "required": False, "fields": [
+                    {"name": "gender", "type": "select", "values": [
+                        {"label": "Decline To Self Identify", "value": "3"}
+                    ]}
+                ]},
+                {"label": "Race", "required": False, "fields": [
+                    {"name": "race", "type": "select", "values": []}
+                ]},
+            ]}],
+        }
+
+        class Response:
+            def raise_for_status(self):
+                return None
+            def json(self):
+                return payload
+
+        with patch.object(gh.requests, "get", return_value=Response()):
+            fields = gh.fetch_form("company", "123")
+
+        names = [field["fields"][0]["name"] for field in fields]
+        self.assertIn("location", names)
+        self.assertNotIn("longitude", names)
+        self.assertIn("school--0", names)
+        self.assertIn("degree--0", names)
+        self.assertIn("discipline--0", names)
+        self.assertIn("gender", names)
+        self.assertIn("hispanic_ethnicity", names)
+        self.assertNotIn("race", names)
+
+    def test_greenhouse_submission_uses_browser_without_claiming_visible_captcha(self):
+        with patch.object(submit, "detect_captcha", side_effect=AssertionError("not needed")):
+            result = submit.submit_application(
+                "greenhouse", "company", "123", "", [], dry_run=False,
+            )
+        self.assertEqual("browser_required", result["status"])
+        self.assertIn("in-browser", result["detail"])
 
     def test_shared_captcha_detector_is_used_for_typed_handoff(self):
         class Response:

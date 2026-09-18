@@ -173,7 +173,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
     const hasMissing = (a.prepared_data || []).some((f) => f.required && f.source === 'user_needed');
     return (a.status ?? 'prepared') === 'prepared'
       && !hasMissing
-      && a.submit_log?.status !== 'needs_captcha';
+      && !['needs_captcha', 'browser_required'].includes(a.submit_log?.status || '');
   }).map((a) => a.id);
 
   // Complete the missing required fields IN-APP, then finish the application:
@@ -208,8 +208,8 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       showToast('Could not save your answers.', 'error');
       return;
     }
-    if (app.submit_log?.status === 'needs_captcha') {
-      showToast('Answers saved for future applications. Use "Open & finish" to complete the captcha.', 'success');
+    if (['needs_captcha', 'browser_required'].includes(app.submit_log?.status || '')) {
+      showToast('Answers saved for future applications. Use "Open & finish" to review and submit the hosted form.', 'success');
       return;
     }
     await submit({ id: app.id }, [app.id]);
@@ -272,7 +272,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
           const drafted = fields.filter((f) => f.source === 'ai_drafted' || f.source === 'ai_needed');
           const auto = fields.filter((f) => AUTO_SOURCES.has(f.source));
           const needs = fields.filter((f) => f.source === 'user_needed' && f.required);
-          const knownCaptcha = app.submit_log?.status === 'needs_captcha';
+          const browserRequired = ['needs_captcha', 'browser_required'].includes(app.submit_log?.status || '');
           const preparing = app.status === 'pending' || app.status === 'processing';
           const completed = app.status === 'submitted' || app.status === 'applied';
           const retryable = app.status === 'error' || app.status === 'form_fetch_failed';
@@ -403,9 +403,9 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                   )}
 
                   {/* Result of the last background submit attempt, if any */}
-                  {app.submit_log?.status === 'needs_captcha' && (
+                  {['needs_captcha', 'browser_required'].includes(app.submit_log?.status || '') && (
                     <p className="text-sm text-amber-600 dark:text-amber-400">
-                      This form requires a browser CAPTCHA. Open it with the browser helper to fill your saved answers, then review and submit.
+                      This hosted form must be reviewed and submitted in your browser. The helper fills your saved answers; an invisible security check may complete without showing a puzzle.
                     </p>
                   )}
                   {(app.submit_log?.status === 'submit_failed' || app.submit_log?.status === 'incomplete') && (
@@ -431,7 +431,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                       </Button>
                     ) : unavailable ? (
                       <Button disabled variant="outline" className="text-sm">Manual application needed</Button>
-                    ) : knownCaptcha ? (
+                    ) : browserRequired ? (
                       <Button disabled={busy.has(app.id)} onClick={() => openPreparedApplication(app)} className="text-sm">
                         {busy.has(app.id) ? 'Preparing browser...' : 'Open & finish'}
                       </Button>
@@ -443,7 +443,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                         {needs.length > 0 ? 'Complete required answers first' : 'Submit for me'}
                       </Button>
                     )}
-                    {!knownCaptcha && (
+                    {!browserRequired && (
                       <a href={app.job_url} target="_blank" rel="noopener noreferrer"
                          className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 text-sm font-medium">
                         Open application
@@ -457,7 +457,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Complete CAPTCHA in your browser. The autofill helper transfers prepared answers into supported ATS forms.
+                    The browser helper transfers prepared answers, including dynamically rendered fields. Submit only after the ATS shows the completed form.
                   </p>
                 </div>
               )}

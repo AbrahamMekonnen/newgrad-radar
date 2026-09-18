@@ -50,6 +50,61 @@ def _ats_job_id(url: str):
     return segs[-1] if segs else None
 
 
+def _infer_education_from_resume(profile: gh.Profile) -> dict:
+    """Fill missing structured education from the resume's Education section.
+
+    Resume parsers often preserve all text but leave the Settings columns empty.
+    This conservative parser only accepts explicit institution/degree/date text.
+    """
+    if not profile.resume_text:
+        return {}
+    match = re.search(r"(?is)\beducation\b(.{0,1200})", profile.resume_text)
+    if not match:
+        return {}
+    section = " ".join(match.group(1).split())
+    updates = {}
+
+    if not profile.school:
+        school = re.search(
+            r"^\s*(.+?(?:University|College|Institute|School))\b",
+            section, re.IGNORECASE,
+        )
+        if school:
+            profile.school = school.group(1).strip(" ,-")
+            updates["education_school"] = profile.school
+
+    if not profile.degree:
+        degree = re.search(
+            r"\b((?:Bachelor|Master|Associate|Doctor)(?:'s)?(?: of [A-Za-z]+)?"
+            r"(?: in [A-Za-z][A-Za-z &/.-]+?))(?=,|;|\s+Minor\b|\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b)",
+            section, re.IGNORECASE,
+        )
+        if degree:
+            profile.degree = degree.group(1).strip()
+            profile.education = profile.degree
+            profile.education_level = profile.degree
+            updates["education_degree"] = profile.degree
+
+    if not profile.major and profile.degree:
+        major = re.search(r"\bin\s+(.+)$", profile.degree, re.IGNORECASE)
+        if major:
+            profile.major = major.group(1).strip()
+            updates["education_major"] = profile.major
+
+    if not profile.graduation_date:
+        dates = re.findall(
+            r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+            r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|"
+            r"Dec(?:ember)?)\.?\s+20\d{2}\b",
+            section[:700], re.IGNORECASE,
+        )
+        if dates:
+            profile.graduation_date = dates[-1]
+            profile.graduation_year = re.search(r"20\d{2}", dates[-1]).group(0)
+            updates["education_graduation_date"] = profile.graduation_date
+    return updates
+
+
 def build_profile(client, user_id: str) -> gh.Profile:
     """Assemble the complete reusable application profile and learned answers."""
     row = (client.table("user_profiles").select("*").eq("user_id", user_id)
@@ -186,6 +241,12 @@ def build_profile(client, user_id: str) -> gh.Profile:
                     logger.debug(f"resume_text cache write skipped: {e}")
         except Exception as e:
             logger.warning(f"resume text extraction failed: {e}")
+    education_updates = _infer_education_from_resume(prof)
+    if education_updates:
+        try:
+            client.table("user_profiles").update(education_updates).eq("user_id", user_id).execute()
+        except Exception as e:
+            logger.debug(f"education profile enrichment skipped: {e}")
     return prof
 
 

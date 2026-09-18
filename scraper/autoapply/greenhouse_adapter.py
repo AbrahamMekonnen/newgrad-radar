@@ -209,13 +209,57 @@ class ResolvedField:
 
 # ---- form fetch -------------------------------------------------------------
 def fetch_form(token: str, job_id) -> list[dict]:
-    """Return Greenhouse questions: [{label, required, fields:[{name,type,values}]}]."""
+    """Return every field exposed by Greenhouse's public job schema.
+
+    The questions list alone omits the hosted form's location, education, and
+    EEO sections. Those omissions made partial applications look 100% complete.
+    """
     r = requests.get(
         f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{job_id}?questions=true",
         headers=UA, timeout=20,
     )
     r.raise_for_status()
-    return r.json().get("questions", [])
+    data = r.json()
+    questions = list(data.get("questions") or [])
+
+    # Hidden latitude/longitude are populated by Greenhouse itself.
+    questions.extend(
+        q for q in (data.get("location_questions") or [])
+        if not any((f.get("type") or "") == "input_hidden" for f in (q.get("fields") or []))
+    )
+
+    if data.get("education"):
+        required = data.get("education") == "education_required"
+        questions.extend([
+            {"label": "School", "required": required, "default_category": "school",
+             "fields": [{"name": "school--0", "type": "combobox", "values": []}]},
+            {"label": "Degree", "required": required, "default_category": "degree",
+             "fields": [{"name": "degree--0", "type": "combobox", "values": []}]},
+            {"label": "Discipline", "required": required, "default_category": "major",
+             "fields": [{"name": "discipline--0", "type": "combobox", "values": []}]},
+        ])
+
+    for section in data.get("compliance") or []:
+        # Greenhouse's hosted form splits the API Race field into its own
+        # Hispanic/Latino control and conditional race controls.
+        questions.extend(
+            q for q in (section.get("questions") or [])
+            if not any((f.get("name") or "") == "race" for f in (q.get("fields") or []))
+        )
+
+    # This hosted EEO control is derived by Greenhouse but absent from the API.
+    existing_names = {
+        f.get("name") for q in questions for f in (q.get("fields") or [])
+    }
+    if "hispanic_ethnicity" not in existing_names and any(
+        q.get("label") in ("Race", "Gender") for q in questions
+    ):
+        questions.append({
+            "label": "Are you Hispanic/Latino?", "required": False,
+            "fields": [{"name": "hispanic_ethnicity", "type": "combobox", "values": []}],
+            "default_category": "race",
+        })
+    return questions
 
 
 # ---- option matching (for selects/dropdowns) --------------------------------
@@ -226,6 +270,54 @@ def _match_option(values: list[dict], *wanted: str) -> Optional[str]:
         for w in wanted:
             if w in label:
                 return v.get("value", v.get("label"))
+    return None
+
+
+_US_STATES = {
+    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas",
+    "ca": "california", "co": "colorado", "ct": "connecticut", "de": "delaware",
+    "fl": "florida", "ga": "georgia", "hi": "hawaii", "id": "idaho",
+    "il": "illinois", "in": "indiana", "ia": "iowa", "ks": "kansas",
+    "ky": "kentucky", "la": "louisiana", "me": "maine", "md": "maryland",
+    "ma": "massachusetts", "mi": "michigan", "mn": "minnesota",
+    "ms": "mississippi", "mo": "missouri", "mt": "montana", "ne": "nebraska",
+    "nv": "nevada", "nh": "new hampshire", "nj": "new jersey",
+    "nm": "new mexico", "ny": "new york", "nc": "north carolina",
+    "nd": "north dakota", "oh": "ohio", "ok": "oklahoma", "or": "oregon",
+    "pa": "pennsylvania", "ri": "rhode island", "sc": "south carolina",
+    "sd": "south dakota", "tn": "tennessee", "tx": "texas", "ut": "utah",
+    "vt": "vermont", "va": "virginia", "wa": "washington",
+    "wv": "west virginia", "wi": "wisconsin", "wy": "wyoming",
+    "dc": "district of columbia",
+}
+
+
+def _canonical_option(values: list[dict], value: object, category: str = "") -> Optional[object]:
+    """Return this form's canonical option id, or None for an invalid answer."""
+    raw = str(value)
+    wanted = _normalized_question(raw)
+    if category == "state":
+        wanted = _US_STATES.get(wanted, wanted)
+
+    for option in values or []:
+        option_value = option.get("value", option.get("label"))
+        if str(option_value) == raw:
+            return option_value
+        if _normalized_question(str(option.get("label", ""))) == wanted:
+            return option_value
+        if _normalized_question(str(option_value)) == wanted:
+            return option_value
+
+    # Allow a unique descriptive substring, but never a two-letter value such as
+    # CA (which used to match arbitrary labels).
+    if len(wanted) >= 3:
+        matches = [
+            option.get("value", option.get("label"))
+            for option in values or []
+            if wanted in _normalized_question(str(option.get("label", "")))
+        ]
+        if len(matches) == 1:
+            return matches[0]
     return None
 
 
@@ -240,7 +332,7 @@ def _decline_option(values: list[dict]) -> Optional[str]:
     - "Prefer not to answer"
     - "Not to disclose"
     """
-    return _match_option(values, "decline", "prefer not", "don't wish", "do not wish",
+    return _match_option(values, "decline", "prefer not", "don't wish", "do not wish", "do not want",
                          "not to disclose", "not to answer", "choose not",
                          "not to say", "not to self-identify", "not specified")
 
@@ -488,12 +580,22 @@ def _category(label: str, field_name: str = "") -> str:
 
     Falls back to local patterns if knowledge base unavailable.
     """
-    # Use knowledge base if available (more comprehensive patterns)
+    lo = (label or "").lower()
+    # Long compliance labels contain misleading identity keywords. Keep these
+    # overrides ahead of broad knowledge-base patterns such as "state".
+    if "employee of the u.s. government" in lo or "employee of the us government" in lo:
+        return "government_employment"
+    if "if yes" in lo and "relationship" in lo and "full name" in lo:
+        return "conditional_detail"
+    if field_name == "hispanic_ethnicity":
+        return "race"
+    if "citizenship" in lo or "citizen status" in lo:
+        return "citizenship"
+
     if _USE_KNOWLEDGE_BASE:
         return _kb_lookup(label, field_name)
 
     # Fallback to local patterns
-    lo = (label or "").lower()
     for cat, pat in _CAT:
         if re.search(pat, lo):
             return cat
@@ -508,22 +610,34 @@ def resolve(questions: list[dict], p: Profile) -> dict:
         label = q.get("label", "")
         required = bool(q.get("required"))
         gfields = q.get("fields", []) or [{}]
-        # a question can have multiple fields (e.g. resume: file + text). Use the first.
+        initial_name = gfields[0].get("name", "")
+        cat = q.get("default_category") or _category(label, initial_name)
+        # Greenhouse exposes file and manual-text alternatives. Prefer text when
+        # we have extracted resume content, and always use text for AI cover letters.
         gf = gfields[0]
+        if cat == "cover_letter":
+            gf = next((item for item in gfields if item.get("type") != "input_file"), gf)
+        elif cat == "resume" and p.resume_text:
+            gf = next((item for item in gfields if item.get("type") != "input_file"), gf)
         name = gf.get("name", "")
         ftype = gf.get("type", "")
         values = gf.get("values", [])
-        cat = _category(label)
         rf = ResolvedField(label=label, name=name, type=ftype, required=required, category=cat,
                            values=values or [])
 
         val, src = _resolve_one(cat, ftype, values, p, label)
+        if values and val not in (None, ""):
+            canonical = _canonical_option(values, val, cat)
+            if canonical is None:
+                val, src = None, "user_needed"
+            else:
+                val = canonical
         rf.value, rf.source = val, src
         resolved.append(rf)
 
     ai_needed = [r for r in resolved if r.source == "ai_needed"]
     user_needed = [r for r in resolved if r.source == "user_needed" and r.required]
-    filled = [r for r in resolved if r.source in ("profile", "matched", "eeo", "file")]
+    filled = [r for r in resolved if r.source in ("profile", "matched", "eeo", "file", "conditional")]
     total = len(resolved) or 1
     return {
         "resolved": resolved,
@@ -548,6 +662,19 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     - user_needed: required field we cannot auto-fill
     """
     lo_label = (label or "").lower()
+
+    # Saved answers win over broad defaults and are remapped to this form's ids.
+    learned = _saved_answer(p.custom_answers, label, cat, values)
+    if learned is not None:
+        return (learned, "matched" if values else "profile")
+
+    if cat == "government_employment":
+        # Legal/compliance facts are asked once and then learned; never guess.
+        return (None, "user_needed")
+
+    if cat == "conditional_detail":
+        # Blank is correct when the controlling relationship answer is No.
+        return (None, "conditional")
 
     # Label-specific safe inferences run before category dispatch because ATS
     # wording is often more precise than the broad category classifier.
@@ -633,7 +760,6 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
         "experience": p.years_experience,
         "notice_period": p.notice_period,
         "clearance_level": p.clearance_level,
-        "citizenship": p.citizenship,
         "visa_status": p.visa_status,
     }
 
@@ -645,10 +771,14 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # === SIMPLE PROFILE FIELDS ===
     if cat in simple:
         v = simple[cat]
-        return (v, "profile") if v else ("unfilled", "unfilled" if not _is_required_like(label) else "user_needed")
+        if v and values:
+            v = _canonical_option(values, v, cat)
+        return (v, "profile") if v not in (None, "") else (None, "user_needed")
 
     # === FILE UPLOADS ===
     if cat == "resume":
+        if "textarea" in (ftype or "").lower() and p.resume_text:
+            return (p.resume_text, "profile")
         return (p.resume_url or None, "file")
 
     # === AI-NEEDED FIELDS ===
@@ -792,8 +922,16 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
 
     # === CITIZENSHIP (general) ===
     if cat == "citizenship":
+        auth = (p.work_authorization or "").lower()
+        if p.is_us_citizen or auth == "us_citizen":
+            v = _match_option(values, "u.s. citizen", "us citizen", "united states citizen") if values else "United States"
+            return (v, "matched") if v is not None else (None, "user_needed")
+        if auth == "permanent_resident":
+            v = _match_option(values, "permanent resident", "green card") if values else "Permanent resident"
+            return (v, "matched") if v is not None else (None, "user_needed")
         if p.citizenship:
-            return (_match_option(values, p.citizenship.lower()) or p.citizenship, "profile")
+            v = _canonical_option(values, p.citizenship, cat) if values else p.citizenship
+            return (v, "profile") if v is not None else (None, "user_needed")
         return (None, "user_needed")
 
     # === NAME PRONUNCIATION (10%) ===
@@ -809,12 +947,8 @@ def _resolve_one(cat, ftype, values, p: Profile, label: str):
     # These are voluntary self-identification questions. We ALWAYS default to
     # "decline to answer" options to protect user privacy.
     if cat in ("gender", "race", "veteran", "disability"):
-        return (_decline_option(values), "eeo")
-
-    # === LEARNED ANSWERS: exact, normalized, category, then high-overlap label ===
-    learned = _saved_answer(p.custom_answers, label, cat, values)
-    if learned is not None:
-        return (learned, "matched" if values else "profile")
+        value = _decline_option(values) if values else "Decline to self-identify"
+        return (value, "eeo")
 
     # === UNKNOWN FIELDS ===
     # Free-text fields -> AI can draft; Select/choice fields -> ask user

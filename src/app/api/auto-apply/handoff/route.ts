@@ -62,5 +62,11 @@ export async function GET(request: NextRequest) {
   const fields = (Array.isArray(row.prepared_data) ? row.prepared_data : []).filter((field: Record<string, unknown>) =>
     field.value !== null && field.value !== undefined && field.value !== '' && field.type !== 'input_file'
   );
-  return NextResponse.json({ jobTitle: row.job_title, companyName: row.company_name, atsType: row.ats_type, fields }, { headers: cors });
+  return NextResponse.json({
+    jobTitle: row.job_title,
+    companyName: row.company_name,
+    jobUrl: row.job_url,
+    atsType: row.ats_type,
+    fields,
+  }, { headers: cors });
 }
