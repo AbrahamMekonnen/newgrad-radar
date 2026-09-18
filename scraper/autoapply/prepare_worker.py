@@ -319,12 +319,31 @@ def process_queue(limit: int, workers: int = 8) -> int:
     logger.info(f"{len(rows)} applications to prepare ({workers} in parallel, "
                 f"{'claimed' if claimed else 'unclaimed — run migration 041 for multi-worker'})")
 
-    # Build each user's profile once, up front (thread-safe: no shared mutation).
-    prof_cache = {uid: build_profile(client, uid) for uid in {r["user_id"] for r in rows}}
+    # Build each user's profile once. A stale/orphaned queue row must not abort
+    # every other user's batch; record that row as an error and continue.
+    prof_cache = {}
+    runnable_rows = []
+    rows_by_user = {}
+    for row in rows:
+        rows_by_user.setdefault(row["user_id"], []).append(row)
+    for uid, user_rows in rows_by_user.items():
+        try:
+            prof_cache[uid] = build_profile(client, uid)
+            runnable_rows.extend(user_rows)
+        except Exception as exc:
+            logger.warning("  profile unavailable for %s queue row(s): %s", len(user_rows), exc)
+            for row in user_rows:
+                _finish(
+                    client,
+                    row["id"],
+                    "error",
+                    "User profile is missing or unavailable. Complete Auto-Apply settings and retry.",
+                    row.get("ats_type") or "unknown",
+                )
 
     done = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(_prepare_with_retries, client, COMPANIES, r, prof_cache[r["user_id"]]): r for r in rows}
+        futs = {ex.submit(_prepare_with_retries, client, COMPANIES, r, prof_cache[r["user_id"]]): r for r in runnable_rows}
         for fut in as_completed(futs):
             try:
                 if fut.result():
