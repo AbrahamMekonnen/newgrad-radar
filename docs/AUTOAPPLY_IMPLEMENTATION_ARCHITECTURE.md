@@ -7,13 +7,13 @@ Parent design: [Unattended Auto-Apply Architecture](./UNATTENDED_AUTOAPPLY_ARCHI
 
 ## 1. Objective
 
-This document converts the product architecture into an implementable system for the current HireRadar repository. It selects concrete technologies, defines process and trust boundaries, specifies protocols and storage, describes the Windows runner and browser engine, and provides an ordered delivery plan.
+This document converts the product architecture into an implementable system for the current HireRadar repository. It selects concrete technologies, defines process and trust boundaries, specifies protocols and storage, describes equal Windows and macOS runner implementations and their shared browser engine, and provides an ordered delivery plan. Windows and macOS are first-release targets and must pass the same functional acceptance suite before general availability.
 
 The implementation must support this core scenario:
 
 1. A user taps Auto Apply from HireRadar on a phone or desktop.
 2. Backend workers prepare a complete, truthful application package.
-3. A paired Windows laptop wakes if sleeping.
+3. A paired Windows or macOS laptop wakes if sleeping.
 4. Its runner leases the application and opens a dedicated browser session.
 5. Several independent applications may execute concurrently according to measured device capacity.
 6. Simple missing answers are resolved from the website.
@@ -87,37 +87,40 @@ The worker deployment contains separate process roles from one image:
 
 Scale each role independently later. Initially, one container may run preparation and notifications if metrics show sufficient isolation.
 
-### 3.4 Windows runner
+### 3.4 Cross-platform desktop runner
 
-Use **.NET 10 LTS** and C#.
+Use **.NET 10 LTS** and C# for the shared runner contracts, state machine, scheduler, browser engine, Realtime client, and intervention transport. Keep OS integration behind narrow platform interfaces. Build Windows and macOS together; a feature is runner-complete only after it passes on both.
 
 Rationale:
 
 - .NET 10 is supported through November 2028.
-- Microsoft provides first-class Worker Service and Windows Service support.
+- .NET 10 supports self-contained Windows and macOS applications from one shared solution.
 - Playwright has official .NET bindings.
-- Windows wake and execution-state APIs are directly accessible.
-- DPAPI provides user-bound local secret protection.
+- Native wake, credential, IPC, installation, and lifecycle APIs remain accessible through small platform projects.
 - Supabase provides a maintained C# client including Realtime.
 - A self-contained signed executable avoids requiring users to install a runtime.
-- C# is a better fit for Windows services, scheduled tasks, named pipes, process supervision, Event Log, and installer integration than adding a Node or Python runtime.
+- C# avoids maintaining separate browser engines and schedulers while Swift supplies the macOS app, Service Management, Keychain, XPC, and IOKit boundary.
 
-The runner has two executables:
+The logical runner has two process roles on both platforms:
 
-1. **HireRadar.Runner.Service**
-   - runs as LocalService
+1. **Machine service**
+   - Windows: `HireRadar.Runner.Service` runs as LocalService
+   - macOS: `HireRadar.Runner.Daemon` runs as a root LaunchDaemon registered with `SMAppService`
    - starts at boot
    - owns updates, wake tasks, health, and user-agent supervision
    - never holds user browser cookies or resumes
-   - cannot manipulate browser UI from Session 0
+   - cannot manipulate browser UI or enter the interactive user session
 
-2. **HireRadar.Runner.Agent**
-   - runs in the signed-in user's session
+2. **User agent**
+   - Windows: `HireRadar.Runner.Agent` runs in the signed-in user's session
+   - macOS: `HireRadar.Runner.Agent` runs from a LaunchAgent and is controlled by a native menu-bar app
    - owns Supabase user/device session, browser profile, Playwright, local documents, scheduling, and phone intervention
-   - starts automatically at login and is relaunched by the service
+   - starts automatically at login and is supervised by the platform service manager
    - displays the tray UI and privacy indicator
 
-A local named pipe connects the service and user agent. The pipe uses an ACL restricted to the installed service SID and the paired Windows user.
+IPC is platform-native and authenticated. Windows uses a named pipe whose ACL is restricted to the service SID and paired user. macOS uses an XPC mach service with code-signing requirement checks and an explicit, versioned protocol. The privileged process never receives browser cookies, resumes, answers, or application field values.
+
+The complete macOS process, security, packaging, wake, permissions, update, and validation design is specified in [macOS Runner Implementation Architecture](./MACOS_RUNNER_IMPLEMENTATION_ARCHITECTURE.md).
 
 ### 3.5 Browser engine
 
@@ -171,7 +174,9 @@ Package the Windows runner as signed MSIX with an `.appinstaller` update feed.
 - keep the previous package available for rollback
 - verify runner/backend protocol compatibility before activation
 
-MSIX provides clean install/uninstall and update support. If service registration or browser payload constraints prove incompatible in a prototype, use a signed WiX bootstrapper while preserving the same executable boundaries.
+MSIX provides clean Windows install/uninstall and update support. If service registration or browser payload constraints prove incompatible in a prototype, use a signed WiX bootstrapper while preserving the same executable boundaries.
+
+Package macOS as a Developer ID-signed and notarized universal `.pkg` containing a signed `.app` bundle, LaunchDaemon, LaunchAgent, shared .NET runtime payload, and Playwright browser payload. Enable hardened runtime, staple the notarization ticket, and publish a signed update manifest. Support both `osx-arm64` and `osx-x64` from the first beta.
 
 ## 4. Repository layout
 
@@ -185,6 +190,9 @@ runner/
   src/
     HireRadar.Runner.Contracts/
     HireRadar.Runner.Core/
+    HireRadar.Runner.Platform/
+    HireRadar.Runner.Platform.Windows/
+    HireRadar.Runner.Platform.MacOS/
     HireRadar.Runner.Service/
     HireRadar.Runner.Agent/
     HireRadar.Runner.Browser/
@@ -196,6 +204,7 @@ runner/
     HireRadar.Runner.BrowserTests/
   packaging/
     msix/
+    macos/
     scripts/
 
 packages/
@@ -412,7 +421,7 @@ Continue using Supabase Auth in the website.
 3. Runner generates an ECDSA P-256 device key pair locally.
 4. Runner sends code, public key, version, and capabilities.
 5. Backend consumes the code and creates the device.
-6. Runner stores the private key with Windows DPAPI under `CurrentUser`.
+6. Runner stores the private key with Windows DPAPI under `CurrentUser` or as a non-exportable macOS Keychain key.
 7. Device proves possession by signing backend nonces.
 
 ### 7.3 Runner access tokens
@@ -496,18 +505,17 @@ The package never contains provider keys. Document URLs are single-purpose, shor
 
 ## 9. Runner process architecture
 
-### 9.1 Service
+### 9.1 Machine service
 
-Hosted services:
+Shared responsibilities:
 
 - `AgentSupervisor`
 - `WakeTaskManager`
 - `UpdateManager`
 - `MachineHealthReporter`
-- `NamedPipeServer`
 - `CrashRecoveryManager`
 
-The service does not connect to ATS pages or read user documents.
+Windows hosts these in a .NET Windows Service and uses a restricted named pipe. macOS hosts machine operations in a Swift LaunchDaemon registered through `SMAppService` and exposes a code-signature-validated XPC protocol. The machine process does not connect to ATS pages, hold user tokens, or read user documents.
 
 ### 9.2 User agent
 
@@ -527,28 +535,36 @@ Use `System.Threading.Channels` for in-process queues and cancellation tokens fo
 
 ### 9.3 Local storage
 
+Windows:
+
 ```text
 %LOCALAPPDATA%/HireRadar/
   config/
-    device.json.dpapi
-    preferences.json
-  browser/
-    chromium-profile/
-  jobs/
-    <attempt-id>/
-      package.json.dpapi
-      documents/
-      checkpoint.json.dpapi
+  browser/chromium-profile/
+  jobs/<attempt-id>/
   logs/
   updates/
 ```
 
+macOS:
+
+```text
+~/Library/Application Support/HireRadar/
+  config/
+  browser/chromium-profile/
+  jobs/<attempt-id>/
+  logs/
+~/Library/Caches/HireRadar/
+```
+
+Sensitive packages and checkpoints are encrypted using a data key protected by DPAPI on Windows or Keychain Services on macOS.
+
 Rules:
 
-- device private keys and refresh material use DPAPI CurrentUser
+- device private keys and refresh material use DPAPI CurrentUser on Windows or Keychain Services on macOS
 - downloaded documents are encrypted at rest or removed immediately after the attempt
 - filenames are randomized
-- browser profile permissions are limited to the Windows user
+- browser profile permissions are limited to the paired OS user
 - logs contain IDs and field categories, not field values
 - cleanup runs after completion and at startup
 - retention defaults are configurable and conservative
@@ -787,7 +803,7 @@ TURN credentials are short-lived and minted for one intervention. Never ship per
 Before committing to the MVP, prove:
 
 - screencast continues when the laptop display is off
-- required rendering continues while Windows is locked
+- required rendering is measured separately while Windows or macOS is locked
 - input reaches the intended page in that state
 - the same ATS session remains valid
 - direct and TURN-relayed connections work on iOS and Android browsers
@@ -800,13 +816,13 @@ If locked-session behavior fails, wake the laptop and keep its dedicated browser
 
 ### 14.1 Scheduled wake
 
-The service creates a Windows Task Scheduler task with `WakeToRun=true`. The task starts or signals the user agent during user-configured application windows.
+Windows creates a Task Scheduler task with `WakeToRun=true`. macOS uses a root LaunchDaemon registered through `SMAppService` to call `IOPMSchedulePowerEvent`, which Apple documents as the persistent root-only wake API. Each platform schedules only the next user-approved application window and reconciles stale wake events.
 
 ### 14.2 Active work
 
-The agent calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` while active work or intervention exists. It does not require `ES_DISPLAY_REQUIRED` unless a tested browser/rendering path needs the display awake.
+Windows calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`. macOS creates an IOKit idle-system-sleep assertion. Neither platform keeps the display awake unless a tested browser path requires it.
 
-Always clear the execution requirement in `finally`, process-exit handling, and service recovery.
+Always release the execution requirement in `finally`, process-exit handling, and service recovery. macOS observes `NSWorkspaceDidWakeNotification`, waits for network reachability, then reconciles durable commands.
 
 ### 14.3 Power policy
 
@@ -861,6 +877,13 @@ Container worker host
 User Windows device
   Runner.Service
   Runner.Agent
+  Playwright Chromium
+  optional attended extension
+
+User macOS device
+  Runner.Daemon
+  Runner.Agent
+  HireRadar menu-bar app
   Playwright Chromium
   optional attended extension
 
@@ -966,7 +989,7 @@ Metrics:
 ### Runner
 
 - local rolling logs with redaction
-- Windows Event Log for service lifecycle
+- Windows Event Log or macOS Unified Logging for platform lifecycle
 - bounded diagnostic upload after user consent
 - crash dumps disabled by default when they might include sensitive memory
 - heartbeat carries summarized health, not browsing content
@@ -995,12 +1018,12 @@ Fixtures never submit to real employers.
 
 - scheduler AIMD behavior
 - memory/CPU pressure
-- service-agent pipe ACL
-- DPAPI round trip
+- Windows pipe ACL and macOS XPC code-signing authorization
+- DPAPI and macOS Keychain round trips
 - device pairing and revocation
 - lease loss
 - browser crash and restart
-- sleep/wake
+- sleep/wake on Windows and macOS
 - multiple tab isolation
 - intervention reconnect and duplicate-input protection
 - update rollback
@@ -1038,13 +1061,17 @@ Purpose: make submission truth correct before adding another executor.
 
 Deliver:
 
-- .NET solution
-- service and user agent
-- MSIX development package
+- shared .NET solution and platform interfaces
+- Windows Service and Agent host
+- macOS Swift host, LaunchDaemon, LaunchAgent, and XPC bridge
+- MSIX development package and signed development macOS `.pkg`
 - pairing and device tokens
 - heartbeat/presence
 - durable commands
-- phone Auto Apply reaches runner
+- phone Auto Apply reaches both runners
+- DPAPI and Keychain device proof
+- Task Scheduler and IOKit wake tests
+- cross-platform protocol parity gate
 
 Purpose: validate security, installation, communication, and wake before browser complexity.
 
@@ -1060,7 +1087,8 @@ Deliver Greenhouse:
 - validation
 - submit
 - confirmation
-- verified finalization
+- verified finalization on Windows and macOS
+- identical normalized events and final state on both platforms
 
 Purpose: prove the entire production path with one high-value adapter.
 
@@ -1079,8 +1107,8 @@ Deliver:
 
 Deliver:
 
-- resource sampler
-- weighted scheduler
+- Windows and macOS resource samplers
+- shared weighted scheduler
 - ATS semaphores
 - additive increase/multiplicative decrease
 - five or more controlled fixture applications
@@ -1115,11 +1143,12 @@ An adapter enters unattended mode only after fixture, failure, and confirmation 
 Deliver:
 
 - code signing
-- stable MSIX
+- stable MSIX and Developer ID-signed, hardened, notarized macOS package
 - staged updater
 - rollback
 - privacy and diagnostics controls
-- beta rollout
+- coordinated Windows and macOS beta rollout
+- general availability blocked until both installers pass clean-machine and parity suites
 
 ## 22. Build-versus-buy decisions
 
@@ -1129,7 +1158,7 @@ Deliver:
 - Vercel for web
 - managed TURN initially
 - Playwright browser binaries
-- Windows MSIX update support
+- Windows MSIX and signed macOS update support
 
 ### Build internally
 
@@ -1148,7 +1177,6 @@ Deliver:
 - native phone apps
 - cloud-browser fleet
 - unrestricted remote desktop
-- macOS runner
 - self-hosted TURN
 - official ATS integrations without partner access
 
@@ -1164,9 +1192,9 @@ Run these prototypes in order:
 4. Supabase C# Realtime private channel authenticates with device-scoped JWT.
 5. Database command remains recoverable after missed broadcast.
 6. CDP screencast and input work while display is off.
-7. Same behavior while Windows is locked.
+7. Measure and define behavior while Windows and macOS sessions are locked.
 8. Phone WebRTC connects directly and through TURN.
-9. MSIX installs service, agent, scheduled task, and update cleanly.
+9. MSIX and macOS `.pkg` install their service or daemon, user agent, wake integration, and updater cleanly.
 10. Verified finalization remains idempotent during repeated acknowledgments.
 
 A failed prototype changes the design before large implementation begins.
@@ -1175,9 +1203,9 @@ A failed prototype changes the design before large implementation begins.
 
 ### Locked-session rendering
 
-Risk: browser rendering or interaction may degrade when Windows locks.
+Risk: browser rendering or interaction may degrade when Windows or macOS locks the interactive user session.
 
-Mitigation: prototype first; keep browser in user session; use CDP page rendering; provide a clear local policy requirement if Windows prevents reliable operation.
+Mitigation: prototype on both platforms first; keep the browser in the user session; use CDP page rendering; checkpoint safely and expose an honest availability state when an OS prevents reliable locked-session operation.
 
 ### ATS schema changes
 
@@ -1195,7 +1223,7 @@ Mitigation: checkpoints, process supervision, controlled restart, ambiguity chec
 
 Risk: stolen local token impersonates a runner.
 
-Mitigation: device key challenge, DPAPI, short-lived JWTs, revocation, signed packages, no service key.
+Mitigation: device key challenge, DPAPI or Keychain, short-lived JWTs, revocation, signed and notarized packages, no service key.
 
 ### Duplicate submission
 
@@ -1213,14 +1241,14 @@ Mitigation: stream the specific Playwright page only, never the desktop; disable
 
 Risk: too many new services slow development.
 
-Mitigation: reuse Supabase Realtime; one worker image; one Windows codebase; managed TURN; one ATS vertical slice before expansion.
+Mitigation: reuse Supabase Realtime; one worker image; one shared runner core with thin Windows and macOS hosts; managed TURN; one ATS vertical slice before expansion.
 
 ## 25. Engineering acceptance criteria
 
 The first production-capable release must demonstrate:
 
 - phone Auto Apply creates one durable attempt
-- paired sleeping laptop wakes and claims it
+- paired sleeping Windows or macOS laptop wakes and claims it
 - runner uses no backend secret keys
 - browser profile survives restart
 - at least five fixture applications execute concurrently
@@ -1234,6 +1262,8 @@ The first production-capable release must demonstrate:
 - reboot, network loss, missed broadcasts, and repeated callbacks do not duplicate submission
 - device revocation prevents new work
 - logs and diagnostics contain no resume text, answers, credentials, or tokens
+- Windows and macOS pass the same ATS, protocol, recovery, intervention, and finalization fixtures
+- signed installers, wake behavior, secure storage, updates, and rollback pass platform-native tests on both systems
 
 ## 26. Research basis
 
@@ -1255,6 +1285,10 @@ The first production-capable release must demonstrate:
 - Windows DPAPI: https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.protecteddata
 - MSIX auto-update: https://learn.microsoft.com/en-us/windows/msix/app-installer/auto-update-and-repair--overview
 - Windows code signing: https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool
+- Apple SMAppService: https://developer.apple.com/documentation/servicemanagement/smappservice
+- Apple scheduled wake: https://developer.apple.com/documentation/iokit/1557076-iopmschedulepowerevent
+- Apple Keychain Services: https://developer.apple.com/documentation/security/keychain-services
+- Apple notarization: https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution
 - WebRTC TURN: https://webrtc.org/getting-started/turn-server
 - Chrome DevTools input: https://chromedevtools.github.io/devtools-protocol/1-3/Input/
 - SIPSorcery WebRTC: https://github.com/sipsorcery-org/sipsorcery
