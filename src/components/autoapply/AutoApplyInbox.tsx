@@ -160,7 +160,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || 'Could not create browser handoff');
       window.open(data.url, '_blank', 'noopener,noreferrer');
-      showToast('Opening the ATS form. Review every field and submit in the browser; prepared answers were copied as a fallback.', 'info');
+      showToast('Opening the ATS form. The helper will fill and submit when every required field is complete; prepared answers were copied as a fallback.', 'info');
     } catch (error) {
       window.open(app.job_url, '_blank', 'noopener,noreferrer');
       showToast(error instanceof Error ? `${error.message}. Prepared answers were copied.` : 'Opened the application and copied prepared answers.', 'error');
@@ -405,7 +405,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                   {/* Result of the last background submit attempt, if any */}
                   {['needs_captcha', 'browser_required'].includes(app.submit_log?.status || '') && (
                     <p className="text-sm text-amber-600 dark:text-amber-400">
-                      This hosted form must be reviewed and submitted in your browser. The helper fills your saved answers; an invisible security check may complete without showing a puzzle.
+                      This hosted form must run in your browser. The helper fills every prepared answer, submits when the form is complete, and stops if the ATS needs input or displays a security challenge.
                     </p>
                   )}
                   {(app.submit_log?.status === 'submit_failed' || app.submit_log?.status === 'incomplete') && (
@@ -457,7 +457,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
                     <Button onClick={() => setStatus(app.id, 'skipped')} variant="ghost" className="text-sm">Skip</Button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    The browser helper transfers prepared answers, including dynamically rendered fields. Submit only after the ATS shows the completed form.
+                    The browser helper submits only after all prepared fields and browser validation pass. The card moves to Submitted only after the ATS displays a verified success page.
                   </p>
                 </div>
               )}
