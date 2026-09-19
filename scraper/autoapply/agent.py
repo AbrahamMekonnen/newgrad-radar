@@ -222,6 +222,19 @@ If you encounter a login wall or CAPTCHA, report it and stop.
 
 async def apply_to_job(profile: UserProfile, job: JobApplication, headless: bool = True) -> dict:
     """Apply to a single job using browser-use agent."""
+    # Final applications must run in the applicant's visible browser session.
+    # A background/headless run cannot provide reliable user review, handle an
+    # interactive challenge, or prove that the ATS accepted the application.
+    # Keep it from submitting or being counted as a successful application.
+    if headless:
+        return {
+            "success": False,
+            "error": (
+                "Headless application submission is disabled. "
+                "Use the HireRadar browser handoff and extension instead."
+            ),
+        }
+
     if not BROWSER_USE_AVAILABLE:
         return {
             "success": False,
