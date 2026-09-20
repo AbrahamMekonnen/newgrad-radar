@@ -16,18 +16,39 @@ const api = async (path, options = {}) => {
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
   method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, ...extra }),
 });
+const adaptiveCapacity = () => {
+  const cores = navigator.hardwareConcurrency || 8;
+  const memory = navigator.deviceMemory || 8;
+  if (cores >= 16 && memory >= 16) return 12;
+  if (cores >= 12 && memory >= 8) return 10;
+  return 8;
+};
+let pollRunning = false;
 async function poll() {
-  const state = await stored();
-  if (!state.deviceToken || state.paused || currentByTab.size) return;
+  if (pollRunning) return;
+  pollRunning = true;
   try {
-    const data = await api('/api/auto-apply/browser/device');
-    if (!data.job) return;
-    const tab = await chrome.tabs.create({ url: data.job.jobUrl, active: false });
-    if (!tab.id) throw new Error('Could not create ATS tab.');
-    currentByTab.set(tab.id, data.job);
-    await chrome.storage.session.set({ ['job:' + tab.id]: data.job });
-    await report(data.job, 'tab_opened');
-  } catch (error) { console.warn('HireRadar poll failed:', error); }
+    const state = await stored();
+    if (!state.deviceToken || state.paused) return;
+    const capacity = adaptiveCapacity();
+    while (currentByTab.size < capacity) {
+      const data = await api('/api/auto-apply/browser/device');
+      if (!data.job) break;
+      try {
+        const tab = await chrome.tabs.create({ url: data.job.jobUrl, active: false });
+        if (!tab.id) throw new Error('Could not create ATS tab.');
+        currentByTab.set(tab.id, data.job);
+        await chrome.storage.session.set({ ['job:' + tab.id]: data.job });
+        await report(data.job, 'tab_opened');
+      } catch (error) {
+        await report(data.job, 'failed', { detail: 'Could not open the ATS tab: ' + error.message }).catch(() => undefined);
+      }
+    }
+  } catch (error) {
+    console.warn('HireRadar poll failed:', error);
+  } finally {
+    pollRunning = false;
+  }
 }
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
@@ -73,7 +94,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message.paused) void poll();
       return { ok: true };
     }
-    if (message.type === 'STATUS') return stored();
+    if (message.type === 'STATUS') return { ...(await stored()), activeCount: currentByTab.size, capacity: adaptiveCapacity() };
     if (message.type === 'PAGE_READY') {
       const tabId = sender.tab?.id;
       if (!tabId) return { job: null };
@@ -100,9 +121,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })().then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
   return true;
 });
-void chrome.storage.session.get(null).then((items) => {
+void chrome.storage.session.get(null).then(async (items) => {
   for (const [key, job] of Object.entries(items)) {
-    if (key.startsWith('job:')) currentByTab.set(Number(key.slice(4)), job);
+    if (!key.startsWith('job:')) continue;
+    const tabId = Number(key.slice(4));
+    try {
+      await chrome.tabs.get(tabId);
+      currentByTab.set(tabId, job);
+    } catch {
+      await chrome.storage.session.remove(key);
+      await report(job, 'failed', { detail: 'ATS tab no longer exists.' }).catch(() => undefined);
+    }
   }
   void poll();
 });
