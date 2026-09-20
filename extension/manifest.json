@@ -1,19 +1,14 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.3.0",
-  "description": "Fills prepared HireRadar application answers in hosted ATS forms for your final review and submission.",
-  "host_permissions": [
-    "https://*.vercel.app/*", "https://newgradradar.com/*", "http://localhost:*/*"
-  ],
+  "version": "0.4.0",
+  "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
+  "permissions": ["storage", "tabs", "alarms"],
+  "host_permissions": ["https://*.vercel.app/*", "https://newgradradar.com/*", "http://localhost:*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "HireRadar Auto-Apply" },
   "content_scripts": [{
-    "matches": [
-      "https://boards.greenhouse.io/*", "https://job-boards.greenhouse.io/*",
-      "https://jobs.lever.co/*", "https://jobs.ashbyhq.com/*",
-      "https://*.myworkdayjobs.com/*", "https://*.smartrecruiters.com/*",
-      "https://careers.roblox.com/*", "https://careers.withwaymo.com/*",
-      "https://www.samsara.com/*"
-    ],
+    "matches": ["https://boards.greenhouse.io/*", "https://job-boards.greenhouse.io/*", "https://jobs.lever.co/*", "https://jobs.ashbyhq.com/*", "https://*.myworkdayjobs.com/*", "https://*.smartrecruiters.com/*", "https://careers.roblox.com/*", "https://careers.withwaymo.com/*", "https://www.samsara.com/*"],
     "js": ["content.js"],
     "run_at": "document_idle"
   }]

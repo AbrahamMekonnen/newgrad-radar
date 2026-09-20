@@ -172,6 +172,10 @@
   };
 
   const loadPayload = async () => {
+    try {
+      const worker = await chrome.runtime.sendMessage({ type: 'PAGE_READY' });
+      if (worker?.job) return { ...worker.job, browserWorker: true };
+    } catch { /* legacy handoff remains available */ }
     const part = location.hash.split('&')
       .find((item) => item.replace(/^#/, '').startsWith(MARKER));
     if (part) {
@@ -222,7 +226,15 @@
   const persist = (data) => sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
 
   const reportSuccess = async (data) => {
-    if (data.reported || !data.handoffOrigin || !data.handoffToken) return;
+    if (data.reported) return;
+    if (data.browserWorker) {
+      const result = await chrome.runtime.sendMessage({ type: 'PROGRESS', stage: 'submitted' });
+      if (!result?.ok) throw new Error(result?.error || 'HireRadar could not record the submission.');
+      data.reported = true;
+      persist(data);
+      return;
+    }
+    if (!data.handoffOrigin || !data.handoffToken) return;
     const response = await fetch(data.handoffOrigin + '/api/auto-apply/handoff', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -279,6 +291,17 @@
           if (await fill(field)) completed.add(field.name);
         }
         const remaining = fields.length - completed.size;
+        if (data.browserWorker) {
+          void chrome.runtime.sendMessage({
+            type: 'PROGRESS',
+            stage: remaining ? 'waiting_for_user' : 'filling',
+            detail: {
+              filled: completed.size,
+              total: fields.length,
+              detail: remaining ? remaining + ' prepared fields were not found or need user input.' : 'All prepared fields were filled.',
+            },
+          });
+        }
         if (remaining) {
           banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
         } else if (!submitPreparedForm(data)) {

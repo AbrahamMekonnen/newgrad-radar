@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
     company_slug: job.company_slug, company_name: job.company_name,
     job_url: url, ats_type: job.ats_type, status: 'pending', priority: 2,
     answers: { submit_after_prepare: true, origin: 'job_card' },
+    authorization_source: 'direct_click', execution_channel: 'user_browser',
   });
   if (error) {
     console.error('queue insert error:', error);

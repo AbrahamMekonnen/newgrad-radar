@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Queue prepared application(s) for background submission. The submit worker
-// posts only when the ATS exposes a legitimate candidate submission endpoint.
+// Queue prepared application(s) for the paired browser worker. The browser
+// opens the real ATS page in a visible user-side tab.
 // Hosted forms return to the inbox for browser handoff and final review. Submission is
 // real + irreversible, so it fires only on rows the user explicitly sends here.
 const REPO = process.env.GITHUB_REPO || 'AbrahamMekonnen/newgrad-radar';
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   const db = admin();
   let q = db.from('autoapply_job_queue')
-    .update({ status: 'submit_requested' })
+    .update({ status: 'waiting_for_browser', execution_channel: 'user_browser' })
     .eq('user_id', user.id)
     .eq('status', 'prepared');
   q = all ? q : q.eq('id', id);
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 
   const queued = data?.length || 0;
-  const triggered = queued > 0 ? await dispatch() : false;
+  const triggered = false;
   return NextResponse.json({
     queued,
     triggered,

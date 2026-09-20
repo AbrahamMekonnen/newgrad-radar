@@ -38,6 +38,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   const [answers, setAnswers] = useState<Record<string, Record<string, string>>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'ready' | 'submitted' | 'attention'>('all');
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -56,9 +57,9 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   // Poll while anything is queued/submitting so cards flip to their result on
   // their own. Stops when nothing is in flight, or after ~2.5 min (a run with
   // no dispatch token only drains on the hourly schedule - no point polling on).
-  const pending = apps.some((a) => ['pending', 'processing', 'submit_requested', 'submitting'].includes(a.status || ''));
+  const pending = apps.some((a) => ['pending', 'processing', 'submit_requested', 'submitting', 'waiting_for_browser', 'browser_filling'].includes(a.status || ''));
   const groupFor = (a: App) => {
-    if (['pending', 'processing', 'submit_requested', 'submitting'].includes(a.status || '')) return 'active';
+    if (['pending', 'processing', 'submit_requested', 'submitting', 'waiting_for_browser', 'browser_filling'].includes(a.status || '')) return 'active';
     if (a.status === 'submitted' || a.status === 'applied') return 'submitted';
     if (a.status === 'prepared' && !(a.prepared_data || []).some((f) => f.required && f.source === 'user_needed')) return 'ready';
     return 'attention';
@@ -128,6 +129,18 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   };
 
   const copy = (text: string) => { navigator.clipboard?.writeText(text); showToast('Copied.', 'info'); };
+  const connectBrowser = async () => {
+    try {
+      const response = await fetch('/api/auto-apply/browser/pairing', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.code) throw new Error(data.error || 'Could not create pairing code');
+      setPairingCode(data.code);
+      await navigator.clipboard?.writeText(data.code).catch(() => undefined);
+      showToast('Pairing code copied. Open the HireRadar extension and paste it within 10 minutes.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not connect browser.', 'error');
+    }
+  };
 
   // Queue for the background submit worker. It submits captcha-free forms and
   // bounces captcha-gated ones back here with a note - never bypasses a captcha.
@@ -240,6 +253,13 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
             ? 'No applications are in the queue yet. Choose Auto Apply on a job card or set criteria in Settings.'
             : `${apps.length} application${apps.length === 1 ? '' : 's'} in your live queue.`}
         </p>
+        {pairingCode && (
+          <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/30 p-3 text-sm">
+            <p className="font-medium text-indigo-900 dark:text-indigo-200">One-time browser code</p>
+            <code className="mt-1 block break-all select-all text-indigo-700 dark:text-indigo-300">{pairingCode}</code>
+            <p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">Open the HireRadar extension, paste this code, and choose Connect browser. It expires in 10 minutes.</p>
+          </div>
+        )}
         {pending && (
           <p className="mt-2 flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
             <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -273,7 +293,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
           const auto = fields.filter((f) => AUTO_SOURCES.has(f.source));
           const needs = fields.filter((f) => f.source === 'user_needed' && f.required);
           const browserRequired = ['needs_captcha', 'browser_required'].includes(app.submit_log?.status || '');
-          const preparing = app.status === 'pending' || app.status === 'processing';
+          const preparing = ['pending', 'processing', 'waiting_for_browser', 'browser_filling'].includes(app.status || '');
           const completed = app.status === 'submitted' || app.status === 'applied';
           const retryable = app.status === 'error' || app.status === 'form_fetch_failed';
           const unavailable = ['form_unavailable', 'unsupported', 'job_missing'].includes(app.status || '');
