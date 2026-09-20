@@ -484,13 +484,14 @@
           // (checkValidity), regardless of `remaining` — an unfilled OPTIONAL
           // prepared field (a link the form doesn't ask for, etc.) must never
           // block a valid, opted-in submission.
-          if ((data.autoSubmit || data.autoSubmitRequested) && submitPreparedForm(data)) return;
-          if (remaining) {
+          if (data.autoSubmit || data.autoSubmitRequested) {
+            // submitPreparedForm either submits (we're done) or banners the exact
+            // blocking field — don't overwrite that specific message below.
+            if (submitPreparedForm(data)) return;
+          } else if (remaining) {
             banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
-          } else if (!(data.autoSubmit || data.autoSubmitRequested)) {
-            banner('HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
           } else {
-            banner('HireRadar filled every field it could. The ATS still flags a required field as incomplete — review it, then submit.');
+            banner('HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
           }
         } finally {
           running = false;  // ALWAYS reset, so a thrown error never freezes retries
