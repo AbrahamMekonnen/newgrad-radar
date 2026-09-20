@@ -93,6 +93,24 @@
     return String(match?.label ?? field.value ?? '');
   };
 
+  // The visible text for a control, by standard semantics (aria-label, an
+  // associated <label for>, or a wrapping <label>) — NOT the parent's text,
+  // which is often an empty wrapper. Works on any well-formed form regardless
+  // of the site's markup/classes.
+  const labelTextFor = (el) => {
+    const aria = el.getAttribute && el.getAttribute('aria-label');
+    if (aria) return aria;
+    if (el.id) {
+      try {
+        const forLabel = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+        if (forLabel) return forLabel.textContent;
+      } catch { /* invalid id for a selector */ }
+    }
+    const wrap = el.closest && el.closest('label');
+    if (wrap) return wrap.textContent;
+    return el.parentElement?.textContent || '';
+  };
+
   const optionMatches = (text, wanted) => {
     const got = normalize(text);
     const target = normalize(wanted);
@@ -104,6 +122,32 @@
     if (!targetTokens.size) return false;
     const overlap = [...targetTokens].filter((x) => gotTokens.has(x)).length;
     return overlap / targetTokens.size >= 0.65;
+  };
+
+  // Pick the BEST-matching candidate, not the first over a loose threshold.
+  // Options often share most words (e.g. work-auth choices), so an exact label
+  // must win over a partial one. Generic — works on any option set.
+  const bestMatch = (candidates, wanted, textOf) => {
+    const target = normalize(wanted);
+    if (!target) return null;
+    let best = null;
+    let bestScore = 0;
+    for (const c of candidates) {
+      const got = normalize(textOf(c));
+      if (!got) continue;
+      let score = 0;
+      if (got === target) score = 3;
+      else if (got.includes(target) || target.includes(got)) score = 2;
+      else {
+        const tt = target.split(' ').filter((x) => x.length > 2);
+        const gt = new Set(got.split(' ').filter((x) => x.length > 2));
+        const overlap = tt.filter((x) => gt.has(x)).length / (tt.length || 1);
+        if (overlap >= 0.65) score = 1 + overlap - Math.abs(gt.size - tt.length) / 100; // tie-break tighter text
+      }
+      if (target.includes('decline') && (got.includes('decline') || got.includes('prefer not'))) score = Math.max(score, 2);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return bestScore > 0 ? best : null;
   };
 
   const visibleOptions = () => [...document.querySelectorAll('[role="option"], [data-option-index]')]
@@ -162,7 +206,7 @@
     if (!container) return false;
     const choices = [...container.querySelectorAll('label, button, [role="radio"], [role="option"]')]
       .filter((item) => item.getClientRects().length > 0);
-    const choice = choices.find((item) => optionMatches(item.textContent, wanted));
+    const choice = bestMatch(choices, wanted, (item) => item.textContent);
     if (!choice) return false;
     const input = choice.querySelector?.('input') || (choice.htmlFor && document.getElementById(choice.htmlFor));
     (input || choice).click();
@@ -210,10 +254,15 @@
     if (element.type === 'radio') {
       const radios = [...document.querySelectorAll('input[type="radio"]')]
         .filter((item) => item.name === element.name || item.closest('fieldset') === element.closest('fieldset'));
-      const option = radios.find((item) => String(item.value) === String(value))
-        || radios.find((item) => optionMatches(item.parentElement?.textContent, answerLabel(field)));
+      // Only trust a value match when the radios actually have distinct values —
+      // many forms render every option with value="on" and differentiate by
+      // label, so match on the associated label text in that case.
+      const distinctValues = new Set(radios.map((item) => String(item.value))).size > 1;
+      const option = (distinctValues && radios.find((item) => String(item.value) === String(value)))
+        || bestMatch(radios, answerLabel(field), labelTextFor);
       if (!option) return fillScopedChoice(field);
       option.click();
+      option.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     }
     if (element.type === 'checkbox') {
