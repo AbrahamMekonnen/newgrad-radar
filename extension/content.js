@@ -12,9 +12,14 @@
   // orphaned — e.g. the tab was open before the extension was reloaded — and
   // rejects when no receiver is listening. Either would abort the fill loop, so
   // always go through here and treat failure as "no worker available".
-  const send = (message) => {
+  const send = (message, timeoutMs = 12000) => {
     try {
-      return Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => null);
+      const request = Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => null);
+      let timer;
+      const timeout = new Promise((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      });
+      return Promise.race([request, timeout]).finally(() => clearTimeout(timer));
     } catch {
       return Promise.resolve(null);
     }
@@ -230,7 +235,7 @@
       try {
         const fileUrl = new URL(value);
         if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) return false;
-        const downloaded = await send({ type: 'FETCH_FILE', url: fileUrl.href });
+        const downloaded = await send({ type: 'FETCH_FILE', url: fileUrl.href }, 20000);
         if (!downloaded?.data) return false;
         const binary = atob(downloaded.data);
         const bytes = new Uint8Array(binary.length);
@@ -542,6 +547,21 @@
       }
       const fields = (data.fields || []).filter((field) =>
         field.value !== null && field.value !== undefined && field.value !== '' && normalize(field.value) !== 'unfilled');
+      if (data.browserWorker && isSmartRecruiters) {
+        void send({
+          type: 'PROGRESS',
+          stage: 'filling',
+          detail: {
+            total: fields.length,
+            detail: JSON.stringify({
+              message: 'SmartRecruiters application frame attached.',
+              host: location.hostname,
+              path: location.pathname,
+              fields: fields.length,
+            }),
+          },
+        });
+      }
       const completed = new Set();
       const resolvedLive = new Set();  // live field names already sent for resolution
       let running = false;
@@ -572,7 +592,7 @@
           if (newLive.length) {
             newLive.forEach((field) => resolvedLive.add(field.name));
             try {
-              const resolved = await send({ type: 'RESOLVE_FIELDS', fields: newLive });
+              const resolved = await send({ type: 'RESOLVE_FIELDS', fields: newLive }, 30000);
               for (const answer of resolved?.answers || []) {
                 const live = newLive.find((field) => field.name === answer.name);
                 if (live) { try { await fill({ ...live, value: answer.value, source: answer.source }); } catch { /* skip */ } }
