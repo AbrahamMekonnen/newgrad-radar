@@ -323,24 +323,47 @@
   };
 
   const isSuccessPage = () => {
+    // ATS clients often leave the old form mounted but hidden after success.
+    // Only a visible, enabled submit control inside a form means the
+    // application can still be submitted.
     const activeSubmit = [...document.querySelectorAll('button, input[type="submit"]')]
       .some((item) => {
         const text = normalize(item.textContent || item.value);
-        return !item.disabled && ['submit application', 'submit', 'apply'].includes(text);
+        return item.getClientRects().length > 0
+          && !item.disabled
+          && !!item.closest('form')
+          && ['submit application', 'submit', 'apply'].includes(text);
       });
     if (activeSubmit) return false;
-    const signalText = [
+
+    const urlSignal = normalize(location.pathname + ' ' + location.search + ' ' + location.hash);
+    const successUrl = [
+      'thank-you', 'thank_you', 'application-submitted', 'application_submitted',
+      'application-success', 'application_success', 'submission-confirmation',
+    ].some((phrase) => urlSignal.includes(phrase));
+
+    // Confirmation copy is frequently rendered in an ordinary div/paragraph,
+    // not an h1, role=status, or role=alert.
+    const signalText = normalize([
       document.title,
-      ...[...document.querySelectorAll('h1, h2, [role="status"], [role="alert"]')]
-        .map((item) => item.textContent || ''),
-    ].map(normalize).join(' ');
-    return [
+      document.body?.innerText || '',
+    ].join(' ')).slice(0, 20000);
+    const successText = [
       'thank you for applying',
+      'thanks for applying',
       'application has been submitted',
+      'application was submitted',
       'application submitted',
+      'successfully submitted your application',
+      'we received your application',
       'we have received your application',
       'your application was received',
+      'your application has been received',
+      'application is complete',
+      'application was already submitted',
+      'your application is in',
     ].some((phrase) => signalText.includes(phrase));
+    return successUrl || successText;
   };
 
   const persist = (data) => sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
