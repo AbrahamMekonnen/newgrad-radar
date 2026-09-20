@@ -113,7 +113,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (job) await report(job, 'filling');
       return { job };
     }
-    if (message.type === 'RESOLVE_FIELDS') {
+    if (message.type === 'FETCH_FILE') {
+      const fileUrl = new URL(message.url);
+      if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) {
+        throw new Error('File URL is outside the configured résumé storage.');
+      }
+      const response = await fetch(fileUrl.href);
+      if (!response.ok) throw new Error('Could not download the stored résumé.');
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return {
+        data: btoa(binary),
+        type: response.headers.get('content-type') || 'application/pdf',
+        name: decodeURIComponent(fileUrl.pathname.split('/').pop() || 'resume.pdf'),
+      };
+    }    if (message.type === 'RESOLVE_FIELDS') {
       const tabId = sender.tab?.id;
       if (!tabId) return { answers: [], needsUser: [] };
       const result = await chrome.storage.session.get('job:' + tabId);

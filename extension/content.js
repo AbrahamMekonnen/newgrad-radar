@@ -132,11 +132,12 @@
       try {
         const fileUrl = new URL(value);
         if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) return false;
-        const response = await fetch(fileUrl.href);
-        if (!response.ok) return false;
-        const blob = await response.blob();
-        const filename = decodeURIComponent(fileUrl.pathname.split('/').pop() || 'resume.pdf');
-        const file = new File([blob], filename, { type: blob.type || 'application/pdf' });
+        const downloaded = await chrome.runtime.sendMessage({ type: 'FETCH_FILE', url: fileUrl.href });
+        if (!downloaded?.data) return false;
+        const binary = atob(downloaded.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const file = new File([bytes], downloaded.name || 'resume.pdf', { type: downloaded.type || 'application/pdf' });
         const transfer = new DataTransfer();
         transfer.items.add(file);
         element.files = transfer.files;
