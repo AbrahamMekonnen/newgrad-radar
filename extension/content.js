@@ -7,6 +7,19 @@
     .replace(/[^a-z0-9]+/g, ' ').trim();
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  // Messaging that can never throw. chrome.runtime.sendMessage throws
+  // "Extension context invalidated" (synchronously) when this content script is
+  // orphaned — e.g. the tab was open before the extension was reloaded — and
+  // rejects when no receiver is listening. Either would abort the fill loop, so
+  // always go through here and treat failure as "no worker available".
+  const send = (message) => {
+    try {
+      return Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => null);
+    } catch {
+      return Promise.resolve(null);
+    }
+  };
+
   const decode = (value) => {
     const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
     return JSON.parse(decodeURIComponent(Array.from(atob(padded), (c) =>
@@ -169,7 +182,7 @@
       try {
         const fileUrl = new URL(value);
         if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) return false;
-        const downloaded = await chrome.runtime.sendMessage({ type: 'FETCH_FILE', url: fileUrl.href });
+        const downloaded = await send({ type: 'FETCH_FILE', url: fileUrl.href });
         if (!downloaded?.data) return false;
         const binary = atob(downloaded.data);
         const bytes = new Uint8Array(binary.length);
@@ -231,7 +244,7 @@
 
   const loadPayload = async () => {
     try {
-      const worker = await chrome.runtime.sendMessage({ type: 'PAGE_READY' });
+      const worker = await send({ type: 'PAGE_READY' });
       if (worker?.job) return { ...worker.job, browserWorker: true };
     } catch { /* legacy handoff remains available */ }
     const part = location.hash.split('&')
@@ -286,7 +299,7 @@
   const reportSuccess = async (data) => {
     if (data.reported) return;
     if (data.browserWorker) {
-      const result = await chrome.runtime.sendMessage({ type: 'PROGRESS', stage: 'submitted' });
+      const result = await send({ type: 'PROGRESS', stage: 'submitted' });
       if (!result?.ok) throw new Error(result?.error || 'HireRadar could not record the submission.');
       data.reported = true;
       persist(data);
@@ -387,7 +400,7 @@
           if (newLive.length) {
             newLive.forEach((field) => resolvedLive.add(field.name));
             try {
-              const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: newLive });
+              const resolved = await send({ type: 'RESOLVE_FIELDS', fields: newLive });
               for (const answer of resolved?.answers || []) {
                 const live = newLive.find((field) => field.name === answer.name);
                 if (live) { try { await fill({ ...live, value: answer.value, source: answer.source }); } catch { /* skip */ } }
@@ -398,7 +411,7 @@
           }
           if (remaining === fields.length && openApplicationForm()) return;
           if (data.browserWorker) {
-            void chrome.runtime.sendMessage({
+            void send({
               type: 'PROGRESS',
               stage: remaining ? 'waiting_for_user' : 'filling',
               detail: {
