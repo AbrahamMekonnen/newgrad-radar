@@ -416,8 +416,8 @@
       if (element.type === 'radio') {
         const group = controls.filter((item) => item.type === 'radio' && item.name === element.name);
         if (group.some((item) => item.checked)) return [];
-        const container = element.closest('fieldset, [role="radiogroup"], .application-question, .application-field, [class*="question"], [class*="field"]');
-        const heading = container?.querySelector('legend, .application-label, [class*="question-label"], [class*="field-label"]');
+        const container = element.closest('.application-question, fieldset, [role="radiogroup"], [class*="question"]');
+        const heading = container?.querySelector('legend, .application-label .text, .application-label, [class*="question-label"]');
         const label = heading?.textContent || container?.textContent || element.getAttribute('aria-label') || '';
         const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
         return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options }];
@@ -475,6 +475,7 @@
         || /^(send|complete) (your )?application\b/.test(text);
     });
     if (!submit) {
+      if (openApplicationForm()) return true;
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
         detail: { detail: 'The form is filled, but no visible ATS submit button was found.' },
@@ -549,18 +550,21 @@
       const isSmartRecruiters = normalize(data.atsType) === 'smartrecruiters';
       // SmartRecruiters uses a different publication identifier in its embedded
       // application URL, so the child frame cannot be compared by job URL ID.
-      if (!(isSmartRecruiters && !isTopFrame) && !sameJob(data)) return;
+      if (!isSmartRecruiters && !sameJob(data)) return;
       // Most ATSes render the application in the top document; ignore their
       // decorative/analytics frames. SmartRecruiters is the exception: its top
       // job page opens an embedded one-click application whose child frame owns
       // filling and submission.
       if (!isTopFrame && !isSmartRecruiters) return;
       if (isTopFrame && isSmartRecruiters) {
-        const opened = openApplicationForm();
         if (data.browserWorker) await send({
-          type: 'PROGRESS',
-          stage: opened ? 'filling' : 'waiting_for_user',
-          detail: { detail: opened ? 'SmartRecruiters application action clicked.' : 'SmartRecruiters application action was not found.' },
+          type: 'PROGRESS', stage: 'filling',
+          detail: { detail: 'SmartRecruiters job page attached; opening the application form.' },
+        });
+        const opened = openApplicationForm();
+        if (!opened && data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'waiting_for_user',
+          detail: { detail: 'SmartRecruiters application action was not found.' },
         });
         return;
       }
