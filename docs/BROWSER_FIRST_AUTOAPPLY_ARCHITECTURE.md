@@ -493,3 +493,360 @@ First:
 6. add per-domain concurrency and challenge circuit breakers;
 7. route watchlist matches into the browser queue;
 8. keep cloud execution behind a separate explicit opt-in.
+
+## 18. Extension implementation blueprint
+
+### 18.1 Current prototype
+
+The repository already has the first browser handoff:
+
+- `extension/manifest.json` injects `content.js` into supported ATS pages.
+- `extension/content.js` reads a short-lived handoff, fills prepared values, optionally clicks Submit, detects generic success text, and reports the result.
+- `src/app/api/auto-apply/handoff/route.ts` creates ten-minute handoff tokens and records browser-confirmed submissions.
+- `src/app/api/auto-apply/queue/route.ts` creates an idempotent queue row for a direct job-card click.
+- Standing rules and direct clicks already converge on `autoapply_job_queue`.
+
+This proves browser-side filling, but it is not yet a durable browser executor. It depends on opening a tokenized application URL, has no background service worker, does not claim queued jobs, excludes required file uploads, and uses generic confirmation detection.
+
+### 18.2 Target extension structure
+
+```text
+extension/
+  manifest.json
+  background.js
+  content.js
+  adapters/
+    base.js
+    greenhouse.js
+    ashby.js
+    lever.js
+    smartrecruiters.js
+    workday.js
+  popup/
+    popup.html
+    popup.js
+  shared/
+    protocol.js
+    redaction.js
+    validation.js
+```
+
+Responsibilities:
+
+- `background.js` owns pairing, command reconciliation, tab creation, leases, concurrency, restart recovery, and global controls.
+- `content.js` owns page discovery, filling, validation, submission, and confirmation observation.
+- ATS adapters contain selectors, multipage behavior, submit controls, and confirmation evidence.
+- The popup shows device status, queue count, active work, Pause, and Emergency Stop.
+
+### 18.3 Manifest V3 capabilities
+
+Add:
+
+- a background service worker;
+- `storage` for non-sensitive extension state;
+- `tabs` for application tab creation and tracking;
+- `alarms` for durable queue reconciliation;
+- `notifications` only for browser-local status when useful;
+- narrowly scoped ATS host permissions;
+- optional host permissions for attended use outside the default registry.
+
+Do not rely on the service worker staying alive. Manifest V3 may suspend it. Every operation must recover from durable backend state and browser events.
+
+### 18.4 Secure pairing
+
+Pairing flow:
+
+1. User selects Connect to HireRadar in the extension.
+2. Extension opens an authenticated HireRadar pairing route.
+3. Extension generates an ECDSA P-256 key through WebCrypto.
+4. The private key is non-exportable and stored through IndexedDB.
+5. Backend stores the public key, browser ID, user ID, version, and capabilities.
+6. Extension proves possession by signing server nonces.
+7. Backend issues short-lived device-scoped tokens.
+8. User can revoke the paired browser in Settings.
+
+The extension never stores:
+
+- a Supabase service-role key;
+- Groq, Gemini, or provider API keys;
+- the user's ATS password;
+- exported site cookies;
+- long-lived application handoff tokens.
+
+### 18.5 Authorization record
+
+Every attempt stores its authorization source.
+
+Direct click:
+
+```json
+{
+  "authorization_source": "direct_click",
+  "authorization_rule_id": null,
+  "execution_channel": "user_browser"
+}
+```
+
+Standing watchlist:
+
+```json
+{
+  "authorization_source": "standing_rule",
+  "authorization_rule_id": "uuid",
+  "execution_channel": "user_browser"
+}
+```
+
+The backend rejects submission commands without active authorization. Disabling a standing rule follows the user's configured policy for already-prepared attempts: finish them or cancel those that have not submitted.
+
+### 18.6 Durable command delivery
+
+The database is authoritative. Realtime is only a wake hint.
+
+The extension reconciles work:
+
+- on browser startup;
+- after pairing;
+- after network reconnection;
+- when the user clicks Auto Apply;
+- on a periodic `chrome.alarms` event;
+- after completing an attempt;
+- after a Realtime hint when the service worker is active.
+
+The extension calls an authenticated claim endpoint. The backend atomically:
+
+1. selects one eligible `waiting_for_browser` attempt;
+2. verifies device, user, authorization, and adapter compatibility;
+3. creates a bounded lease;
+4. records browser ID and execution channel;
+5. returns an attempt-scoped package token.
+
+A dropped event cannot lose work because the next reconciliation finds the durable row.
+
+### 18.7 Tab ownership
+
+The background worker opens the direct application URL with `chrome.tabs.create()` and stores:
+
+```text
+tab_id
+attempt_id
+lease_id
+adapter
+current_stage
+last_heartbeat_at
+```
+
+The mapping lives in `chrome.storage.session` for worker suspension recovery and in the backend for browser restart recovery.
+
+The token is not placed in the employer URL. On every supported page load:
+
+1. content script sends `PAGE_READY` with URL and detected ATS;
+2. background worker checks tab ownership;
+3. it returns the attempt-scoped prepared package;
+4. content script verifies that the job identity matches the attempt.
+
+A stable tab ID allows the same attempt to survive multipage navigation and redirects.
+
+### 18.8 Prepared package
+
+The package is immutable and versioned:
+
+```json
+{
+  "schemaVersion": 1,
+  "attemptId": "uuid",
+  "leaseId": "uuid",
+  "authorizationSource": "direct_click",
+  "adapter": {
+    "name": "greenhouse",
+    "version": "2026.09.1"
+  },
+  "job": {
+    "id": "job-id",
+    "url": "https://...",
+    "company": "Example",
+    "title": "Software Engineer"
+  },
+  "fields": [],
+  "documents": [],
+  "submissionAuthorized": true,
+  "expiresAt": "ISO-8601"
+}
+```
+
+It contains no provider keys, browser cookies, or unrelated profile data. The extension receives only values needed for that attempt.
+
+### 18.9 Form execution
+
+The ATS adapter:
+
+1. waits for the form and dynamic framework controls;
+2. inventories visible and required fields;
+3. matches the package using stable names, IDs, labels, option values, and normalized aliases;
+4. preserves values the user entered manually;
+5. fills text, textarea, select, radio, checkbox, combobox, date, and multiselect controls;
+6. dispatches the framework's expected input, change, blur, and click events;
+7. handles conditional questions;
+8. uploads required documents;
+9. navigates multipage forms;
+10. validates after every mutation and page transition;
+11. checkpoints after each stage.
+
+Deterministic selectors and mappings run before any AI-based interpretation.
+
+### 18.10 Document uploads
+
+For each required document:
+
+1. Extension requests a short-lived, attempt-bound download.
+2. It downloads the content as a Blob.
+3. It creates a browser File with the expected name and MIME type.
+4. It assigns the file through a DataTransfer object.
+5. It dispatches the expected change events.
+6. The adapter verifies that the ATS displays the uploaded filename.
+7. The extension releases the Blob and URL after use.
+
+If the ATS rejects programmatic assignment, the attempt becomes `intervention_required` instead of pretending the upload succeeded.
+
+### 18.11 Pre-submit validation
+
+Submission requires all of the following:
+
+- active authorization;
+- valid unexpired lease;
+- expected job identity;
+- all required controls completed;
+- selected values belong to available options;
+- required documents visibly attached;
+- no unresolved user-only fact;
+- no CAPTCHA, MFA, identity, consent, rate-limit, or block signal;
+- no existing ambiguous submit checkpoint;
+- enabled adapter and domain policy.
+
+Review is optional. A user may configure review for selected fields or categories without changing the default automatic flow.
+
+### 18.12 Scheduling and concurrency
+
+The browser scheduler uses weighted work units.
+
+Defaults:
+
+- start with three independent application tabs;
+- permit expansion toward five to seven on capable devices;
+- one active flow per account-bound platform;
+- one active flow per employer or ATS domain by default;
+- no new work while the browser is under memory or CPU pressure;
+- multiplicative backoff after slow actions, challenges, rate limits, or adapter errors.
+
+Every authorized job stays in the queue. Scheduling controls when it runs, not whether it is discarded.
+
+### 18.13 Submission
+
+Before the final click, the content script writes a pre-submit checkpoint containing:
+
+- attempt and lease IDs;
+- adapter and job identity;
+- page URL;
+- validation result;
+- timestamp;
+- idempotency key.
+
+It then clicks the adapter's specific final submission control once.
+
+The extension never retries automatically after losing contact during the submission window. That attempt becomes `ambiguous` until confirmation is resolved.
+
+### 18.14 Confirmation evidence
+
+Generic success phrases alone are insufficient. Each adapter defines an evidence rule combining signals such as:
+
+- final submit control disappeared;
+- known confirmation container appeared;
+- URL matches an ATS confirmation pattern;
+- application-specific success heading appeared;
+- expected job identity remains correlated;
+- known successful network outcome is observable without reading prohibited data.
+
+The extension reports a typed event:
+
+```json
+{
+  "attemptId": "uuid",
+  "leaseId": "uuid",
+  "idempotencyKey": "uuid",
+  "event": "submission_confirmed",
+  "adapter": "greenhouse",
+  "adapterVersion": "2026.09.1",
+  "evidenceType": "confirmation_page"
+}
+```
+
+An atomic backend function updates the attempt, queue, saved job, application history, analytics, and notification outbox exactly once.
+
+### 18.15 Interruption and recovery
+
+If the service worker is suspended, the content script can wake it with a runtime message. If the browser closes or the device sleeps:
+
+- pre-submit work returns to `waiting_for_browser` after lease expiry;
+- browser restart triggers reconciliation;
+- recoverable pages resume from the last checkpoint;
+- tabs are matched to attempts when possible;
+- an attempt interrupted after the submit click becomes `ambiguous`;
+- ambiguous attempts are never automatically resubmitted;
+- completed attempts ignore duplicate callbacks.
+
+### 18.16 Live progress
+
+Every stage appends a durable event. Applications → Auto Apply displays:
+
+```text
+Preparing
+Waiting for browser
+Opening application
+Filling page 1 of 3
+Uploading resume
+Needs your answer
+Waiting for CAPTCHA or verification
+Submitting
+Verifying submission
+Submitted
+Ambiguous
+Failed
+Cancelled
+```
+
+Phone commands are durable. If the browser is online, Realtime wakes it immediately. If offline, the command waits for the next reconciliation.
+
+### 18.17 Account-safety behavior
+
+The extension uses the user's normal browser session and network but makes no promise of invisibility.
+
+It must:
+
+- keep cookies on-device;
+- avoid proxy rotation and fingerprint spoofing;
+- avoid simultaneous flows on one account-bound platform;
+- stop after challenges or block signals;
+- preserve truthful consistent profile facts;
+- avoid duplicate employer applications;
+- expose active work and Emergency Stop;
+- honor remote adapter shutdowns;
+- record the authorization source for every submission.
+
+## 19. Migration from the current prototype
+
+Implement incrementally:
+
+1. Add `background.js` and Manifest V3 service-worker registration.
+2. Add extension pairing, device records, heartbeat, and revocation.
+3. Add `waiting_for_browser` and durable browser-command tables.
+4. Replace URL-fragment handoff with tab-owned package delivery.
+5. Extract current field matching into `adapters/base.js`.
+6. Build Greenhouse-specific navigation and confirmation.
+7. Add document upload and required-field validation.
+8. Add leases, checkpoints, and ambiguous-submit handling.
+9. Route direct clicks through the browser command queue.
+10. Route standing watchlist matches through the same queue.
+11. Add adaptive cross-domain concurrency and circuit breakers.
+12. Add Ashby and Lever only after Greenhouse passes fixtures and canaries.
+
+The existing handoff path remains available during migration and is removed only after the durable extension executor passes end-to-end recovery and confirmation tests.
