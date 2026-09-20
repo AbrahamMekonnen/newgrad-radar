@@ -408,10 +408,11 @@
   const openApplicationForm = () => {
     const actions = [...document.querySelectorAll('a, button')];
     const trigger = actions.find((item) => {
-      const text = normalize(item.textContent);
+      if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
+      const text = normalize(item.textContent).replace(/[ ']/g, '');
       return [
         'apply now', 'apply for this job', 'start application', 'apply to this job',
-        "i'm interested", 'im interested', 'interested',
+        'im interested', 'interested',
       ].includes(text);
     });
     if (!trigger) return false;
@@ -431,19 +432,32 @@
     // neither navigated nor displayed a success state.
     if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 15000) return true;
     if ((data.submitAttempts || 0) >= 2) {
+      if (data.browserWorker) void send({
+        type: 'PROGRESS', stage: 'waiting_for_user',
+        detail: { detail: 'The ATS did not accept two submit attempts; the application was not marked submitted.' },
+      });
       banner('The ATS did not accept two submit attempts. Review the visible form error; HireRadar has not marked this application as submitted.', true);
       return false;
     }
     const controls = [...document.querySelectorAll('button, input[type="submit"]')];
     const submit = controls.find((item) => {
+      if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
       const text = normalize(item.textContent || item.value);
       return text === 'submit application' || text === 'submit' || text === 'apply';
     });
     if (!submit) {
+      if (data.browserWorker) void send({
+        type: 'PROGRESS', stage: 'waiting_for_user',
+        detail: { detail: 'The form is filled, but no visible ATS submit button was found.' },
+      });
       banner('HireRadar filled the form but could not find the ATS submit button.', true);
       return false;
     }
     if (submit.disabled) {
+      if (data.browserWorker) void send({
+        type: 'PROGRESS', stage: 'waiting_for_user',
+        detail: { detail: 'The ATS submit button is visible but disabled.' },
+      });
       banner('The ATS submit button is still disabled. HireRadar is checking for a missing field...', true);
       return false;
     }
@@ -544,7 +558,7 @@
             } catch { /* live resolution best-effort */ }
           }
           if (remaining === fields.length && openApplicationForm()) return;
-          if (data.browserWorker) {
+          if (data.browserWorker && !data.lastSubmitAttemptAt) {
             void send({
               type: 'PROGRESS',
               stage: remaining ? 'waiting_for_user' : 'filling',
