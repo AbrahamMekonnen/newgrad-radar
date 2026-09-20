@@ -399,17 +399,23 @@
     // only reached once every prepared field is filled; checkValidity below is
     // the real completeness gate (the ATS itself confirms all required fields).
     if ((!data.autoSubmit && !data.autoSubmitRequested) || data.submitStarted) return false;
-    const form = document.querySelector('form');
-    if (form?.checkValidity && !form.checkValidity()) {
-      banner('HireRadar filled the prepared answers, but the ATS still reports a required field. Review it before submitting.', true);
-      return false;
-    }
     const controls = [...document.querySelectorAll('button, input[type="submit"]')];
     const submit = controls.find((item) => {
       const text = normalize(item.textContent || item.value);
       return text === 'submit application' || text === 'submit' || text === 'apply';
     });
     if (!submit || submit.disabled) return false;
+    // Validate the form that actually CONTAINS the submit button, not the first
+    // form on the page (Ashby renders a separate "autofill from resume" mini-form
+    // whose validity is unrelated). Name the flagged field so we can see it.
+    const form = submit.form || submit.closest('form') || document.querySelector('form');
+    if (form?.checkValidity && !form.checkValidity()) {
+      const bad = [...form.querySelectorAll('input, select, textarea')]
+        .find((el) => el.willValidate && !el.checkValidity());
+      const label = bad && (bad.labels?.[0]?.textContent || bad.getAttribute('aria-label') || bad.name || bad.id);
+      banner('The ATS still needs: "' + String(label || 'a required field').replace(/\s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
+      return false;
+    }
     data.submitStarted = true;
     persist(data);
     banner('HireRadar filled every required field and is submitting the application…');
