@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
+import { browserApplyUrl } from '@/lib/autoapply-support';
 
 function admin() {
   return createClient(
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     jobTitle: row.job_title,
     companyName: row.company_name,
-    jobUrl: row.job_url,
+    jobUrl: browserApplyUrl(row.ats_type, row.job_url),
     atsType: row.ats_type,
     fields,
     autoSubmit: prof?.auto_submit === true,

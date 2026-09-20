@@ -1,4 +1,4 @@
-import { AUTOAPPLY_SUPPORTED_ATS, isAutoApplySupported, validApplyTarget } from './autoapply-support';
+import { AUTOAPPLY_SUPPORTED_ATS, browserApplyUrl, isAutoApplySupported, validApplyTarget } from './autoapply-support';
 
 describe('browser auto-apply support', () => {
   it('exposes only ATS providers supported by both preparation and the extension', () => {
@@ -16,6 +16,15 @@ describe('browser auto-apply support', () => {
     'does not advertise %s until the extension supports it',
     (ats) => expect(isAutoApplySupported(ats)).toBe(false),
   );
+
+  it('opens Lever and Greenhouse at their actual application forms', () => {
+    expect(browserApplyUrl('lever', 'https://jobs.lever.co/acme/1ebcedcb-82ba-4d19-ac88-aa73a812dd81'))
+      .toBe('https://jobs.lever.co/acme/1ebcedcb-82ba-4d19-ac88-aa73a812dd81/apply');
+    expect(browserApplyUrl('lever', 'https://jobs.lever.co/acme/id/apply'))
+      .toBe('https://jobs.lever.co/acme/id/apply');
+    expect(browserApplyUrl('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/123456'))
+      .toBe('https://job-boards.greenhouse.io/acme/jobs/123456#app');
+  });
 
   it('requires a specific job URL for every supported ATS', () => {
     expect(validApplyTarget('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/123456')).toBe(true);

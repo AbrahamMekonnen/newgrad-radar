@@ -439,11 +439,13 @@
       banner('The ATS did not accept two submit attempts. Review the visible form error; HireRadar has not marked this application as submitted.', true);
       return false;
     }
-    const controls = [...document.querySelectorAll('button, input[type="submit"]')];
+    const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
     const submit = controls.find((item) => {
       if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
       const text = normalize(item.textContent || item.value);
-      return text === 'submit application' || text === 'submit' || text === 'apply';
+      return ['submit application', 'submit', 'apply'].includes(text)
+        || /^submit (your )?application\b/.test(text)
+        || /^(send|complete) (your )?application\b/.test(text);
     });
     if (!submit) {
       if (data.browserWorker) void send({

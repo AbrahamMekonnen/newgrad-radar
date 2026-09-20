@@ -29,3 +29,15 @@ export function validApplyTarget(ats?: string | null, url?: string | null, slug 
   return !!jid && jid.toLowerCase() !== (slug || '').toLowerCase() && jid.length >= 5
     && !['jobs', 'careers', 'apply', 'search', 'job'].includes(jid);
 }
+
+export function browserApplyUrl(ats?: string | null, url?: string | null): string {
+  const a = (ats || '').toLowerCase();
+  const value = url || '';
+  if (a === 'lever' && /jobs\.lever\.co\//i.test(value) && !/\/apply(?:[/?#]|$)/i.test(value)) {
+    return value.replace(/\/+$/, '') + '/apply';
+  }
+  if (a === 'greenhouse' && /greenhouse\.io/i.test(value) && !value.includes('#app')) {
+    return value + '#app';
+  }
+  return value;
+}

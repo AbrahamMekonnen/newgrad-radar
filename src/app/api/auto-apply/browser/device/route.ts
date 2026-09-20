@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { browserApplyUrl } from '@/lib/autoapply-support';
 
 function admin() {
   return createClient(
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
     leaseId: row.browser_lease_id,
     jobTitle: row.job_title,
     companyName: row.company_name,
-    jobUrl: row.job_url,
+    jobUrl: browserApplyUrl(row.ats_type, row.job_url),
     atsType: row.ats_type,
     fields,
     autoSubmit: prof?.auto_submit === true,
