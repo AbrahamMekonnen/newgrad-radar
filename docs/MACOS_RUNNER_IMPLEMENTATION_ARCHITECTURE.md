@@ -1,5 +1,7 @@
 # macOS Runner Implementation Architecture
 
+> **Architecture decision:** This desktop-runner design is retained as research, but it is not the selected implementation. The selected architecture is [Browser-First Auto-Apply Architecture](./BROWSER_FIRST_AUTOAPPLY_ARCHITECTURE.md), using cloud browser workers plus an optional attended extension.
+
 Status: First-release engineering design
 
 Last updated: 2026-09-18
