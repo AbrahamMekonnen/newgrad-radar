@@ -67,9 +67,9 @@ export async function GET(request: NextRequest) {
   if (!row) return json({ paused: false, job: null });
   const allFields = Array.isArray(row.prepared_data) ? row.prepared_data : [];
   const fields = allFields.filter((field: Record<string, unknown>) =>
-    field.value !== null && field.value !== undefined && field.value !== '' && field.type !== 'input_file');
+    field.value !== null && field.value !== undefined && field.value !== '' && String(field.value).toLowerCase() !== 'unfilled');
   const missingRequired = allFields.some((field: Record<string, unknown>) =>
-    field.required === true && (field.source === 'user_needed' || field.value === null || field.value === undefined || field.value === ''));
+    field.required === true && (field.source === 'user_needed' || field.value === null || field.value === undefined || field.value === '' || String(field.value).toLowerCase() === 'unfilled'));
   return json({ job: {
     id: row.id,
     leaseId: row.browser_lease_id,

@@ -125,8 +125,26 @@
       await clickManualEntry(field);
       element = findField(field);
     }
-    if (!element || element.type === 'file') return false;
+    if (!element) return false;
     const value = field.value;
+    if (element.type === 'file') {
+      if (!value || typeof value !== 'string') return false;
+      try {
+        const fileUrl = new URL(value);
+        if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) return false;
+        const response = await fetch(fileUrl.href);
+        if (!response.ok) return false;
+        const blob = await response.blob();
+        const filename = decodeURIComponent(fileUrl.pathname.split('/').pop() || 'resume.pdf');
+        const file = new File([blob], filename, { type: blob.type || 'application/pdf' });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        element.files = transfer.files;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        return element.files?.length === 1;
+      } catch { return false; }
+    }
 
     if (element instanceof HTMLSelectElement) {
       const wanted = answerLabel(field);
@@ -300,7 +318,7 @@
       const data = await loadPayload();
       if (!data || !sameJob(data)) return;
       const fields = (data.fields || []).filter((field) =>
-        field.value !== null && field.value !== undefined && field.value !== '');
+        field.value !== null && field.value !== undefined && field.value !== '' && normalize(field.value) !== 'unfilled');
       const completed = new Set();
       let running = false;
       const run = async () => {
