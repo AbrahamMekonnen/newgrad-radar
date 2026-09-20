@@ -409,10 +409,21 @@
     const seen = new Set();
     return controls.flatMap((element, index) => {
       if (element.getClientRects().length === 0 || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
-      if (element.type === 'checkbox' || element.type === 'radio' ? element.checked : String(element.value || '').trim()) return [];
       const name = element.name || element.id || ('live-field-' + index);
       if (seen.has(name)) return [];
       seen.add(name);
+
+      if (element.type === 'radio') {
+        const group = controls.filter((item) => item.type === 'radio' && item.name === element.name);
+        if (group.some((item) => item.checked)) return [];
+        const container = element.closest('fieldset, [role="radiogroup"], .application-question, .application-field, [class*="question"], [class*="field"]');
+        const heading = container?.querySelector('legend, .application-label, [class*="question-label"], [class*="field-label"]');
+        const label = heading?.textContent || container?.textContent || element.getAttribute('aria-label') || '';
+        const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
+        return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options }];
+      }
+
+      if (element.type === 'checkbox' ? element.checked : String(element.value || '').trim()) return [];
       const label = element.labels?.[0]?.textContent || element.getAttribute('aria-label')
         || element.closest('fieldset, [class*="field"], [class*="question"]')?.textContent || '';
       const options = element instanceof HTMLSelectElement
@@ -425,7 +436,7 @@
     const actions = [...document.querySelectorAll('a, button')];
     const trigger = actions.find((item) => {
       if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
-      const text = normalize(item.textContent).replace(/\\s+/g, '');
+      const text = normalize(item.textContent).replace(/\s+/g, '');
       return [
         'applynow', 'applyforthisjob', 'startapplication', 'applytothisjob',
         'iminterested', 'interested',
@@ -545,7 +556,12 @@
       // filling and submission.
       if (!isTopFrame && !isSmartRecruiters) return;
       if (isTopFrame && isSmartRecruiters) {
-        openApplicationForm();
+        const opened = openApplicationForm();
+        if (data.browserWorker) await send({
+          type: 'PROGRESS',
+          stage: opened ? 'filling' : 'waiting_for_user',
+          detail: { detail: opened ? 'SmartRecruiters application action clicked.' : 'SmartRecruiters application action was not found.' },
+        });
         return;
       }
       const fields = (data.fields || []).filter((field) =>
