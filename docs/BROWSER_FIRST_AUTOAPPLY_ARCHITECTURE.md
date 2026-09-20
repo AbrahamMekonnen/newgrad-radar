@@ -8,16 +8,20 @@ Supersedes the desktop runner as HireRadar's primary execution model.
 
 ## 1. Decision
 
-HireRadar will use a browser-first hybrid:
+HireRadar will use a user-browser execution architecture:
 
-1. Backend services prepare, route, and track every application.
-2. Cloud browser workers submit supported public company career-site forms.
-3. A phone-accessible live cloud browser handles human intervention in the same session.
-4. The existing browser extension provides attended autofill and tracking.
-5. HireRadar does not automate authenticated job boards whose terms prohibit outside automation.
-6. No Windows or macOS desktop application is required.
+1. The backend discovers jobs and prepares complete application packages.
+2. A direct Auto Apply click or standing watchlist rule authorizes submission.
+3. The browser extension is the preferred submission executor.
+4. It submits from the user's normal browser session and network.
+5. If the browser is unavailable, the attempt waits in `waiting_for_browser`.
+6. HireRadar never silently moves an account-bound attempt to a cloud browser.
+7. Cloud execution is a separately authorized option for eligible public employer forms.
+8. No Windows or macOS native desktop application is required.
 
-The Windows and macOS runner designs remain research references only. They are not on the implementation critical path.
+HireRadar applies to the jobs the user selected. Match scores may influence ordering and recommendations, but do not cancel an explicitly authorized application.
+
+The Windows and macOS runner designs remain research references only.
 
 ## 2. Why the architecture changed
 
@@ -38,7 +42,7 @@ Competitor research shows that this complexity is avoidable. Products generally 
 - unattended cloud application workers
 - a hybrid where cloud workers handle compatible forms and an extension handles attended cases
 
-The hybrid is the best fit for HireRadar because the product must operate while the user's devices are off while still offering a browser-side fallback.
+The selected model prioritizes account safety by preparing applications in the cloud and executing them in the user's browser. Preparation continues while user devices are off, but submission waits for an authorized browser unless the user separately enables cloud execution for eligible public employer forms.
 
 ## 3. Competitor findings
 
@@ -66,109 +70,118 @@ It also states that its cloud loop continues when the user's browser is closed. 
 
 This is the clearest public evidence for the selected HireRadar split.
 
-## 4. Terms-aware routing
+## 4. Authorization and execution policy
 
-HireRadar must route based on both technical support and platform authorization.
+Job selection is controlled by the user.
 
-LinkedIn's current User Agreement prohibits unauthorized bots and automated methods and restricts browser plugins used to scrape or copy the service. Indeed's current terms prohibit outside automation for Indeed Apply and automated bulk submission without written permission.
+An application is authorized through either:
 
-Therefore:
+- **Direct authorization:** the user clicks Auto Apply on a specific job.
+- **Standing authorization:** the user enables Auto Apply for a saved search, watchlist, company rule, or filter.
 
-- LinkedIn and Indeed are discovery and attended-assistance channels unless HireRadar receives written authorization.
-- The extension may help users transfer prepared answers while the user remains in control.
-- It must not crawl, mass-submit, or disguise automation on those platforms.
-- Cloud submission focuses on company career sites and ATS-hosted forms whose applicable rules permit the action.
-- The adapter registry contains a per-domain policy and can remotely disable execution.
+HireRadar does not ask for another per-job approval after either authorization. It prepares and queues the application automatically.
 
-Technical capability does not override a site's terms.
+Execution policy is separate from selection:
+
+- prefer the user's browser extension whenever available;
+- hold the attempt in `waiting_for_browser` while unavailable;
+- do not substitute cloud execution for an account-bound site;
+- use cloud execution only after separate user authorization and only for eligible public employer forms;
+- stop for CAPTCHA, MFA, identity verification, unknown facts, or legally meaningful attestations;
+- never use stealth, rotating identity, fingerprint spoofing, or security bypasses.
+
+Running in the user's browser may reduce centralized risk signals, but does not guarantee that automation is undetectable or authorized. HireRadar must disclose that risk and remotely disable unsafe execution paths.
 
 ## 5. Selected topology
 
 ```text
 Phone or desktop web
         |
+        | direct click or standing watchlist authorization
         v
 Next.js control plane
         |
         v
-Supabase
-  Auth
-  PostgreSQL
-  Storage
-  Realtime
-  durable queues
+Supabase durable application queue
         |
-        +---------------------------+
-        |                           |
-        v                           v
-Preparation workers          Browser workers
-Python                       headed Playwright
-AI answers                   encrypted profiles
-documents                    ATS adapters
-validation                   confirmation evidence
-        |                           |
-        +-------------+-------------+
-                      |
-             intervention required
-                      |
-                      v
-           authenticated live session
-             in HireRadar web UI
-
-Optional extension
-  attended autofill
-  user review
-  manual submission
-  verified tracking
+        v
+Cloud preparation workers
+  job data, answers, resume, documents, field plan
+        |
+        v
+Prepared application package
+        |
+        +-------------------------------+
+        |                               |
+        v                               v
+User browser extension             Optional cloud browser
+preferred executor                 public employer forms only
+normal session and network         separate authorization
+        |                               |
+        +---------------+---------------+
+                        |
+                 confirmation evidence
+                        |
+                        v
+             one live application timeline
 ```
+
+The web application remains the control surface on phones and desktops. The extension works across supported desktop browsers, so no operating-system-specific installer is required.
 
 ## 6. Execution channels
 
-Every job receives one channel before preparation completes.
+### 6.1 User-browser extension
 
-### 6.1 Cloud browser
+This is the preferred channel. Use it when the extension is paired and online, the user authorized the job directly or through a standing rule, the adapter supports the destination, and no unresolved user-only question blocks submission.
 
-Use when:
+The backend sends a short-lived package. The extension opens an isolated application tab, fills fields, uploads documents, validates required controls, submits automatically under the recorded authorization, and reports confirmation evidence. Per-job review is optional, not required by default.
 
-- the application is on a supported company career site or ATS domain
-- no prohibited authenticated job-board automation is involved
-- the field schema can be inspected
-- the worker can preserve one browser session through completion
-- the user has authorized submission for the attempt
+### 6.2 Waiting for browser
 
-Result states:
+If the extension or computer is unavailable:
+
+- preparation continues;
+- the attempt enters `waiting_for_browser`;
+- the lease remains unclaimed;
+- the timeline explains why it is waiting;
+- the extension claims it after reconnecting;
+- jobs remain ordered by deadline, user priority, and queue age.
+
+A browser extension cannot execute while the computer is asleep, powered off, or the browser is closed. A phone click can create and prepare the attempt immediately, but submission begins when the paired browser becomes available.
+
+### 6.3 Standing watchlist execution
+
+When a job matches a watchlist with Auto Apply enabled:
+
+1. create one idempotent attempt;
+2. record the standing rule that authorized it;
+3. prepare answers and documents;
+4. place it in the browser queue;
+5. notify the extension when online;
+6. submit without another approval;
+7. notify the user of the confirmed result or intervention.
+
+### 6.4 Optional cloud browser
+
+Cloud submission is not an automatic fallback. It requires separate opt-in, an eligible public employer or ATS form, no transferred account session, and a permitting domain policy. Account-bound jobs remain `waiting_for_browser` even when cloud capacity exists.
+
+### 6.5 Manual-only
+
+Use manual-only when automation cannot proceed safely or reliably. HireRadar still prepares answers and documents and tracks the outcome without claiming submission.
+
+### 6.6 Result states
 
 - `submitted` only after verified confirmation
+- `waiting_for_browser` when the preferred executor is offline
 - `intervention_required` for a user-resolvable blocker
 - `needs_answer` for an unknown factual answer
-- `manual_only` when automation is not appropriate
+- `manual_only` when automation is inappropriate
 - `failed` for a terminal technical failure
-- `ambiguous` when submit may have occurred but confirmation is unavailable
+- `ambiguous` when submission may have occurred but confirmation is unavailable
 
-### 6.2 Extension attended mode
+## 7. Optional cloud browser design
 
-Use when:
-
-- site policy requires the user's direct browser interaction
-- the user opens the application manually
-- the cloud browser route is disabled
-- the user wants to review before submission
-
-The extension receives a short-lived prepared package. It fills the page, highlights uncertain fields, and records confirmation after the user submits. It uses the same attempt and event model as the cloud worker.
-
-### 6.3 Manual-only
-
-Use when:
-
-- the site prohibits the planned automation
-- identity verification cannot be delegated
-- a legal attestation requires direct user action
-- the application cannot be verified safely
-- the form requests facts HireRadar does not know and the user does not answer
-
-Manual-only jobs remain useful: HireRadar prepares answers and documents, deep-links to the form, and tracks the outcome without claiming submission.
-
-## 7. Cloud browser design
+This section applies only to separately authorized cloud execution for eligible public employer forms. It is not the default executor and never receives account-bound browser cookies.
 
 ### 7.1 Initial implementation
 
@@ -216,37 +229,44 @@ Each worker container runs a small number of browser contexts. The scheduler con
 
 Start with a conservative concurrency of three pages per worker. Increase only from measured fixture and production-canary evidence.
 
-## 8. Human intervention from phone
+## 8. Intervention and phone control
 
-The intervention continues the same cloud browser session.
+### 8.1 Browser-side intervention
 
-Flow:
+When the extension encounters CAPTCHA, MFA, consent, identity verification, or an unknown factual answer, it checkpoints the tab, sets `intervention_required`, and sends the configured notification. The user returns to the same tab, resolves the blocker, and the extension resumes. Prepared values remain in place.
 
-1. Worker reaches CAPTCHA, MFA, consent, login, or unknown answer.
-2. It checkpoints the page and sets `intervention_required`.
-3. The backend sends push, email, Telegram, or in-app notification according to settings.
-4. The user opens an authenticated HireRadar route on any phone or computer.
-5. HireRadar exchanges a one-use intervention token for a short-lived live-session URL.
-6. The user sees and controls only that browser session.
-7. The worker detects completion and resumes.
-8. The live URL expires and cannot be reopened.
+### 8.2 Phone control
 
-Do not expose a provider's raw debug URL directly. Place HireRadar authorization in front of it, bind it to one attempt and user, keep it out of logs, and revoke it after use.
+The phone can create an attempt, display all states, answer non-page-specific questions, pause or cancel work, and receive results. If the paired browser is online, commands reach it through Realtime plus a durable command row. If offline, they remain queued.
 
-Browserless and Steel both document interactive live browser sessions intended for human-in-the-loop workflows. Prototype both before selecting a provider.
+Remote control of the exact local browser tab can be evaluated later, but the first release does not require desktop-wide access.
 
-## 9. CAPTCHA and challenge policy
+### 8.3 Cloud-session intervention
 
-HireRadar does not promise that every challenge can be automated.
+For a separately authorized cloud attempt, intervention may continue through a short-lived authenticated live view of the same session. Raw provider debug URLs are never exposed or logged.
 
-Preferred order:
+## 9. CAPTCHA, challenge, and account-safety policy
 
-1. avoid generating challenges through normal rates and stable sessions
-2. let the user complete the challenge through live takeover
-3. use a provider-supported challenge service only where its use is lawful and permitted
-4. route to manual-only when completion is unsafe or prohibited
+HireRadar cannot guarantee that a platform will never detect automation or restrict an account. It reduces avoidable risk without claiming to be undetectable.
 
-Never mark a prepared form as submitted because a challenge is visible. Never silently replace user action for attestations or facts that require the user's knowledge.
+Controls:
+
+1. prefer the user's established browser session and normal network;
+2. never upload browser cookies;
+3. never rotate proxies, spoof fingerprints, or disguise the executor;
+4. allow at most one active flow per account-bound platform;
+5. allow at most one active flow per employer or ATS domain by default;
+6. permit broader concurrency only across independent destinations;
+7. stop new work after CAPTCHA, rate-limit, verification, or block signals;
+8. require user action for CAPTCHA, MFA, identity, consent, and unknown facts;
+9. prevent duplicates with idempotent attempts and confirmation checks;
+10. keep profile facts consistent and truthful;
+11. expose Pause and Emergency Stop;
+12. remotely disable a domain or adapter when challenge or failure rates rise.
+
+Every authorized job stays queued. Safety controls regulate timing and concurrency; they do not silently discard selected jobs.
+
+A capable device may run five to seven application tabs across independent destinations, but never five to seven simultaneous flows against one account or employer.
 
 ## 10. Managed browser versus self-hosted browser
 
@@ -288,12 +308,13 @@ Begin with the lowest-complexity provider that passes the security and fixture g
 
 The existing durable attempt model remains valid.
 
-A cloud worker must not transition directly from `filling` to `submitted`. Required sequence:
+No executor may transition directly from `filling` to `submitted`. The browser path uses this sequence:
 
 ```text
 queued
 preparing
 ready
+waiting_for_browser (browser path only)
 leased
 opening
 filling
@@ -313,35 +334,43 @@ Verified evidence may include:
 
 A click, navigation, or network request alone is insufficient.
 
-## 12. Extension scope
+## 12. Extension executor
 
-Retain the existing Manifest V3 extension, but reduce its responsibilities.
+Retain the Manifest V3 extension and make it the preferred submission executor.
 
 It should:
 
-- authenticate to HireRadar
-- request one short-lived prepared package for the active application
-- inspect and fill the active tab
-- surface unanswered or uncertain fields
-- let the user review
-- observe and report confirmation
-- sync status to the same attempt timeline
+- pair and authenticate with HireRadar;
+- maintain an online heartbeat and capabilities;
+- reconcile durable commands after reconnecting;
+- claim short-lived prepared packages;
+- open isolated application tabs;
+- fill fields, upload documents, and navigate multipage forms;
+- submit under direct or standing authorization;
+- pause for unresolved user-only fields;
+- report adapter-specific confirmation;
+- checkpoint recoverable state;
+- synchronize every transition;
+- provide Pause and Emergency Stop.
 
-It should not:
+It must not:
 
-- serve as the unattended scheduler
-- stay running for 24/7 automation
-- store service-role credentials
-- receive provider API keys
-- crawl prohibited job boards
-- attempt to evade bot controls
-- claim submission without confirmation
+- store service-role credentials or provider API keys;
+- export browser cookies;
+- claim submission without confirmation;
+- retry an ambiguous submit automatically;
+- rotate fingerprints, proxies, or identities;
+- bypass CAPTCHA, MFA, access controls, or platform protections;
+- run simultaneous flows against one account-bound platform;
+- continue after authorization is revoked.
 
-Publish through the Chrome Web Store when ready. Restrict host permissions to supported ATS domains where practical and use optional permissions for broader attended use.
+Publish through browser extension stores for automatic cross-platform updates. Restrict host permissions where practical and request optional site permissions only when needed. This requires no Apple Developer membership.
 
 ## 13. Security boundaries
 
-- Browser workers receive attempt-scoped tokens.
+- Both extension and cloud executors receive attempt-scoped tokens.
+- Extension packages expire quickly and are bound to the paired device and attempt.
+- Browser cookies remain on the user device and are never included in packages.
 - No service-role key is present in a browser container.
 - Each browser context belongs to one user.
 - Documents use short-lived, single-purpose URLs.
@@ -354,29 +383,39 @@ Publish through the Chrome Web Store when ready. Restrict host permissions to su
 
 ## 14. Implementation sequence
 
-### Milestone A: truthful queue
+### Milestone A: truthful queue and authorization
 
 - finish attempts, events, leases, and finalization RPCs
-- make every UI use the same state
+- record `direct_click` or `standing_rule` authorization
+- add `waiting_for_browser`
 - ensure prepared never counts as submitted
 
-### Milestone B: one cloud ATS
+### Milestone B: extension executor vertical slice
 
-- containerized headed Playwright worker
-- ephemeral browser context
-- Greenhouse fixture and canary
-- deterministic fill and validation
-- verified finalization
+- extension pairing and heartbeat
+- durable command reconciliation
+- short-lived package protocol
+- Greenhouse fixture
+- deterministic fill, validation, submission, and confirmation
 
-### Milestone C: answers and intervention
+### Milestone C: watchlist dispatch and recovery
 
-- question prompt in web UI
-- Answer Bank feedback
-- same-session continuation
-- managed live-session provider prototype
-- phone interaction
+- create attempts idempotently from matching rules
+- queue while browser is offline
+- claim after reconnect
+- recover extension and browser restart
+- cancellation and Emergency Stop
+- browser-side intervention
 
-### Milestone D: adapter expansion
+### Milestone D: account-safety controls
+
+- per-platform and per-domain semaphores
+- adaptive device concurrency
+- challenge and rate-limit circuit breakers
+- duplicate and ambiguous-submit protection
+- remote adapter disablement
+
+### Milestone E: adapter expansion
 
 - Ashby
 - Lever
@@ -384,41 +423,35 @@ Publish through the Chrome Web Store when ready. Restrict host permissions to su
 - Workday
 - iCIMS and Taleo
 
-Each adapter needs fixture, challenge, failure, and confirmation tests before unattended enablement.
+### Milestone F: optional cloud execution
 
-### Milestone E: extension fallback
-
-- short-lived package protocol
-- attended fill
-- review and submit
-- confirmation event
-- policy-aware domain routing
-
-### Milestone F: production scale
-
-- encrypted persistent profiles where necessary
-- adaptive worker concurrency
-- per-domain circuit breakers
-- notification outbox
-- cost and reliability dashboards
-- controlled beta rollout
+- separate user opt-in
+- public-form eligibility policy
+- isolated headed browser worker
+- same package and event protocol
+- no silent browser-to-cloud fallback
 
 ## 15. Acceptance criteria
 
-The first browser-first beta must demonstrate:
+The first browser-executor beta must demonstrate:
 
-- Auto Apply works while the user's devices are off.
-- No desktop installer is required.
+- A manual click creates one authorized attempt.
+- A standing watchlist creates attempts without asking again.
+- Every authorized job remains queued until completed, cancelled, or visibly made manual-only.
+- An online browser claims and begins prepared work.
+- An offline browser produces `waiting_for_browser`.
+- No native desktop installer is required.
 - Greenhouse, Ashby, and Lever fixtures reach verified final states.
 - Unknown factual questions pause instead of being invented.
-- A user can intervene from a phone in the same cloud session.
-- The worker resumes after intervention.
-- A challenge or click never counts as submission.
-- Duplicate callbacks and worker crashes cannot duplicate an application.
-- LinkedIn and Indeed are not automatically submitted without written permission.
-- Extension and cloud attempts appear in one timeline.
+- CAPTCHA, MFA, verification, and block signals stop automation.
+- At most one flow runs per account-bound platform.
+- Five to seven independent fixture tabs run on capable hardware without state crossover.
+- Browser cookies never leave the device.
+- A click never counts as confirmed submission.
+- Reconnects and crashes cannot duplicate an application.
+- Every attempt shows its authorization source and execution channel.
 - Credentials and application values are absent from logs.
-- A remote flag can disable any adapter or domain immediately.
+- A remote flag can disable any adapter or domain.
 
 ## 16. Sources
 
@@ -448,13 +481,15 @@ Platform rules:
 
 ## 17. Immediate next work
 
-Do not start Windows Service, macOS LaunchDaemon, MSIX, `.pkg`, wake, or desktop update implementation.
+Do not start native Windows or macOS runner implementation.
 
 First:
 
-1. extract the Greenhouse adapter behind a browser-worker interface
-2. create a headed container fixture
-3. prove verified submission against a local fixture
-4. compare Browserless and Steel live intervention on a phone
-5. add domain execution policy to the adapter registry
-6. route one application from the existing web queue through the cloud worker
+1. add direct-click and standing-rule authorization fields;
+2. add `waiting_for_browser` to the state machine and UI;
+3. connect the existing extension to durable commands and heartbeat;
+4. implement one Greenhouse extension-executor fixture end to end;
+5. require adapter-specific confirmation before `submitted`;
+6. add per-domain concurrency and challenge circuit breakers;
+7. route watchlist matches into the browser queue;
+8. keep cloud execution behind a separate explicit opt-in.
