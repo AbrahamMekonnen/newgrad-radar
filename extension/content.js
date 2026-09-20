@@ -247,6 +247,23 @@
     persist(data);
   };
 
+  const scanUnfilledFields = () => {
+    const controls = [...document.querySelectorAll('input, textarea, select, [role="combobox"]')];
+    const seen = new Set();
+    return controls.flatMap((element, index) => {
+      if (element.getClientRects().length === 0 || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
+      if (element.type === 'checkbox' || element.type === 'radio' ? element.checked : String(element.value || '').trim()) return [];
+      const name = element.name || element.id || ('live-field-' + index);
+      if (seen.has(name)) return [];
+      seen.add(name);
+      const label = element.labels?.[0]?.textContent || element.getAttribute('aria-label')
+        || element.closest('fieldset, [class*="field"], [class*="question"]')?.textContent || '';
+      const options = element instanceof HTMLSelectElement
+        ? [...element.options].map((option) => option.textContent.trim()).filter(Boolean)
+        : [];
+      return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: element.type || element.getAttribute('role'), options }];
+    }).filter((field) => field.label);
+  };
   const openApplicationForm = () => {
     const actions = [...document.querySelectorAll('a, button')];
     const trigger = actions.find((item) => {
@@ -304,6 +321,18 @@
           if (await fill(field)) completed.add(field.name);
         }
         const remaining = fields.length - completed.size;
+        const liveFields = scanUnfilledFields();
+        if (liveFields.length && !data.liveResolutionStarted) {
+          data.liveResolutionStarted = true;
+          persist(data);
+          const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: liveFields });
+          for (const answer of resolved?.answers || []) {
+            const live = liveFields.find((field) => field.name === answer.name);
+            if (live) await fill({ ...live, value: answer.value, source: answer.source });
+          }
+          data.liveNeedsUser = resolved?.needsUser || [];
+          persist(data);
+        }
         if (remaining === fields.length && openApplicationForm()) {
           running = false;
           return;

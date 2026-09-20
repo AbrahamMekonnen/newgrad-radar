@@ -113,7 +113,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (job) await report(job, 'filling');
       return { job };
     }
-    if (message.type === 'PROGRESS') {
+    if (message.type === 'RESOLVE_FIELDS') {
+      const tabId = sender.tab?.id;
+      if (!tabId) return { answers: [], needsUser: [] };
+      const result = await chrome.storage.session.get('job:' + tabId);
+      const job = currentByTab.get(tabId) || result['job:' + tabId];
+      if (!job) return { answers: [], needsUser: [] };
+      return api('/api/auto-apply/browser/resolve', {
+        method: 'POST', body: JSON.stringify({ jobId: job.id, fields: message.fields }),
+      });
+    }    if (message.type === 'PROGRESS') {
       const tabId = sender.tab?.id;
       if (!tabId) return { ok: false };
       const result = await chrome.storage.session.get('job:' + tabId);
