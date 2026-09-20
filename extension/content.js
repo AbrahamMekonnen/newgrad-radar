@@ -120,6 +120,26 @@
     return true;
   };
 
+  const diagnoseField = (field) => {
+    const id = String(field.name || '');
+    const question = normalize(field.label);
+    const nodes = [...document.querySelectorAll('[name], [role], label, button')]
+      .filter((node) => {
+        const name = String(node.getAttribute('name') || '');
+        const text = normalize(node.textContent);
+        return (id && name.includes(id)) || (question && text.includes(question));
+      })
+      .slice(0, 12)
+      .map((node) => ({
+        tag: node.tagName,
+        name: node.getAttribute('name'),
+        role: node.getAttribute('role'),
+        type: node.getAttribute('type'),
+        text: String(node.textContent || '').replace(/s+/g, ' ').trim().slice(0, 300),
+        htmlFor: node.getAttribute('for'),
+      }));
+    return { name: field.name, label: field.label, wanted: answerLabel(field), nodes };
+  };
   const fillScopedChoice = (field) => {
     const question = normalize(field.label);
     const wanted = answerLabel(field);
@@ -380,7 +400,7 @@
             detail: {
               filled: completed.size,
               total: fields.length,
-              detail: remaining ? remaining + ' prepared fields were not found or need user input.' : 'All prepared fields were filled.',
+              detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', unresolved: fields.filter((field) => !completed.has(field.name)).map(diagnoseField) }) : 'All prepared fields were filled.',
             },
           });
         }
