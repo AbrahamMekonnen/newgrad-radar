@@ -50,7 +50,7 @@ export interface CompanyEnrichment {
 }
 
 // Well-known companies with verified data (saves API calls)
-const KNOWN_COMPANIES: Record<string, Partial<CompanyEnrichment>> = {
+export const KNOWN_COMPANIES: Record<string, Partial<CompanyEnrichment>> = {
   'google': { fundingStage: 'public', companySize: '10000+', industry: 'Technology', foundedYear: 1998, stockTicker: 'GOOGL', isPublic: true, headquarters: 'Mountain View, CA' },
   'meta': { fundingStage: 'public', companySize: '10000+', industry: 'Technology', foundedYear: 2004, stockTicker: 'META', isPublic: true, headquarters: 'Menlo Park, CA' },
   'facebook': { fundingStage: 'public', companySize: '10000+', industry: 'Technology', foundedYear: 2004, stockTicker: 'META', isPublic: true, headquarters: 'Menlo Park, CA' },
