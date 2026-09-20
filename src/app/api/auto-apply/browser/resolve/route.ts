@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
     if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
-    if (/city/.test(q) && pick(f, profile?.city)) continue;
+    if (/location/.test(q) && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '))) continue;
+    if (/city/.test(q) && pick(f, profile?.city || profile?.location)) continue;
     if (/state|province/.test(q) && pick(f, profile?.state)) continue;
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;

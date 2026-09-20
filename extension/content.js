@@ -171,8 +171,11 @@
     await wait(150);
     let option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
     if (!option && element instanceof HTMLInputElement) {
+      element.focus();
       setNativeValue(element, wanted);
-      await wait(isLocation ? 900 : 350);
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
+      await wait(isLocation ? 1800 : 350);
       option = visibleOptions().find((item) => optionMatches(item.textContent, wanted))
         || visibleOptions()[0];
     }
@@ -422,10 +425,10 @@
     const actions = [...document.querySelectorAll('a, button')];
     const trigger = actions.find((item) => {
       if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
-      const text = normalize(item.textContent).replace(/[ ']/g, '');
+      const text = normalize(item.textContent).replace(/\\s+/g, '');
       return [
-        'apply now', 'apply for this job', 'start application', 'apply to this job',
-        'im interested', 'interested',
+        'applynow', 'applyforthisjob', 'startapplication', 'applytothisjob',
+        'iminterested', 'interested',
       ].includes(text);
     });
     if (!trigger) return false;
