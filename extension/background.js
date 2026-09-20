@@ -36,6 +36,17 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
 });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === POLL_ALARM) void poll(); });
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') return;
+  const result = await chrome.storage.session.get('job:' + tabId);
+  const job = currentByTab.get(tabId) || result['job:' + tabId];
+  if (!job) return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  } catch (error) {
+    await report(job, 'failed', { detail: 'Could not start the ATS page helper: ' + error.message }).catch(() => undefined);
+  }
+});
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const result = await chrome.storage.session.get('job:' + tabId);
   const job = currentByTab.get(tabId) || result['job:' + tabId];

@@ -1,4 +1,6 @@
 (() => {
+  if (window.__hireRadarAutoApplyLoaded) return;
+  window.__hireRadarAutoApplyLoaded = true;
   const MARKER = 'newgrad-radar=';
   const CACHE_KEY = 'newgrad-radar-handoff-v2';
   const normalize = (value) => String(value || '').toLowerCase()
@@ -314,6 +316,8 @@
 
       let debounce;
       const observer = new MutationObserver(() => {
+  if (window.__hireRadarAutoApplyLoaded) return;
+  window.__hireRadarAutoApplyLoaded = true;
         clearTimeout(debounce);
         debounce = setTimeout(run, 120);
       });
@@ -322,10 +326,14 @@
       setTimeout(run, 750);
       setTimeout(run, 2000);
       const retry = setInterval(() => {
+  if (window.__hireRadarAutoApplyLoaded) return;
+  window.__hireRadarAutoApplyLoaded = true;
         run();
         if (completed.size === fields.length) clearInterval(retry);
       }, 3000);
       setTimeout(() => {
+  if (window.__hireRadarAutoApplyLoaded) return;
+  window.__hireRadarAutoApplyLoaded = true;
         clearInterval(retry);
         observer.disconnect();
       }, 120000);
