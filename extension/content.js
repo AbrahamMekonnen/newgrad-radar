@@ -517,7 +517,21 @@
   (async () => {
     try {
       const data = await loadPayload();
-      if (!data || !sameJob(data)) return;
+      if (!data) return;
+      const isTopFrame = window.top === window;
+      const isSmartRecruiters = normalize(data.atsType) === 'smartrecruiters';
+      // SmartRecruiters uses a different publication identifier in its embedded
+      // application URL, so the child frame cannot be compared by job URL ID.
+      if (!(isSmartRecruiters && !isTopFrame) && !sameJob(data)) return;
+      // Most ATSes render the application in the top document; ignore their
+      // decorative/analytics frames. SmartRecruiters is the exception: its top
+      // job page opens an embedded one-click application whose child frame owns
+      // filling and submission.
+      if (!isTopFrame && !isSmartRecruiters) return;
+      if (isTopFrame && isSmartRecruiters) {
+        openApplicationForm();
+        return;
+      }
       const fields = (data.fields || []).filter((field) =>
         field.value !== null && field.value !== undefined && field.value !== '' && normalize(field.value) !== 'unfilled');
       const completed = new Set();
