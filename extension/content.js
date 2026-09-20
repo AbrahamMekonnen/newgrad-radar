@@ -363,58 +363,61 @@
       const run = async () => {
         if (running) return;
         running = true;
-        if (isSuccessPage()) {
-          try {
-            await reportSuccess(data);
-            banner('Application submitted successfully. HireRadar marked it as Submitted.');
-          } catch (error) {
-            banner(error.message || 'Could not update the submitted status.', true);
+        try {
+          if (isSuccessPage()) {
+            try {
+              await reportSuccess(data);
+              banner('Application submitted successfully. HireRadar marked it as Submitted.');
+            } catch (error) {
+              banner(error.message || 'Could not update the submitted status.', true);
+            }
+            return;
           }
-          running = false;
-          return;
-        }
-        for (const field of fields) {
-          if (completed.has(field.name)) continue;
-          if (await fill(field)) completed.add(field.name);
-        }
-        const remaining = fields.length - completed.size;
-        // Resolve live fields that the server prep missed — including ones the
-        // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
-        // so a field that appears after the first pass still gets resolved.
-        const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
-        if (newLive.length) {
-          newLive.forEach((field) => resolvedLive.add(field.name));
-          const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: newLive });
-          for (const answer of resolved?.answers || []) {
-            const live = newLive.find((field) => field.name === answer.name);
-            if (live) await fill({ ...live, value: answer.value, source: answer.source });
+          for (const field of fields) {
+            if (completed.has(field.name)) continue;
+            // One field throwing must never abort the rest of the fill.
+            try { if (await fill(field)) completed.add(field.name); } catch { /* skip */ }
           }
-          data.liveNeedsUser = [...(data.liveNeedsUser || []), ...(resolved?.needsUser || [])];
-          persist(data);
+          const remaining = fields.length - completed.size;
+          // Resolve live fields that the server prep missed — including ones the
+          // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
+          // so a field that appears after the first pass still gets resolved.
+          // Best-effort: a resolver hiccup must never block prepared fills.
+          const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
+          if (newLive.length) {
+            newLive.forEach((field) => resolvedLive.add(field.name));
+            try {
+              const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: newLive });
+              for (const answer of resolved?.answers || []) {
+                const live = newLive.find((field) => field.name === answer.name);
+                if (live) { try { await fill({ ...live, value: answer.value, source: answer.source }); } catch { /* skip */ } }
+              }
+              data.liveNeedsUser = [...(data.liveNeedsUser || []), ...(resolved?.needsUser || [])];
+              persist(data);
+            } catch { /* live resolution best-effort */ }
+          }
+          if (remaining === fields.length && openApplicationForm()) return;
+          if (data.browserWorker) {
+            void chrome.runtime.sendMessage({
+              type: 'PROGRESS',
+              stage: remaining ? 'waiting_for_user' : 'filling',
+              detail: {
+                filled: completed.size,
+                total: fields.length,
+                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', unresolved: fields.filter((field) => !completed.has(field.name)).map(diagnoseField) }) : 'All prepared fields were filled.',
+              },
+            });
+          }
+          if (remaining) {
+            banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
+          } else if (!submitPreparedForm(data)) {
+            banner(data.autoSubmitRequested
+              ? 'HireRadar filled every prepared field. Review the ATS field highlighted as incomplete, then submit.'
+              : 'HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
+          }
+        } finally {
+          running = false;  // ALWAYS reset, so a thrown error never freezes retries
         }
-        if (remaining === fields.length && openApplicationForm()) {
-          running = false;
-          return;
-        }
-        if (data.browserWorker) {
-          void chrome.runtime.sendMessage({
-            type: 'PROGRESS',
-            stage: remaining ? 'waiting_for_user' : 'filling',
-            detail: {
-              filled: completed.size,
-              total: fields.length,
-              detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', unresolved: fields.filter((field) => !completed.has(field.name)).map(diagnoseField) }) : 'All prepared fields were filled.',
-            },
-          });
-        }
-        if (remaining) {
-          banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
-        } else if (!submitPreparedForm(data)) {
-          banner(data.autoSubmitRequested
-            ? 'HireRadar filled every prepared field. Review the ATS field highlighted as incomplete, then submit.'
-            : 'HireRadar filled all ' + fields.length + ' prepared fields. Review the form, then submit when it is correct.');
-        }
-        running = false;
       };
 
       let debounce;
