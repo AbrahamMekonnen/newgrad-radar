@@ -150,22 +150,26 @@
     return bestScore > 0 ? best : null;
   };
 
-  const visibleOptions = () => [...document.querySelectorAll('[role="option"], [data-option-index]')]
-    .filter((item) => item.getClientRects().length > 0);
+  const visibleOptions = () => [...document.querySelectorAll(
+    '[role="option"], [data-option-index], .dropdown-results > *'
+  )].filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
 
   const fillCombo = async (element, field) => {
     const wanted = answerLabel(field);
     const existing = normalize(element.value || element.textContent);
-    if (existing && existing !== 'select' && optionMatches(existing, wanted)) return true;
-    if (existing && existing !== 'select') return true; // preserve a user's manual choice
+    const isLocation = /location/i.test(String(element.id || element.name || ''));
+    const selectedLocation = isLocation && document.querySelector('#selected-location, input[name="selectedLocation"]');
+    if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
+    if (existing && existing !== 'select' && !isLocation) return true; // preserve a user's manual choice
 
     element.click();
-    await wait(100);
+    await wait(150);
     let option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
     if (!option && element instanceof HTMLInputElement) {
       setNativeValue(element, wanted);
-      await wait(250);
-      option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
+      await wait(isLocation ? 900 : 350);
+      option = visibleOptions().find((item) => optionMatches(item.textContent, wanted))
+        || visibleOptions()[0];
     }
     if (!option) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -250,7 +254,11 @@
       element.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     }
-    if (element.getAttribute('role') === 'combobox') return fillCombo(element, field);
+    if (
+      element.getAttribute('role') === 'combobox'
+      || element.getAttribute('aria-autocomplete')
+      || /location/i.test(String(element.id || element.name || ''))
+    ) return fillCombo(element, field);
     if (element.type === 'radio') {
       const radios = [...document.querySelectorAll('input[type="radio"]')]
         .filter((item) => item.name === element.name || item.closest('fieldset') === element.closest('fieldset'));
@@ -625,6 +633,13 @@
         observer.disconnect();
       }, 120000);
     } catch (error) {
+      try {
+        void send({
+          type: 'PROGRESS',
+          stage: 'waiting_for_user',
+          detail: { detail: 'Browser helper error: ' + String(error?.message || error).slice(0, 700) },
+        });
+      } catch { /* extension context may be unavailable */ }
       banner(error.message || 'Could not load prepared answers.', true);
     }
   })();
