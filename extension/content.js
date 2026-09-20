@@ -247,6 +247,17 @@
     persist(data);
   };
 
+  const openApplicationForm = () => {
+    const actions = [...document.querySelectorAll('a, button')];
+    const trigger = actions.find((item) => {
+      const text = normalize(item.textContent);
+      return ['apply now', 'apply for this job', 'start application', 'apply to this job'].includes(text);
+    });
+    if (!trigger) return false;
+    banner('HireRadar is opening the application form…');
+    trigger.click();
+    return true;
+  };
   const submitPreparedForm = (data) => {
     if (!data.autoSubmitRequested || data.submitStarted) return false;
     const form = document.querySelector('form');
@@ -293,6 +304,10 @@
           if (await fill(field)) completed.add(field.name);
         }
         const remaining = fields.length - completed.size;
+        if (remaining === fields.length && openApplicationForm()) {
+          running = false;
+          return;
+        }
         if (data.browserWorker) {
           void chrome.runtime.sendMessage({
             type: 'PROGRESS',

@@ -57,6 +57,16 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
 });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === POLL_ALARM) void poll(); });
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (!tab.id || !tab.openerTabId) return;
+  const result = await chrome.storage.session.get('job:' + tab.openerTabId);
+  const job = currentByTab.get(tab.openerTabId) || result['job:' + tab.openerTabId];
+  if (!job) return;
+  currentByTab.delete(tab.openerTabId);
+  await chrome.storage.session.remove('job:' + tab.openerTabId);
+  currentByTab.set(tab.id, job);
+  await chrome.storage.session.set({ ['job:' + tab.id]: job });
+});
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
   const result = await chrome.storage.session.get('job:' + tabId);
