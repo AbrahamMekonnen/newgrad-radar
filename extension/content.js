@@ -413,7 +413,28 @@
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
       const label = bad && (bad.labels?.[0]?.textContent || bad.getAttribute('aria-label') || bad.name || bad.id);
-      banner('The ATS still needs: "' + String(label || 'a required field').replace(/\s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
+      const diagnostic = bad ? {
+        name: bad.name || '',
+        id: bad.id || '',
+        type: bad.type || bad.tagName,
+        label: String(label || '').replace(/s+/g, ' ').trim().slice(0, 300),
+        message: bad.validationMessage || '',
+        checked: typeof bad.checked === 'boolean' ? bad.checked : undefined,
+        files: bad.files?.length,
+        value: bad.type === 'file' ? undefined : String(bad.value || '').slice(0, 100),
+      } : { label: 'unknown required field' };
+      if (data.browserWorker) {
+        void send({
+          type: 'PROGRESS',
+          stage: 'waiting_for_user',
+          detail: {
+            filled: (data.fields || []).length,
+            total: (data.fields || []).length,
+            detail: JSON.stringify({ message: 'ATS native validation blocked submission.', invalid: diagnostic }),
+          },
+        });
+      }
+      banner('The ATS still needs: "' + String(label || 'a required field').replace(/s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
       return false;
     }
     data.submitStarted = true;
