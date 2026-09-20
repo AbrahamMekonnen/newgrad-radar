@@ -70,6 +70,11 @@ export async function GET(request: NextRequest) {
     field.value !== null && field.value !== undefined && field.value !== '' && String(field.value).toLowerCase() !== 'unfilled');
   const missingRequired = allFields.some((field: Record<string, unknown>) =>
     field.required === true && (field.source === 'user_needed' || field.value === null || field.value === undefined || field.value === '' || String(field.value).toLowerCase() === 'unfilled'));
+  // The user's explicit auto-submit opt-in. The extension uses this (plus the
+  // ATS's own form validity) to decide whether to submit, so a field the server
+  // left for live resolution no longer permanently blocks submission.
+  const { data: prof } = await db.from('user_profiles')
+    .select('auto_submit').eq('user_id', device.user_id).maybeSingle();
   return json({ job: {
     id: row.id,
     leaseId: row.browser_lease_id,
@@ -78,6 +83,7 @@ export async function GET(request: NextRequest) {
     jobUrl: row.job_url,
     atsType: row.ats_type,
     fields,
+    autoSubmit: prof?.auto_submit === true,
     autoSubmitRequested: !missingRequired,
   }});
 }

@@ -394,7 +394,11 @@
     return true;
   };
   const submitPreparedForm = (data) => {
-    if (!data.autoSubmitRequested || data.submitStarted) return false;
+    // Submit when the user opted into auto-submit (data.autoSubmit) OR the server
+    // prep already flagged it — but NOT on the stale prep flag alone. This is
+    // only reached once every prepared field is filled; checkValidity below is
+    // the real completeness gate (the ATS itself confirms all required fields).
+    if ((!data.autoSubmit && !data.autoSubmitRequested) || data.submitStarted) return false;
     const form = document.querySelector('form');
     if (form?.checkValidity && !form.checkValidity()) {
       banner('HireRadar filled the prepared answers, but the ATS still reports a required field. Review it before submitting.', true);

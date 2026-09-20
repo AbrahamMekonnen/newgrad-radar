@@ -71,12 +71,15 @@ export async function GET(request: NextRequest) {
     field.required === true && field.type === 'input_file'
   );
   const submitStatus = (row.submit_log as { status?: string } | null)?.status || '';
+  const { data: prof } = await db.from('user_profiles')
+    .select('auto_submit').eq('user_id', row.user_id).maybeSingle();
   return NextResponse.json({
     jobTitle: row.job_title,
     companyName: row.company_name,
     jobUrl: row.job_url,
     atsType: row.ats_type,
     fields,
+    autoSubmit: prof?.auto_submit === true,
     autoSubmitRequested: ['browser_required', 'needs_captcha'].includes(submitStatus)
       && !hasMissingRequired && !requiresFileUpload,
   }, { headers: cors });
