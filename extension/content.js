@@ -192,7 +192,7 @@
         name: node.getAttribute('name'),
         role: node.getAttribute('role'),
         type: node.getAttribute('type'),
-        text: String(node.textContent || '').replace(/s+/g, ' ').trim().slice(0, 300),
+        text: String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300),
         htmlFor: node.getAttribute('for'),
       }));
     return { name: field.name, label: field.label, wanted: answerLabel(field), nodes };
@@ -404,7 +404,14 @@
       const text = normalize(item.textContent || item.value);
       return text === 'submit application' || text === 'submit' || text === 'apply';
     });
-    if (!submit || submit.disabled) return false;
+    if (!submit) {
+      banner('HireRadar filled the form but could not find the ATS submit button.', true);
+      return false;
+    }
+    if (submit.disabled) {
+      banner('The ATS submit button is still disabled. HireRadar is checking for a missing field...', true);
+      return false;
+    }
     // Validate the form that actually CONTAINS the submit button, not the first
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
@@ -417,7 +424,7 @@
         name: bad.name || '',
         id: bad.id || '',
         type: bad.type || bad.tagName,
-        label: String(label || '').replace(/s+/g, ' ').trim().slice(0, 300),
+        label: String(label || '').replace(/\s+/g, ' ').trim().slice(0, 300),
         message: bad.validationMessage || '',
         checked: typeof bad.checked === 'boolean' ? bad.checked : undefined,
         files: bad.files?.length,
@@ -434,7 +441,7 @@
           },
         });
       }
-      banner('The ATS still needs: "' + String(label || 'a required field').replace(/s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
+      banner('The ATS still needs: "' + String(label || 'a required field').replace(/\s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
       return false;
     }
     data.submitStarted = true;

@@ -59,16 +59,29 @@ export async function GET(request: NextRequest) {
   }
 
   const allFields = Array.isArray(row.prepared_data) ? row.prepared_data : [];
+  const isSupportedResume = (field: Record<string, unknown>) => {
+    if (field.type !== 'input_file' && field.source !== 'file') return true;
+    if (typeof field.value !== 'string') return false;
+    try {
+      const url = new URL(field.value);
+      return url.hostname === 'jmrbyubrrpxxvotsljms.supabase.co'
+        && url.pathname.includes('/storage/v1/object/public/resumes/');
+    } catch {
+      return false;
+    }
+  };
   const fields = allFields.filter((field: Record<string, unknown>) =>
-    field.value !== null && field.value !== undefined && field.value !== '' && field.type !== 'input_file'
+    field.value !== null && field.value !== undefined && field.value !== '' && isSupportedResume(field)
   );
   const hasMissingRequired = allFields.some((field: Record<string, unknown>) =>
     field.required === true && (
       field.source === 'user_needed' || field.value === null || field.value === undefined || field.value === ''
     )
   );
-  const requiresFileUpload = allFields.some((field: Record<string, unknown>) =>
-    field.required === true && field.type === 'input_file'
+  const hasUnresolvedRequiredFile = allFields.some((field: Record<string, unknown>) =>
+    field.required === true
+      && (field.type === 'input_file' || field.source === 'file')
+      && !isSupportedResume(field)
   );
   const submitStatus = (row.submit_log as { status?: string } | null)?.status || '';
   const { data: prof } = await db.from('user_profiles')
@@ -81,7 +94,7 @@ export async function GET(request: NextRequest) {
     fields,
     autoSubmit: prof?.auto_submit === true,
     autoSubmitRequested: ['browser_required', 'needs_captcha'].includes(submitStatus)
-      && !hasMissingRequired && !requiresFileUpload,
+      && !hasMissingRequired && !hasUnresolvedRequiredFile,
   }, { headers: cors });
 }
 
