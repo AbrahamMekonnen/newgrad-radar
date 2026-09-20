@@ -398,7 +398,16 @@
     // prep already flagged it — but NOT on the stale prep flag alone. This is
     // only reached once every prepared field is filled; checkValidity below is
     // the real completeness gate (the ATS itself confirms all required fields).
-    if ((!data.autoSubmit && !data.autoSubmitRequested) || data.submitStarted) return false;
+    if (!data.autoSubmit && !data.autoSubmitRequested) return false;
+    const now = Date.now();
+    // A click is an attempt, not proof of submission. Keep it in flight long
+    // enough for the ATS response, then permit one controlled retry if the page
+    // neither navigated nor displayed a success state.
+    if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 15000) return true;
+    if ((data.submitAttempts || 0) >= 2) {
+      banner('The ATS did not accept two submit attempts. Review the visible form error; HireRadar has not marked this application as submitted.', true);
+      return false;
+    }
     const controls = [...document.querySelectorAll('button, input[type="submit"]')];
     const submit = controls.find((item) => {
       const text = normalize(item.textContent || item.value);
@@ -444,9 +453,21 @@
       banner('The ATS still needs: "' + String(label || 'a required field').replace(/\s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
       return false;
     }
-    data.submitStarted = true;
+    data.submitAttempts = (data.submitAttempts || 0) + 1;
+    data.lastSubmitAttemptAt = now;
     persist(data);
-    banner('HireRadar filled every required field and is submitting the application…');
+    if (data.browserWorker) {
+      void send({
+        type: 'PROGRESS',
+        stage: 'submit_started',
+        detail: {
+          filled: (data.fields || []).length,
+          total: (data.fields || []).length,
+          detail: 'ATS submit attempt ' + data.submitAttempts + ' started.',
+        },
+      });
+    }
+    banner('HireRadar filled every required field and is submitting the application...');
     submit.click();
     return true;
   };
@@ -539,11 +560,9 @@
       setTimeout(run, 750);
       setTimeout(run, 2000);
       const retry = setInterval(() => {
+        // Continue through the submit phase. Field completeness alone is not a
+        // terminal state; only the ATS success page confirms submission.
         run();
-        // Stop once every prepared field is filled AND no unresolved live field remains.
-        if (completed.size === fields.length && scanUnfilledFields().every((f) => resolvedLive.has(f.name))) {
-          clearInterval(retry);
-        }
       }, 3000);
       setTimeout(() => {
         clearInterval(retry);

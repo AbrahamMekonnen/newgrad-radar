@@ -73,16 +73,6 @@ export async function GET(request: NextRequest) {
   const fields = allFields.filter((field: Record<string, unknown>) =>
     field.value !== null && field.value !== undefined && field.value !== '' && isSupportedResume(field)
   );
-  const hasMissingRequired = allFields.some((field: Record<string, unknown>) =>
-    field.required === true && (
-      field.source === 'user_needed' || field.value === null || field.value === undefined || field.value === ''
-    )
-  );
-  const hasUnresolvedRequiredFile = allFields.some((field: Record<string, unknown>) =>
-    field.required === true
-      && (field.type === 'input_file' || field.source === 'file')
-      && !isSupportedResume(field)
-  );
   const submitStatus = (row.submit_log as { status?: string } | null)?.status || '';
   const { data: prof } = await db.from('user_profiles')
     .select('auto_submit').eq('user_id', row.user_id).maybeSingle();
@@ -93,8 +83,10 @@ export async function GET(request: NextRequest) {
     atsType: row.ats_type,
     fields,
     autoSubmit: prof?.auto_submit === true,
-    autoSubmitRequested: ['browser_required', 'needs_captcha'].includes(submitStatus)
-      && !hasMissingRequired && !hasUnresolvedRequiredFile,
+    // Opening this tokenized handoff is the user's explicit request to finish
+    // this application. The extension still requires the live ATS form to pass
+    // native validation before it can submit.
+    autoSubmitRequested: ['browser_required', 'needs_captcha'].includes(submitStatus),
   }, { headers: cors });
 }
 
