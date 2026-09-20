@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
   "permissions": [
     "storage",
@@ -47,6 +47,7 @@
       "js": [
         "content.js"
       ],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ]
