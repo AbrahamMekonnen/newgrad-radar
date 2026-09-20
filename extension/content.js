@@ -433,7 +433,7 @@
     trigger.click();
     return true;
   };
-  const submitPreparedForm = (data) => {
+  const submitPreparedForm = async (data) => {
     // Submit when the user opted into auto-submit (data.autoSubmit) OR the server
     // prep already flagged it — but NOT on the stale prep flag alone. This is
     // only reached once every prepared field is filled; checkValidity below is
@@ -445,7 +445,7 @@
     // neither navigated nor displayed a success state.
     if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 15000) return true;
     if ((data.submitAttempts || 0) >= 2) {
-      if (data.browserWorker) void send({
+      if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
         detail: { detail: 'The ATS did not accept two submit attempts; the application was not marked submitted.' },
       });
@@ -461,7 +461,7 @@
         || /^(send|complete) (your )?application\b/.test(text);
     });
     if (!submit) {
-      if (data.browserWorker) void send({
+      if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
         detail: { detail: 'The form is filled, but no visible ATS submit button was found.' },
       });
@@ -469,7 +469,7 @@
       return false;
     }
     if (submit.disabled) {
-      if (data.browserWorker) void send({
+      if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
         detail: { detail: 'The ATS submit button is visible but disabled.' },
       });
@@ -495,7 +495,7 @@
         value: bad.type === 'file' ? undefined : String(bad.value || '').slice(0, 100),
       } : { label: 'unknown required field' };
       if (data.browserWorker) {
-        void send({
+        await send({
           type: 'PROGRESS',
           stage: 'waiting_for_user',
           detail: {
@@ -512,7 +512,7 @@
     data.lastSubmitAttemptAt = now;
     persist(data);
     if (data.browserWorker) {
-      void send({
+      await send({
         type: 'PROGRESS',
         stage: 'submit_started',
         detail: {
@@ -603,7 +603,7 @@
           }
           if (remaining === fields.length && openApplicationForm()) return;
           if (data.browserWorker && !data.lastSubmitAttemptAt) {
-            void send({
+            await send({
               type: 'PROGRESS',
               stage: remaining ? 'waiting_for_user' : 'filling',
               detail: {
@@ -620,7 +620,7 @@
           if (data.autoSubmit || data.autoSubmitRequested) {
             // submitPreparedForm either submits (we're done) or banners the exact
             // blocking field — don't overwrite that specific message below.
-            if (submitPreparedForm(data)) return;
+            if (await submitPreparedForm(data)) return;
           } else if (remaining) {
             banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
           } else {
