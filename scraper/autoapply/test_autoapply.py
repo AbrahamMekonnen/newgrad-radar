@@ -176,6 +176,39 @@ def test_lever_live():
         check("lever live", False, str(e)[:120])
 
 
+def test_smartrecruiters_live():
+    print("[integration] SmartRecruiters live form fetch + resolve")
+    try:
+        import smartrecruiters_adapter as sr
+        form = sr.fetch_form("AccentureFederalServices", "78366121")
+        check("smartrecruiters fetched a non-empty form", len(form) >= 5, f"got {len(form)} fields")
+        p = gh.Profile(first_name="A", last_name="B", email="a@b.com", resume_url="r.pdf",
+                       work_authorized=True, require_sponsorship=False)
+        res = sr.resolve(form, p)
+        check("smartrecruiters resolves required identity",
+              all(any(r.category == cat and r.value for r in res["resolved"])
+                  for cat in ("first_name", "last_name", "email", "resume")))
+    except Exception as e:
+        check("smartrecruiters live", False, str(e)[:120])
+
+
+def test_workday_live():
+    print("[integration] Workday live public schema fetch + resolve")
+    try:
+        import workday_adapter as wd
+        url = ("https://micron.wd1.myworkdayjobs.com/en-US/micron/job/Richardson-TX/"
+               "New-College-Grad---AI-Infrastructure---HBM-Architecture-Engineer_JR109578")
+        token, jid = wd.parse_url(url)
+        form = wd.fetch_form(token, jid)
+        check("workday fetched a non-empty form", len(form) >= 5, f"got {len(form)} fields")
+        p = gh.Profile(first_name="A", last_name="B", email="a@b.com", resume_url="r.pdf",
+                       work_authorized=True, require_sponsorship=False)
+        res = wd.resolve(form, p)
+        check("workday resolves profile fields", sum(r.source == "profile" for r in res["resolved"]) >= 4)
+    except Exception as e:
+        check("workday live", False, str(e)[:120])
+
+
 def test_rules_matching_live():
     print("[integration] rules matching against the live jobs DB")
     try:
@@ -295,7 +328,8 @@ def main():
         _load_env()
         has_db = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
         print("\n=== INTEGRATION ===")
-        test_greenhouse_live(); test_lever_live(); test_ashby_live(); test_submit_detects_live_captcha()
+        test_greenhouse_live(); test_lever_live(); test_ashby_live()
+        test_smartrecruiters_live(); test_workday_live(); test_submit_detects_live_captcha()
         if has_db:
             test_rules_matching_live()
         test_prepare_end_to_end()

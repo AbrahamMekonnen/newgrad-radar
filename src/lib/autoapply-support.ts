@@ -5,7 +5,6 @@
 
 export const AUTOAPPLY_SUPPORTED_ATS = [
   'greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters',
-  'bamboohr', 'jobvite', 'jazzhr', 'recruitee', 'breezyhr', 'icims', 'taleo',
 ] as const;
 
 export function isAutoApplySupported(ats?: string | null): boolean {
