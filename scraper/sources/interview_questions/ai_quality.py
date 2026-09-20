@@ -36,9 +36,13 @@ _PROMPT = (
 )
 
 
-def classify_batch(texts: list[str]) -> list[bool]:
-    """Return is_question per text. On total LLM failure, returns all True
-    (keep) so a provider outage never deletes data."""
+def classify_batch(texts: list[str]) -> list[bool] | None:
+    """Return is_question per text, or None if the LLM was unavailable.
+
+    None (not keep-all) signals failure so the caller does NOT stamp the rows
+    processed — they must be retried on a later run, never silently kept AND
+    marked done. A provider outage therefore never deletes data and never
+    permanently exempts junk from review."""
     if not texts:
         return []
     items = "\n".join(f"[{i}] {(t or '').strip()[:400]}" for i, t in enumerate(texts))
@@ -49,11 +53,11 @@ def classify_batch(texts: list[str]) -> list[bool]:
             out = []
             for i in range(len(texts)):
                 v = data.get(str(i))
-                # default keep (True) when the model omits an index
+                # default keep (True) when the model omits a single index
                 out.append(True if v is None else bool(v) if not isinstance(v, str)
                            else v.strip().lower() in ("true", "yes", "1"))
             return out
-    return [True] * len(texts)  # LLM unavailable → keep, never delete blindly
+    return None  # LLM unavailable → signal failure; caller leaves rows for retry
 
 
 if __name__ == "__main__":
@@ -65,5 +69,6 @@ if __name__ == "__main__":
         "t meant to be solutions. When you see something like that",
         "Tell me about a time you disagreed with your manager.",
     ]
-    for t, ok in zip(samples, classify_batch(samples)):
+    verdicts = classify_batch(samples) or [True] * len(samples)
+    for t, ok in zip(samples, verdicts):
         print(("QUESTION " if ok else "JUNK     ") + t[:60])

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import argparse
 import logging
 import datetime as dt
@@ -55,6 +56,11 @@ def run(sources=None, limit=None, batch_size=25, dry_run=False) -> dict:
         if not rows:
             break
         verdicts = classify_batch([r.get("question_text") or "" for r in rows])
+        if verdicts is None:
+            # LLM unavailable — do NOT stamp these rows; stop so a later run
+            # retries them instead of marking them done-but-unclassified.
+            logger.warning("LLM unavailable; stopping so remaining rows are retried later")
+            break
         junk_ids = [r["id"] for r, ok in zip(rows, verdicts) if not ok]
         keep_ids = [r["id"] for r, ok in zip(rows, verdicts) if ok]
         processed += len(rows)
@@ -78,6 +84,7 @@ def run(sources=None, limit=None, batch_size=25, dry_run=False) -> dict:
         logger.info(f"  processed {processed}, junked {junked}")
         if dry_run and processed >= (limit or 0):
             break
+        time.sleep(1.0)  # pace to ease free-tier LLM rate limits
     logger.info(f"DONE: processed {processed}, junked {junked} "
                 f"({'dry-run' if dry_run else 'applied'})")
     return {"processed": processed, "junked": junked}
