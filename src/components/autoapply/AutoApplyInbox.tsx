@@ -236,6 +236,10 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auto-Apply Queue</h1>
           <div className="flex items-center gap-3 shrink-0">
+            <button onClick={connectBrowser}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 dark:text-indigo-300">
+              Connect browser
+            </button>
             {readyIds().length > 0 && (
               <button
                 onClick={() => submit({ all: true }, readyIds())}
