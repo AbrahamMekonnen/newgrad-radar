@@ -358,6 +358,7 @@
       const fields = (data.fields || []).filter((field) =>
         field.value !== null && field.value !== undefined && field.value !== '' && normalize(field.value) !== 'unfilled');
       const completed = new Set();
+      const resolvedLive = new Set();  // live field names already sent for resolution
       let running = false;
       const run = async () => {
         if (running) return;
@@ -377,16 +378,18 @@
           if (await fill(field)) completed.add(field.name);
         }
         const remaining = fields.length - completed.size;
-        const liveFields = scanUnfilledFields();
-        if (liveFields.length && !data.liveResolutionStarted) {
-          data.liveResolutionStarted = true;
-          persist(data);
-          const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: liveFields });
+        // Resolve live fields that the server prep missed — including ones the
+        // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
+        // so a field that appears after the first pass still gets resolved.
+        const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
+        if (newLive.length) {
+          newLive.forEach((field) => resolvedLive.add(field.name));
+          const resolved = await chrome.runtime.sendMessage({ type: 'RESOLVE_FIELDS', fields: newLive });
           for (const answer of resolved?.answers || []) {
-            const live = liveFields.find((field) => field.name === answer.name);
+            const live = newLive.find((field) => field.name === answer.name);
             if (live) await fill({ ...live, value: answer.value, source: answer.source });
           }
-          data.liveNeedsUser = resolved?.needsUser || [];
+          data.liveNeedsUser = [...(data.liveNeedsUser || []), ...(resolved?.needsUser || [])];
           persist(data);
         }
         if (remaining === fields.length && openApplicationForm()) {
@@ -415,9 +418,10 @@
       };
 
       let debounce;
+      // Re-run fill whenever the ATS mutates the DOM — this is how late-rendered
+      // dynamic fields get filled. (Previously guarded by a flag that was always
+      // true, so this never fired and dynamic fields were left unfilled.)
       const observer = new MutationObserver(() => {
-  if (window.__hireRadarAutoApplyLoaded) return;
-  window.__hireRadarAutoApplyLoaded = true;
         clearTimeout(debounce);
         debounce = setTimeout(run, 120);
       });
@@ -426,14 +430,13 @@
       setTimeout(run, 750);
       setTimeout(run, 2000);
       const retry = setInterval(() => {
-  if (window.__hireRadarAutoApplyLoaded) return;
-  window.__hireRadarAutoApplyLoaded = true;
         run();
-        if (completed.size === fields.length) clearInterval(retry);
+        // Stop once every prepared field is filled AND no unresolved live field remains.
+        if (completed.size === fields.length && scanUnfilledFields().every((f) => resolvedLive.has(f.name))) {
+          clearInterval(retry);
+        }
       }, 3000);
       setTimeout(() => {
-  if (window.__hireRadarAutoApplyLoaded) return;
-  window.__hireRadarAutoApplyLoaded = true;
         clearInterval(retry);
         observer.disconnect();
       }, 120000);
