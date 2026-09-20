@@ -409,7 +409,10 @@
     const actions = [...document.querySelectorAll('a, button')];
     const trigger = actions.find((item) => {
       const text = normalize(item.textContent);
-      return ['apply now', 'apply for this job', 'start application', 'apply to this job'].includes(text);
+      return [
+        'apply now', 'apply for this job', 'start application', 'apply to this job',
+        "i'm interested", 'im interested', 'interested',
+      ].includes(text);
     });
     if (!trigger) return false;
     banner('HireRadar is opening the application form…');

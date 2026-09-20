@@ -270,6 +270,15 @@ def _finish(client, row_id, status, reason, ats, extra=None):
             logger.warning(f"  status write failed for {row_id}: {e2}")
 
 
+def _is_submission_ready(prepared: dict) -> bool:
+    """A form is browser-ready when every required field is resolved.
+
+    ready_pct includes optional fields, so it is a display metric and must not
+    block an otherwise complete, user-authorized submission.
+    """
+    return prepared.get("status") == "prepared" and not (prepared.get("needs_user") or [])
+
+
 def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
     """Prepare a single queued application and write it back. FULLY ISOLATED: any
     failure is captured on THIS row (status + prepare_log) and never raises, so
@@ -320,7 +329,7 @@ def _prepare_one(client, COMPANIES, r: dict, profile) -> bool:
         # 'form_unavailable' / 'form_fetch_failed' keep their real status so they
         # stay OUT of the inbox (which shows only 'prepared') and are diagnosable.
         needs_user = prepared.get("needs_user") or []
-        complete = pstatus == "prepared" and not needs_user and prepared.get("ready_pct") == 100
+        complete = _is_submission_ready(prepared)
         submit_after_prepare = bool((r.get("answers") or {}).get("submit_after_prepare"))
         final_status = "submit_requested" if complete and (profile.auto_submit or submit_after_prepare) else (
             "prepared" if pstatus == "prepared" else pstatus

@@ -54,6 +54,20 @@ class _Client:
 
 
 class AutoApplyRegressionTests(unittest.TestCase):
+    def test_optional_fields_do_not_block_authorized_submission(self):
+        prepared = {
+            "status": "prepared",
+            "ready_pct": 65,
+            "needs_user": [],
+            "fields": [
+                {"required": True, "value": "filled"},
+                {"required": False, "value": None},
+            ],
+        }
+        self.assertTrue(prepare_worker._is_submission_ready(prepared))
+        prepared["needs_user"] = [{"required": True, "value": None}]
+        self.assertFalse(prepare_worker._is_submission_ready(prepared))
+
     def test_profile_derives_sponsorship_and_location(self):
         client = _Client({
             "user_profiles": {

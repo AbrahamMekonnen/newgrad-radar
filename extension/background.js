@@ -72,6 +72,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   const result = await chrome.storage.session.get('job:' + tabId);
   const job = currentByTab.get(tabId) || result['job:' + tabId];
   if (!job) return;
+  const currentUrl = String(changeInfo.url || tab.url || '');
+  if (/community\.workday\.com\/invalid-url/i.test(currentUrl)) {
+    currentByTab.delete(tabId);
+    await chrome.storage.session.remove('job:' + tabId);
+    await report(job, 'failed', { detail: 'The Workday posting redirected to its invalid/expired-job page.' }).catch(() => undefined);
+    void poll();
+    return;
+  }
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   } catch (error) {
