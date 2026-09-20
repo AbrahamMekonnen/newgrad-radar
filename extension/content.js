@@ -67,8 +67,9 @@
     if (field.name) {
       const exact = document.getElementsByName(field.name)[0];
       if (exact) return exact;
-      const suffix = [...document.querySelectorAll('[name]')]
-        .find((el) => String(el.getAttribute('name')).endsWith(String(field.name)));
+      const named = [...document.querySelectorAll('[name]')];
+      const suffix = named.find((el) => String(el.getAttribute('name')).endsWith(String(field.name)))
+        || named.find((el) => String(el.getAttribute('name')).includes(String(field.name)));
       if (suffix) return suffix;
     }
     return byLabel(field.label);
@@ -119,13 +120,29 @@
     return true;
   };
 
+  const fillScopedChoice = (field) => {
+    const question = normalize(field.label);
+    const wanted = answerLabel(field);
+    const containers = [...document.querySelectorAll('fieldset, [role="radiogroup"], [class*="field"], [class*="question"], form > div')];
+    const container = containers.filter((item) => normalize(item.textContent).includes(question))
+      .sort((a, b) => String(a.textContent).length - String(b.textContent).length)[0];
+    if (!container) return false;
+    const choices = [...container.querySelectorAll('label, button, [role="radio"], [role="option"]')]
+      .filter((item) => item.getClientRects().length > 0);
+    const choice = choices.find((item) => optionMatches(item.textContent, wanted));
+    if (!choice) return false;
+    const input = choice.querySelector?.('input') || (choice.htmlFor && document.getElementById(choice.htmlFor));
+    (input || choice).click();
+    (input || choice).dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  };
   const fill = async (field) => {
     let element = findField(field);
     if (!element) {
       await clickManualEntry(field);
       element = findField(field);
     }
-    if (!element) return false;
+    if (!element) return fillScopedChoice(field);
     const value = field.value;
     if (element.type === 'file') {
       if (!value || typeof value !== 'string') return false;
@@ -162,7 +179,7 @@
         .filter((item) => item.name === element.name || item.closest('fieldset') === element.closest('fieldset'));
       const option = radios.find((item) => String(item.value) === String(value))
         || radios.find((item) => optionMatches(item.parentElement?.textContent, answerLabel(field)));
-      if (!option) return false;
+      if (!option) return fillScopedChoice(field);
       option.click();
       return true;
     }
