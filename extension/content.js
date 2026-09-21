@@ -456,12 +456,33 @@
     persist(data);
   };
 
+  const fieldLabelFor = (element) => {
+    const labelledBy = String(element.getAttribute('aria-labelledby') || '').split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent || '').filter(Boolean).join(' ');
+    const container = element.closest('.application-question, fieldset, [class*=field], [class*=question], [class*=phone], [data-testid]');
+    const heading = container?.querySelector('legend, label, .application-label, [class*=label], [class*=heading]');
+    return String(element.labels?.[0]?.textContent || element.getAttribute('aria-label') || labelledBy
+      || heading?.textContent || element.getAttribute('placeholder') || container?.textContent || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 1000);
+  };
+  const liveFieldFor = (element, index = 0) => {
+    let name = element.name || element.id || element.dataset.hireradarField;
+    if (!name) {
+      name = 'hireradar-anonymous-' + index + '-' + Math.random().toString(36).slice(2, 8);
+      element.dataset.hireradarField = name;
+    }
+    const options = element instanceof HTMLSelectElement
+      ? [...element.options].map((option) => option.textContent.trim()).filter(Boolean)
+      : [];
+    return { name, label: fieldLabelFor(element), type: element.type || element.getAttribute('role'), options };
+  };
   const scanUnfilledFields = () => {
     const controls = [...document.querySelectorAll('input, textarea, select, [role="combobox"]')];
     const seen = new Set();
     return controls.flatMap((element, index) => {
       if (element.getClientRects().length === 0 || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
-      const name = element.name || element.id || ('live-field-' + index);
+      const descriptor = liveFieldFor(element, index);
+      const name = descriptor.name;
       if (seen.has(name)) return [];
       seen.add(name);
 
@@ -476,12 +497,7 @@
       }
 
       if (element.type === 'checkbox' ? element.checked : String(element.value || '').trim()) return [];
-      const label = element.labels?.[0]?.textContent || element.getAttribute('aria-label')
-        || element.closest('fieldset, [class*="field"], [class*="question"]')?.textContent || '';
-      const options = element instanceof HTMLSelectElement
-        ? [...element.options].map((option) => option.textContent.trim()).filter(Boolean)
-        : [];
-      return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: element.type || element.getAttribute('role'), options }];
+      return [descriptor];
     }).filter((field) => field.label);
   };
   const fieldAccepted = (field) => {
@@ -596,7 +612,7 @@
     if (form?.checkValidity && !form.checkValidity()) {
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
-      const label = bad && (bad.labels?.[0]?.textContent || bad.getAttribute('aria-label') || bad.name || bad.id);
+      const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
       if (bad?.type === 'radio') {
         const group = [...form.querySelectorAll('input[type="radio"]')].filter((item) => item.name === bad.name);
         const container = bad.closest('.application-question, fieldset, [role="radiogroup"], [class*="question"]');
@@ -607,6 +623,16 @@
           const result = await resolveFieldBounded({ name: bad.name, label: question, type: 'radio', options }, bad.validationMessage || '');
           if (result.accepted) {
             banner('HireRadar resolved the required choice and is retrying submission...');
+            return true;
+          }
+        }
+      }
+      if (bad && bad.type !== 'radio' && data.browserWorker) {
+        const live = liveFieldFor(bad, 9999);
+        if (live.label) {
+          const result = await resolveFieldBounded(live, bad.validationMessage || '');
+          if (result.accepted) {
+            banner('HireRadar resolved the required field and is retrying submission...');
             return true;
           }
         }

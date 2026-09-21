@@ -79,6 +79,9 @@ jobs:
           GITHUB_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          # Government source (USAJobs) — the scraper skips it without these.
+          USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
+          USAJOBS_EMAIL: ${{ secrets.USAJOBS_EMAIL }}
         run: |
           cd scraper
           # Refresh the company universe from the public new-grad feed (adds

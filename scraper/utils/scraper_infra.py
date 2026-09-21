@@ -192,14 +192,24 @@ def cached_request(url: str, fetch_fn, ttl: int = 21600) -> Optional[str]:
                 pass
         return content
 
-    # Fetch and cache
+    # Fetch, then cache best-effort. A caching failure must NEVER discard a
+    # good response: cache.set expects a requests.Response or a dict with a
+    # 'content' key, but fetch_fn returns text/bytes, so wrap those before
+    # storing (previously this raised AttributeError, was swallowed, and the
+    # whole call returned None even though the fetch succeeded).
     try:
         response = fetch_fn(url)
-        if response:
-            cache.set(url, response)
-        return response
     except Exception:
         return None
+    if response:
+        try:
+            if isinstance(response, (str, bytes, bytearray)):
+                cache.set(url, {"content": response, "status_code": 200, "headers": {}})
+            else:
+                cache.set(url, response)
+        except Exception:
+            pass
+    return response
 
 
 def wait_for_rate_limit(domain: str):
