@@ -48,3 +48,12 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: npx tsx scripts/backfill-filters.ts
+
+      - name: Populate derived filters (experience split + high_paying badge)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PYTHONUTF8: "1"
+        run: |
+          cd scraper
+          python backfill_derived.py || echo "::warning::derived backfill had errors"

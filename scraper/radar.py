@@ -551,6 +551,14 @@ def extract_badges(raw: dict, company_slug: str, company_info: dict) -> list[str
     if company_info.get("recently_funded") or source == "hot_hiring":
         badges.append("just_funded")
 
+    # High-paying badge from the salary we now scrape (>= $150k base). Kept in
+    # sync with the "high_paying" smart filter threshold in the jobs page.
+    try:
+        if int(raw.get("salary_min") or 0) >= 150000:
+            badges.append("high_paying")
+    except (TypeError, ValueError):
+        pass
+
     # Check if posted in last 24 hours
     posted = raw.get("posted")
     if posted:

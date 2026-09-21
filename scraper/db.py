@@ -117,8 +117,10 @@ def is_us_location(location: Optional[str]) -> bool:
 # A title-derived level is authoritative: "Senior/Staff/Manager/Lead" is never
 # a new-grad role, so we tag it and exclude it from the New Grad filter. Generic
 # titles ("Software Engineer") stay whatever the scraper set (often null).
+_LVL_PRINCIPAL = re.compile(
+    r"\b(principal|distinguished|fellow)\b", re.IGNORECASE)
 _LVL_STAFF = re.compile(
-    r"\b(staff|principal|distinguished|fellow|architect|director|vp|"
+    r"\b(staff|architect|director|vp|"
     r"vice\s+president|head\s+of|l[6-9]|level\s*[6-9])\b", re.IGNORECASE)
 _LVL_SENIOR = re.compile(
     r"\b(senior|sr\.?|lead|manager|mgr|l5|level\s*5|iii|iv|"
@@ -128,10 +130,13 @@ _LVL_MID = re.compile(r"\b(mid[\s-]*level|ii|[3-5]\+?\s*years)\b", re.IGNORECASE
 _LVL_INTERN = re.compile(r"\b(intern(ship)?|co[\s-]*op|apprentice(ship)?|summer\s*20\d\d)\b",
                          re.IGNORECASE)
 _LVL_NEWGRAD = re.compile(
-    r"\b(new\s*grad(uate)?|new\s*college\s*grad|entry[\s-]*level|early\s*career|"
+    r"\b(new\s*grad(uate)?|new\s*college\s*grad|early\s*career|"
     r"university\s*grad|campus|recent\s*grad(uate)?|"
     r"grad\s*(20)?2[4-9]|0[\s-]*2\s*years|l3|level\s*3|sde\s*[i1]\b|"
-    r"software\s*engineer\s*[i1]\b|associate)\b", re.IGNORECASE)
+    r"software\s*engineer\s*[i1]\b)\b", re.IGNORECASE)
+# "Entry level" / "Associate" roles are distinct from an explicit New Grad
+# posting; checked AFTER new-grad so a title carrying both still reads new_grad.
+_LVL_ENTRY = re.compile(r"\b(entry[\s-]*level|associate)\b", re.IGNORECASE)
 _LVL_JUNIOR = re.compile(r"\b(junior|jr\.?)\b", re.IGNORECASE)
 
 
@@ -144,6 +149,8 @@ def classify_experience_from_title(title: Optional[str]) -> Optional[str]:
     if not title:
         return None
     t = title
+    if _LVL_PRINCIPAL.search(t):
+        return "principal"
     if _LVL_STAFF.search(t):
         return "staff"
     if _LVL_SENIOR.search(t):
@@ -152,6 +159,8 @@ def classify_experience_from_title(title: Optional[str]) -> Optional[str]:
         return "intern"
     if _LVL_NEWGRAD.search(t):
         return "new_grad"
+    if _LVL_ENTRY.search(t):
+        return "entry_level"
     if _LVL_JUNIOR.search(t):
         return "junior"
     if _LVL_MID.search(t):

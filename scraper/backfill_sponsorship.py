@@ -56,28 +56,41 @@ def main() -> None:
             break
     print(f'distinct companies: {len(companies)}')
 
-    sponsors = []
+    # Non-sponsors are matched EXACTLY against the known list (defense/export-
+    # controlled firms) — never the fuzzy substring path, which would wrongly
+    # flag e.g. a company containing "la" as a non-sponsor.
+    non_sponsor_norms = {h1b.normalize_company_name(n) for n in h1b.KNOWN_NON_SPONSORS}
+
+    sponsors, non_sponsors = [], []
     for slug, name in companies.items():
         try:
             info = h1b.get_sponsorship_info(name)
         except Exception:
-            continue
-        # High-confidence only: the known-sponsor list. Skip fuzzy partial_match
-        # (it false-positives on single letters).
-        if info.get('is_sponsor') and info.get('confidence') == 'high':
+            info = {}
+        norm = h1b.normalize_company_name(name)
+        if norm in non_sponsor_norms:
+            non_sponsors.append(slug)
+        # High-confidence only: the known-sponsor list + DOL exact matches. Skip
+        # fuzzy partial_match (it false-positives on single letters).
+        elif info.get('is_sponsor') and info.get('confidence') == 'high':
             sponsors.append(slug)
-    print(f'{"[dry-run] " if args.dry_run else ""}companies matched as H1B sponsors: {len(sponsors)}')
+    pfx = "[dry-run] " if args.dry_run else ""
+    print(f'{pfx}matched as H1B sponsors: {len(sponsors)} | non-sponsors: {len(non_sponsors)}')
 
-    if not args.dry_run:
+    def apply(slugs: list[str], value: str) -> int:
         updated = 0
-        for i in range(0, len(sponsors), 50):
-            chunk = sponsors[i:i + 50]
+        for i in range(0, len(slugs), 50):
+            chunk = slugs[i:i + 50]
             # Only fill 'unknown' rows: incremental for new jobs, never clobber.
-            c.table('jobs').update({'sponsorship_status': 'sponsors'}) \
+            c.table('jobs').update({'sponsorship_status': value}) \
                 .in_('company_slug', chunk).eq('is_active', True) \
                 .eq('sponsorship_status', 'unknown').execute()
             updated += len(chunk)
-        print(f'marked sponsors for {updated} companies')
+        return updated
+
+    if not args.dry_run:
+        print(f'marked sponsors for {apply(sponsors, "sponsors")} companies')
+        print(f'marked no_sponsor for {apply(non_sponsors, "no_sponsor")} companies')
 
 
 if __name__ == '__main__':

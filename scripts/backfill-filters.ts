@@ -35,9 +35,20 @@ function salaryFor(slug: string, tier: string | null): { min: number; max: numbe
   const est = tier ? ESTIMATED_NEW_GRAD_RANGES[tier] : null;
   return est ? { min: est.min, max: est.max } : DEFAULT_RANGE;
 }
-function fundingFor(slug: string): string | null {
+// Tier implies a funding floor that is true by definition: a "unicorn" is a
+// $1B+ private company (past Series B), and a "yc" company has been through Y
+// Combinator (seed stage at minimum). We only use this when the precise company
+// map has nothing, so real data always wins. Other tiers span too many stages
+// to infer, so they stay null (honest — the filter shows nothing rather than a
+// guess).
+const TIER_FUNDING_FALLBACK: Record<string, string> = {
+  unicorn: 'series-b+',
+  yc: 'seed',
+};
+function fundingFor(slug: string, tier: string | null): string | null {
   const cd = KNOWN_COMPANIES[(slug || '').toLowerCase()];
-  return cd?.fundingStage ? fundingStageToFilter(cd.fundingStage) : null;
+  if (cd?.fundingStage) return fundingStageToFilter(cd.fundingStage);
+  return tier ? (TIER_FUNDING_FALLBACK[tier] ?? null) : null;
 }
 
 async function main() {
@@ -63,7 +74,7 @@ async function main() {
   let salaryGroups = 0, fundingGroups = 0;
   for (const { slug, tier } of pairs.values()) {
     const salary = salaryFor(slug, tier);
-    const funding = fundingFor(slug);
+    const funding = fundingFor(slug, tier);
     const patch: Record<string, unknown> = {};
     if (salary) { patch.salary_min = salary.min; patch.salary_max = salary.max; }
     if (funding) patch.funding_stage = funding;
