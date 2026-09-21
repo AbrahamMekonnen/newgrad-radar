@@ -10,7 +10,9 @@ Upgraded to use production infrastructure:
 - Unified scraper_infra module for stealth headers, rate limiting, and caching
 """
 
+import re
 from datetime import datetime
+from html import unescape
 from typing import Optional, List, Dict, Any
 
 try:
@@ -19,6 +21,16 @@ except ImportError:
     requests = None
 
 from config import REQUEST_TIMEOUT
+
+
+def strip_html(html: str) -> str:
+    """Remove HTML tags and decode entities (mirrors greenhouse/lever)."""
+    if not html:
+        return ""
+    text = re.sub(r'<[^>]+>', ' ', html)
+    text = unescape(text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 # Infrastructure availability flag
 INFRA_AVAILABLE = False
@@ -170,6 +182,13 @@ class AshbyScraper:
             job_url = job.get("jobUrl", "")
             apply_url = job.get("applyUrl", "") or job_url
 
+            # Keep the plain-text description so downstream enrichment (salary,
+            # sponsorship, work mode, deadlines) can reuse it instead of
+            # re-fetching + discarding it every run.
+            description = job.get("descriptionPlain") or ""
+            if not description and job.get("descriptionHtml"):
+                description = strip_html(job["descriptionHtml"])
+
             jobs.append({
                 "company": company_slug or board_token,
                 "title": job.get("title", ""),
@@ -179,6 +198,7 @@ class AshbyScraper:
                 "posted": self._parse_iso(job.get("publishedAt")),
                 "source": "ashby",
                 "external_id": job.get("id", ""),
+                "description": description or None,
             })
 
         # Cache results

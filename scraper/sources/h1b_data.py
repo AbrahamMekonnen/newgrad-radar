@@ -26,7 +26,6 @@ Usage:
 """
 
 import os
-import csv
 import json
 import re
 import hashlib
@@ -34,7 +33,6 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
-from io import StringIO
 
 import requests
 
@@ -94,16 +92,19 @@ CACHE_DIR = Path(__file__).parent.parent / ".h1b_cache"
 CACHE_FILE = CACHE_DIR / "sponsors.json"
 CACHE_TTL_DAYS = 7  # Refresh data weekly
 
-# DOL OFLC Disclosure Data URLs (LCA files contain H1B sponsors)
-# These are updated quarterly by the Department of Labor
+# DOL OFLC Disclosure Data URLs (LCA files contain H1B sponsors).
+# Updated quarterly by the Department of Labor. NOTE: DOL publishes these as
+# .xlsx (the old .csv paths 404), so we parse them with python-calamine. Keep
+# to the most recent quarters — one year of filings already yields ~30k
+# distinct sponsors, and older quarters only add download/parse time.
 DOL_LCA_URLS = [
-    # FY2024 Q4 (most recent)
-    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2024_Q4.csv",
-    # FY2024 Q3
-    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2024_Q3.csv",
-    # FY2024 Q2
-    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2024_Q2.csv",
+    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2026_Q1.xlsx",
+    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2025_Q4.xlsx",
+    "https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/LCA_Disclosure_Data_FY2025_Q3.xlsx",
 ]
+
+# Column header in DOL LCA files that holds the sponsoring company name.
+DOL_EMPLOYER_COLUMN = "EMPLOYER_NAME"
 
 # H1BData.info style API endpoint (alternative source)
 H1BDATA_API_URL = "https://h1bdata.info/index.php"
@@ -261,66 +262,96 @@ KNOWN_NON_SPONSORS = {
 }
 
 
+def _download_to_temp(url: str, retry_mgr) -> Optional[str]:
+    """Stream a (large) DOL file to a temp path on disk. Returns the path or None.
+
+    These files are ~75MB each, so we never hold them in memory as text — we
+    write to disk and let the parser stream from there.
+    """
+    import tempfile
+
+    def do_fetch():
+        resp = requests.get(url, timeout=180, stream=True)
+        resp.raise_for_status()
+        return resp
+
+    response = retry_mgr.execute(do_fetch) if retry_mgr else do_fetch()
+    fd, path = tempfile.mkstemp(suffix=".xlsx")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            for chunk in response.iter_content(chunk_size=1 << 20):
+                if chunk:
+                    fh.write(chunk)
+    except Exception:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    return path
+
+
+def _employer_names_from_xlsx(path: str):
+    """Yield raw EMPLOYER_NAME values from a DOL LCA .xlsx file.
+
+    Uses python-calamine (Rust-backed) because openpyxl is far too slow on
+    these 75MB workbooks.
+    """
+    from python_calamine import CalamineWorkbook
+
+    wb = CalamineWorkbook.from_path(path)
+    sheet = wb.get_sheet_by_index(0)
+    rows = sheet.to_python(skip_empty_area=True)
+    if not rows:
+        return
+    header = [str(h).strip() for h in rows[0]]
+    try:
+        idx = header.index(DOL_EMPLOYER_COLUMN)
+    except ValueError:
+        logger.warning("EMPLOYER_NAME column not found; header=%s", header[:25])
+        return
+    for row in rows[1:]:
+        if idx < len(row):
+            value = row[idx]
+            if value:
+                yield str(value)
+
+
 def fetch_dol_sponsors() -> set[str]:
     """Fetch H1B sponsor data from DOL disclosure files.
+
+    Downloads each quarterly LCA .xlsx, extracts every distinct EMPLOYER_NAME,
+    and returns the normalized set. A failure on any single file is non-fatal
+    (we keep whatever we gathered and fall back to KNOWN_H1B_SPONSORS upstream).
 
     Returns:
         Set of normalized company names that have filed H1B LCAs.
     """
-    sponsors = set()
-    cache = _get_cache()
+    sponsors: set[str] = set()
     retry_mgr = _get_retry_manager()
 
     for url in DOL_LCA_URLS:
+        path = None
         try:
             print(f"Fetching DOL LCA data: {url}")
-
-            # Check cache first (DOL data doesn't change frequently)
-            cached_content = None
-            if cache:
-                cached = cache.get(url)
-                if cached:
-                    logger.info(f"Using cached DOL data for {url}")
-                    cached_content = cached.content.decode('utf-8', errors='replace')
-
-            if cached_content:
-                content = cached_content
-            else:
-                # Fetch with retry for robustness
-                def do_fetch():
-                    resp = requests.get(url, timeout=120, stream=True)
-                    resp.raise_for_status()
-                    return resp
-
-                if retry_mgr:
-                    response = retry_mgr.execute(do_fetch)
-                else:
-                    response = do_fetch()
-
-                content = response.text
-
-                # Cache the response for 7 days
-                if cache:
-                    cache.set(url, response, ttl=7 * 24 * 3600)
-
-            reader = csv.DictReader(StringIO(content))
-
-            for row in reader:
-                # EMPLOYER_NAME column contains the sponsoring company
-                employer = row.get('EMPLOYER_NAME', '') or row.get('employer_name', '')
-                if employer:
-                    normalized = normalize_company_name(employer)
-                    if normalized:
-                        sponsors.add(normalized)
-
+            path = _download_to_temp(url, retry_mgr)
+            for employer in _employer_names_from_xlsx(path):
+                normalized = normalize_company_name(employer)
+                if normalized:
+                    sponsors.add(normalized)
             print(f"  Found {len(sponsors)} unique sponsors so far")
-
         except requests.RequestException as e:
             logger.warning(f"Failed to fetch {url}: {e}")
             print(f"  Warning: Failed to fetch {url}: {e}")
         except Exception as e:
             logger.warning(f"Error parsing {url}: {e}")
             print(f"  Warning: Error parsing {url}: {e}")
+        finally:
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
     return sponsors
 

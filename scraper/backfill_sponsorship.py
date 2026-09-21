@@ -72,8 +72,10 @@ def main() -> None:
         updated = 0
         for i in range(0, len(sponsors), 50):
             chunk = sponsors[i:i + 50]
+            # Only fill 'unknown' rows: incremental for new jobs, never clobber.
             c.table('jobs').update({'sponsorship_status': 'sponsors'}) \
-                .in_('company_slug', chunk).eq('is_active', True).execute()
+                .in_('company_slug', chunk).eq('is_active', True) \
+                .eq('sponsorship_status', 'unknown').execute()
             updated += len(chunk)
         print(f'marked sponsors for {updated} companies')
 

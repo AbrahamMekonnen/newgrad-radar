@@ -73,10 +73,21 @@ async function main() {
     if (!dryRun) {
       const tierFilter = tier === null ? 'tier=is.null' : `tier=eq.${encodeURIComponent(tier)}`;
       const slugFilter = `company_slug=eq.${encodeURIComponent(slug)}`;
+      // Incremental + non-destructive: only fill rows that are still missing the
+      // value, so scheduled runs cheaply cover NEW jobs and never overwrite data.
       try {
-        await rest(`jobs?is_active=eq.true&${slugFilter}&${tierFilter}`, {
-          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch),
-        });
+        if (salary) {
+          await rest(`jobs?is_active=eq.true&${slugFilter}&${tierFilter}&salary_min=is.null`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ salary_min: salary.min, salary_max: salary.max }),
+          });
+        }
+        if (funding) {
+          await rest(`jobs?is_active=eq.true&${slugFilter}&funding_stage=is.null`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ funding_stage: funding }),
+          });
+        }
       } catch (e) { console.warn(`update ${slug}/${tier}: ${(e as Error).message.slice(0, 80)}`); }
     }
   }

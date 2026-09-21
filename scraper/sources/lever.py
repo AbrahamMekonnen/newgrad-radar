@@ -336,8 +336,10 @@ def _fetch_lever_impl(company_slug: str, ctx) -> list[dict]:
 
         salary_min, salary_max = None, None
         description = job.get("descriptionPlain", "") or job.get("description", "")
+        description_text = None
         if description:
             text = strip_html(description) if "<" in description else description
+            description_text = text or None
             salary_min, salary_max = parse_salary_from_text(text)
 
         if not salary_min:
@@ -361,6 +363,7 @@ def _fetch_lever_impl(company_slug: str, ctx) -> list[dict]:
             "external_id": job.get("id", ""),
             "salary_min": salary_min,
             "salary_max": salary_max,
+            "description": description_text,
         })
 
     # Record jobs found via monitoring

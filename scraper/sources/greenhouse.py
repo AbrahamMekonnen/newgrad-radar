@@ -209,10 +209,17 @@ def parse_iso(ts: Optional[str]) -> Optional[str]:
 
 
 def strip_html(html: str) -> str:
-    """Remove HTML tags and decode entities."""
+    """Remove HTML tags and decode entities.
+
+    Unescape first: the Greenhouse API returns entity-escaped markup
+    (``&lt;h2&gt;``), so we must decode entities before stripping tags or the
+    literal tags survive into the text. Unescape again afterwards for entities
+    that live in the text itself (``&amp;``).
+    """
     if not html:
         return ""
-    text = re.sub(r'<[^>]+>', ' ', html)
+    text = unescape(html)
+    text = re.sub(r'<[^>]+>', ' ', text)
     text = unescape(text)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
@@ -302,8 +309,14 @@ def fetch_greenhouse(board_token: str, company_slug: str = None, fetch_salary: b
 
 def _fetch_greenhouse_impl(board_token: str, company_slug: str, fetch_salary: bool, ctx) -> list[dict]:
     """Internal implementation of fetch_greenhouse."""
-    url = f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs"
-    cache_key = f"greenhouse_board_{board_token}"
+    # `?content=true` returns every job's full description inline in ONE request
+    # per board, so we get salary text + description without an N+1 detail fetch.
+    if fetch_salary:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true"
+        cache_key = f"greenhouse_board_{board_token}_content"
+    else:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs"
+        cache_key = f"greenhouse_board_{board_token}"
 
     # Record request if monitoring context available
     if ctx:
@@ -328,13 +341,21 @@ def _fetch_greenhouse_impl(board_token: str, company_slug: str, fetch_salary: bo
         apply_url = f"{job_url}#app" if job_url and "#app" not in job_url else job_url
 
         salary_min, salary_max = None, None
+        description = None
 
-        if fetch_salary and job_id:
-            details = fetch_job_details(board_token, job_id)
-            content = details.get("content", "")
+        if fetch_salary:
+            # With ?content=true the description is inline on each job; fall back
+            # to a per-job detail fetch only if it somehow isn't present.
+            content = job.get("content", "")
+            if not content and job_id:
+                content = fetch_job_details(board_token, job_id).get("content", "")
             if content:
                 text = strip_html(content)
                 salary_min, salary_max = parse_salary_from_text(text)
+                # Keep the plain-text description so downstream enrichment
+                # (salary, sponsorship, work mode, deadlines) can reuse it
+                # instead of re-fetching + discarding it every run.
+                description = text or None
 
         jobs.append({
             "company": company_slug or board_token,
@@ -347,6 +368,7 @@ def _fetch_greenhouse_impl(board_token: str, company_slug: str, fetch_salary: bo
             "external_id": job_id,
             "salary_min": salary_min,
             "salary_max": salary_max,
+            "description": description,
         })
 
     # Record jobs found via monitoring

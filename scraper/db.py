@@ -339,6 +339,10 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
             **{k: job[k] for k in (
                 "salary_min", "salary_max", "salary_text",
                 "sponsorship_status", "funding_stage", "deadline",
+                # Persist the description so downstream enrichment (salary,
+                # sponsorship, work mode, deadlines) can reuse it instead of
+                # re-fetching + discarding it every run.
+                "description",
             ) if job.get(k) is not None},
         })
 
