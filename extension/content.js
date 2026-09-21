@@ -477,10 +477,16 @@
     return { name, label: fieldLabelFor(element), type: element.type || element.getAttribute('role'), options };
   };
   const scanUnfilledFields = () => {
-    const controls = [...document.querySelectorAll('input, textarea, select, [role="combobox"]')];
+    const submit = [...document.querySelectorAll('button, input[type="submit"]')].find((item) => /submit|apply/i.test(String(item.textContent || item.value || '')));
+    const root = submit?.form || submit?.closest('form') || document.querySelector('form');
+    if (!root) return [];
+    const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
     const seen = new Set();
     return controls.flatMap((element, index) => {
       if (element.getClientRects().length === 0 || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
+      const required = element.required || element.getAttribute('aria-required') === 'true'
+        || element.closest('[aria-required=true], .required, [class*=required]');
+      if (!required) return [];
       const descriptor = liveFieldFor(element, index);
       const name = descriptor.name;
       if (seen.has(name)) return [];
@@ -784,9 +790,14 @@
           const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
           if (newLive.length) {
             try {
-              const results = await Promise.allSettled(newLive.map((field) => resolveFieldBounded(field)));
-              results.forEach((result, index) => { if (result.status === 'fulfilled' && result.value.accepted) resolvedLive.add(newLive[index].name); });
-              data.liveNeedsUser = [...new Set([...(data.liveNeedsUser || []), ...newLive.filter((_, index) => results[index].status !== 'fulfilled' || !results[index].value.accepted).map((field) => field.name)])];
+              const results = await Promise.race([
+                Promise.allSettled(newLive.map((field) => resolveFieldBounded(field))),
+                wait(45000).then(() => null),
+              ]);
+              if (results) {
+                results.forEach((result, index) => { if (result.status === 'fulfilled' && result.value.accepted) resolvedLive.add(newLive[index].name); });
+                data.liveNeedsUser = [...new Set([...(data.liveNeedsUser || []), ...newLive.filter((_, index) => results[index].status !== 'fulfilled' || !results[index].value.accepted).map((field) => field.name)])];
+              }
               persist(data);
             } catch { /* bounded live resolution is best-effort */ }
           }
