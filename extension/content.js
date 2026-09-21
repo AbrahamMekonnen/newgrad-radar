@@ -155,6 +155,24 @@
     return bestScore > 0 ? best : null;
   };
 
+  const degreeLevel = (value) => {
+    const text = normalize(value);
+    if (/\b(phd|ph d|doctor|doctorate)\b/.test(text)) return 'doctorate';
+    if (/\b(master|masters|ms|m s|mba|ma|m a)\b/.test(text)) return 'master';
+    if (/\b(bachelor|bachelors|bs|b s|ba|b a)\b/.test(text)) return 'bachelor';
+    if (/\b(associate|associates|aa|a a|as|a s)\b/.test(text)) return 'associate';
+    if (/\b(high school|secondary|ged)\b/.test(text)) return 'high_school';
+    return '';
+  };
+  const semanticOption = (field, wanted, candidates) => {
+    const question = normalize(field.label);
+    if (/degree|education level|qualification/.test(question)) {
+      const level = degreeLevel(wanted);
+      if (level) return candidates.find((item) => degreeLevel(item.textContent) === level) || null;
+    }
+    return null;
+  };
+  const unresolvedChoiceSignatures = new Map();
   const visibleOptions = () => [...document.querySelectorAll(
     '[role="option"], [data-option-index], .dropdown-results > *'
   )].filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
@@ -165,29 +183,38 @@
     const isLocation = /location/i.test(String(element.id || element.name || ''));
     const selectedLocation = isLocation && document.querySelector('#selected-location, input[name="selectedLocation"]');
     if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
-    if (existing && existing !== 'select' && !isLocation) return true; // preserve a user's manual choice
+    if (existing && existing !== 'select' && !isLocation) return true;
 
     element.click();
     await wait(150);
-    let option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
+    let candidates = visibleOptions();
+    let option = candidates.find((item) => optionMatches(item.textContent, wanted))
+      || semanticOption(field, wanted, candidates);
+    const initialSignature = candidates.map((item) => normalize(item.textContent)).join('|');
+    if (!option && initialSignature && unresolvedChoiceSignatures.get(field.name) === initialSignature) return false;
     if (!option && element instanceof HTMLInputElement) {
       element.focus();
       setNativeValue(element, wanted);
       element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
       await wait(isLocation ? 1800 : 350);
-      option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
+      candidates = visibleOptions();
+      option = candidates.find((item) => optionMatches(item.textContent, wanted))
+        || semanticOption(field, wanted, candidates);
     }
     if (!option) {
+      const signature = candidates.map((item) => normalize(item.textContent)).join('|') || initialSignature;
+      if (signature) unresolvedChoiceSignatures.set(field.name, signature);
+      if (element instanceof HTMLInputElement) setNativeValue(element, '');
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       element.blur();
       return false;
     }
+    unresolvedChoiceSignatures.delete(field.name);
     option.click();
     element.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   };
-
   const diagnoseField = (field) => {
     const id = String(field.name || '');
     const question = normalize(field.label);
