@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { matchAvailableOption } from '@/lib/form-option-matching';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -31,8 +32,7 @@ export async function POST(request: NextRequest) {
     if (value === null || value === undefined || value === '') return false;
     let chosen = String(value);
     if (f.options?.length) {
-      const wanted = norm(chosen);
-      chosen = f.options.find((o) => norm(o) === wanted || norm(o).includes(wanted) || wanted.includes(norm(o))) || '';
+      chosen = matchAvailableOption(f.label, chosen, f.options) || '';
       if (!chosen) return false;
     }
     answers.push({ name: f.name, value: chosen, source: 'profile' }); return true;
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     if (/city/.test(q) && pick(f, profile?.city || profile?.location)) continue;
     if (/state|province/.test(q) && pick(f, profile?.state)) continue;
     if (/country/.test(q) && pick(f, profile?.country)) continue;
+    if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;

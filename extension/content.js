@@ -176,8 +176,16 @@
       element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
       await wait(isLocation ? 1800 : 350);
-      option = visibleOptions().find((item) => optionMatches(item.textContent, wanted))
-        || visibleOptions()[0];
+      option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
+      if (!option && visibleOptions().length) {
+        const choices = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        const resolved = await send({
+          type: 'RESOLVE_FIELDS',
+          fields: [{ name: field.name, label: field.label, type: 'combobox', options: choices }],
+        }, 30000);
+        const answer = resolved?.answers?.[0]?.value;
+        if (answer) option = visibleOptions().find((item) => normalize(item.textContent) === normalize(answer));
+      }
     }
     if (!option) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -255,8 +263,17 @@
 
     if (element instanceof HTMLSelectElement) {
       const wanted = answerLabel(field);
-      const option = [...element.options].find((item) => String(item.value) === String(value))
+      let option = [...element.options].find((item) => String(item.value) === String(value))
         || [...element.options].find((item) => optionMatches(item.textContent, wanted));
+      if (!option) {
+        const choices = [...element.options].map((item) => item.textContent.trim()).filter(Boolean);
+        const resolved = await send({
+          type: 'RESOLVE_FIELDS',
+          fields: [{ name: field.name, label: field.label, type: 'select', options: choices }],
+        }, 30000);
+        const answer = resolved?.answers?.[0]?.value;
+        if (answer) option = [...element.options].find((item) => normalize(item.textContent) === normalize(answer));
+      }
       if (!option) return false;
       element.value = option.value;
       element.dispatchEvent(new Event('change', { bubbles: true }));
