@@ -57,3 +57,12 @@ jobs:
         run: |
           cd scraper
           python backfill_derived.py || echo "::warning::derived backfill had errors"
+
+      - name: Populate diversity tags (conference sponsors, company-level)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PYTHONUTF8: "1"
+        run: |
+          cd scraper
+          python backfill_diversity.py || echo "::warning::diversity backfill had errors"
