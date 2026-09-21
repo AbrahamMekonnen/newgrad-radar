@@ -50,8 +50,19 @@ async function poll() {
     pollRunning = false;
   }
 }
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
+chrome.runtime.onInstalled.addListener(async () => {
+  chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 });
+  // Unpacked-extension reloads preserve session storage and existing ATS tabs.
+  // Clear only tabs created and tracked by this helper so each update starts
+  // with the current content script. Ordinary browser tabs are never touched.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const items = await chrome.storage.session.get(null);
+  const managedKeys = Object.keys(items).filter((key) => key.startsWith('job:'));
+  const managedTabs = managedKeys.map((key) => Number(key.slice(4))).filter(Number.isFinite);
+  currentByTab.clear();
+  if (managedKeys.length) await chrome.storage.session.remove(managedKeys);
+  await Promise.allSettled(managedTabs.map((tabId) => chrome.tabs.remove(tabId)));
+  void poll();
 });
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();

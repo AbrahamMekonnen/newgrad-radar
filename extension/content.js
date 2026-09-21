@@ -434,7 +434,8 @@
   };
   const openApplicationForm = () => {
     const actions = [...document.querySelectorAll('a, button')];
-    const trigger = actions.find((item) => {
+    const stableTrigger = document.querySelector('#st-apply, .job-apply .js-oneclick');
+    const trigger = (stableTrigger && stableTrigger.getAttribute('aria-hidden') !== 'true' ? stableTrigger : null) || actions.find((item) => {
       if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
       const text = normalize(item.textContent).replace(/\s+/g, '');
       return [
