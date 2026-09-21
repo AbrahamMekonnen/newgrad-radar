@@ -146,21 +146,10 @@ def _validate_job(job: dict) -> tuple[bool, dict]:
         if keyword in title_lower:
             return False, job
 
-    # Use production infrastructure validation if available
-    if INFRASTRUCTURE_AVAILABLE:
-        try:
-            is_valid, cleaned_data, errors = validate_question({
-                'content': job.get('title', ''),
-                'company': job.get('company', ''),
-                'source': 'usajobs',
-            })
-            if is_valid:
-                job['company'] = cleaned_data.get('company', job.get('company', ''))
-                return True, job
-            return False, job
-        except Exception:
-            pass  # Fall through to return True
-
+    # NOTE: do NOT run validate_question() here — that validator is built for
+    # interview-question text and rejects ordinary job titles, which zeroed out
+    # every USAJobs row. A job with a title, a company, and no excluded keyword
+    # is valid.
     return True, job
 
 
@@ -227,14 +216,23 @@ def fetch_usajobs(
         response.raise_for_status()
         return response.text
 
+    import json
+    # Direct request (no cache wrapper) so HTTP failures are VISIBLE instead of
+    # being swallowed into a silent empty result — that hid a CI 401/403 as
+    # "Total raw jobs: 0". The 4xx body from USAJobs explains auth problems.
+    headers = get_stealth_headers(full_url)
+    headers.update({
+        "Authorization-Key": USAJOBS_API_KEY,
+        "User-Agent": USAJOBS_EMAIL or "newgrad-radar-bot",
+        "Host": "data.usajobs.gov",
+        "Accept": "application/json",
+    })
     try:
-        response_text = cached_request(full_url, fetch_fn, ttl=USAJOBS_CACHE_TTL)
-        if not response_text:
+        resp = requests.get(full_url, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code >= 400:
+            print(f"USAJobs HTTP {resp.status_code}: {resp.text[:300]}")
             return []
-
-        import json
-        data = json.loads(response_text)
-
+        data = json.loads(resp.text)
     except requests.RequestException as e:
         print(f"Error fetching USAJobs: {e}")
         return []
@@ -252,9 +250,11 @@ def fetch_usajobs(
     for item in search_items:
         job = item.get("MatchedObjectDescriptor", {})
 
-        # Additional entry-level filtering if API params didn't catch all
-        if entry_level_only and not is_entry_level(job):
-            continue
+        # NOTE: no secondary is_entry_level() filter here. When entry_level_only
+        # is set we already pass PayGradeLow/High=05/09 to the API, which is
+        # authoritative. The old local check read a grade number that isn't in
+        # the search payload (JobGrade only carries the pay-plan Code, e.g.
+        # "GS"), so it silently rejected every row.
 
         # Extract position details
         position_id = job.get("PositionID", "")
@@ -272,8 +272,11 @@ def fetch_usajobs(
         # Check for remote/telework
         user_area = job.get("UserArea", {})
         details = user_area.get("Details", {})
-        telework = details.get("TeleworkEligible", "")
-        if telework and telework.lower() == "yes" and not location:
+        # TeleworkEligible is a bool in the API (older docs implied a string),
+        # so normalize before comparing.
+        telework = details.get("TeleworkEligible", False)
+        is_telework = telework is True or (isinstance(telework, str) and telework.lower() == "yes")
+        if is_telework and not location:
             location = "Remote Eligible"
 
         # Get apply URL
