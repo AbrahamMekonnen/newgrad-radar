@@ -135,7 +135,7 @@ jobs:
           from sources.conferences import fetch_all_conference_jobs
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -161,7 +161,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               job_id = generate_job_id(company_slug, raw['title'], raw['url'])
               return {
@@ -193,8 +193,8 @@ jobs:
           # Normalize and filter
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering: {len(normalized)}')
@@ -418,7 +418,7 @@ jobs:
           from events import get_upcoming_career_fairs, get_career_fair_companies
           from db import upsert_jobs
           from classifier import classify_jobs
-          from companies import COMPANIES
+          from companies import COMPANIES, resolve_company_slug, company_info_for
           import json
 
           dry_run = '${{ inputs.dry_run }}' == 'true'

@@ -49,7 +49,7 @@ jobs:
           from sources.newsletters import fetch_all_newsletter_jobs
           from db import upsert_jobs
           from classifier import classify_jobs
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           # Check for dry run
@@ -85,7 +85,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               job_id = generate_job_id(company_slug, raw['title'], raw['url'])
               return {
@@ -109,8 +109,8 @@ jobs:
           # Normalize and filter to target companies
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job['company'])
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job['company'])
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering to target companies: {len(normalized)}')

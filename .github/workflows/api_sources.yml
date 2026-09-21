@@ -95,7 +95,8 @@ jobs:
           from sources.${{ matrix.source.module }} import ${{ matrix.source.function }}
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG
+          from companies import (COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG,
+                                 resolve_company_slug, company_info_for)
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -130,7 +131,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug, raw.get('company'))
               location = raw.get('location') or raw.get('locations', [])
               if isinstance(location, list):
                   location = ', '.join(location[:3]) if location else 'Remote'
@@ -157,14 +158,16 @@ jobs:
               print(f'Error fetching jobs: {e}')
               sys.exit(1)
 
-          # Normalize and filter
+          # Normalize. Accept ANY employer (banks, government, untracked
+          # startups) — resolve_company_slug generates a slug for unknowns.
+          # Non-technical roles are dropped later by classify_jobs().
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
-          print(f'After filtering to target companies: {len(normalized)}')
+          print(f'After normalize (all employers): {len(normalized)}')
 
           # Dedupe
           seen = {}

@@ -20,7 +20,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG
+from companies import (
+    COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG,
+    generate_company_slug, company_info_for,
+)
 
 # New infrastructure imports for production-grade scraping
 try:
@@ -385,7 +388,10 @@ def normalize_company(raw_company: str) -> str | None:
         if var and var in COMPANY_NAME_TO_SLUG:
             return COMPANY_NAME_TO_SLUG[var]
 
-    return None
+    # Untracked employer (bank, government agency, new startup...) — generate a
+    # slug so its technical roles are still ingested. Non-tech roles are dropped
+    # later by the classifier.
+    return generate_company_slug(raw_company) or None
 
 
 def normalize_location(raw_location) -> str:
@@ -629,7 +635,7 @@ def normalize_job(raw: dict, company_slug: str) -> dict:
     Returns:
         Normalized job dict ready for database
     """
-    company_info = COMPANIES[company_slug]
+    company_info = company_info_for(company_slug, raw.get("company"))
 
     # Handle both 'location' and 'locations' keys
     location = raw.get("location") or raw.get("locations", [])
@@ -1251,7 +1257,9 @@ def process_and_save(raw_jobs: list[dict], args, dry_run: bool) -> tuple[int, in
         if is_generic_careers_url(job.get("url", "")):
             continue
         company_slug = normalize_company(job.get("company", ""))
-        if company_slug and company_slug in COMPANIES:
+        # Accept ANY employer, not just curated companies. Non-technical roles
+        # are filtered out downstream by classify_jobs()/is_technical_role().
+        if company_slug:
             normalized.append(normalize_job(job, company_slug))
 
     # dedup by id within this batch (merge sources)

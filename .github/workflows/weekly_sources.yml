@@ -53,7 +53,7 @@ jobs:
           from sources.github_repos import fetch_all_github_repos, GITHUB_REPOS
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, COMPANY_TOKEN_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -86,7 +86,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               if isinstance(location, list):
                   location = ', '.join(location[:3]) if location else 'Remote'
@@ -119,8 +119,8 @@ jobs:
           # Normalize and filter
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering to target companies: {len(normalized)}')
@@ -193,7 +193,7 @@ jobs:
           from sources.bootcamps import fetch_all_bootcamp_partners, get_bootcamp_partner_companies
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -219,7 +219,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               job_id = generate_job_id(company_slug, raw['title'], raw['url'])
               return {
@@ -250,8 +250,8 @@ jobs:
           # Normalize and filter
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering: {len(normalized)}')
@@ -320,7 +320,7 @@ jobs:
           from sources.vc_portfolios import fetch_all_vc_jobs
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -346,7 +346,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               job_id = generate_job_id(company_slug, raw['title'], raw['url'])
               return {
@@ -378,8 +378,8 @@ jobs:
           # Normalize and filter
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering: {len(normalized)}')
@@ -448,7 +448,7 @@ jobs:
           from sources.hackathons import fetch_all_hackathon_sponsors
           from db import upsert_jobs
           from classifier import classify_jobs, detect_role_types
-          from companies import COMPANIES, COMPANY_NAME_TO_SLUG
+          from companies import COMPANIES, COMPANY_NAME_TO_SLUG, resolve_company_slug, company_info_for
           import hashlib
 
           dry_run = '${{ inputs.dry_run }}' == 'true'
@@ -474,7 +474,7 @@ jobs:
               return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
           def normalize_job(raw, company_slug):
-              company_info = COMPANIES[company_slug]
+              company_info = company_info_for(company_slug)
               location = raw.get('location', 'Remote')
               job_id = generate_job_id(company_slug, raw['title'], raw['url'])
               return {
@@ -505,8 +505,8 @@ jobs:
           # Normalize and filter
           normalized = []
           for job in all_jobs:
-              company_slug = normalize_company(job.get('company', ''))
-              if company_slug and company_slug in COMPANIES:
+              company_slug = resolve_company_slug(job.get('company', ''))
+              if company_slug:
                   normalized.append(normalize_job(job, company_slug))
 
           print(f'After filtering: {len(normalized)}')

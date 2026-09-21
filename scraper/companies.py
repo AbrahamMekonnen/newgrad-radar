@@ -1,5 +1,7 @@
 """Company list with ATS mappings for job scraping."""
 
+import re as _re
+
 COMPANIES = {
     # FAANG
     "meta": {"name": "Meta", "tier": "faang", "ats_type": "custom", "ats_token": None},
@@ -265,3 +267,61 @@ for slug, info in COMPANIES.items():
     # Map ATS token to slug
     if info["ats_token"]:
         COMPANY_TOKEN_TO_SLUG[info["ats_token"].lower()] = slug
+
+
+# ---------------------------------------------------------------------------
+# Open ingestion: any employer's technical roles are welcome, not just the
+# curated list above. Unknown companies (banks, government agencies, startups
+# not yet tracked) get a generated slug and a synthetic company record so their
+# software/engineering jobs flow through the same pipeline. Non-technical roles
+# are still dropped later by classifier.is_technical_role().
+# ---------------------------------------------------------------------------
+
+def generate_company_slug(raw_company: str) -> str:
+    """Deterministic slug for a company with no curated entry."""
+    s = _re.sub(r"[^a-z0-9]+", "-", (raw_company or "").lower().strip()).strip("-")
+    return s[:60]
+
+
+def resolve_company_slug(raw_company: str):
+    """Map a raw company name to a slug.
+
+    Returns the canonical slug for a curated company, otherwise a generated
+    slug so ANY employer is ingestable. Returns None only for an empty name.
+    """
+    if not raw_company:
+        return None
+    raw_lower = raw_company.lower().strip()
+    if raw_lower in COMPANIES:
+        return raw_lower
+    if raw_lower in COMPANY_NAME_TO_SLUG:
+        return COMPANY_NAME_TO_SLUG[raw_lower]
+    if raw_lower in COMPANY_TOKEN_TO_SLUG:
+        return COMPANY_TOKEN_TO_SLUG[raw_lower]
+    variations = [
+        raw_lower.replace(" ", "-"),
+        raw_lower.replace(".", ""),
+        raw_lower.replace(".", "-"),
+        raw_lower.split()[0] if " " in raw_lower else None,
+    ]
+    for var in variations:
+        if var and var in COMPANIES:
+            return var
+        if var and var in COMPANY_NAME_TO_SLUG:
+            return COMPANY_NAME_TO_SLUG[var]
+    return generate_company_slug(raw_company) or None
+
+
+def company_info_for(slug: str, fallback_name: str = None) -> dict:
+    """Curated company record, or a synthetic one for an untracked employer.
+
+    The synthetic record carries the keys the pipeline reads (name, tier, and
+    ats_* / enrichment fields default to None via .get), so untracked companies
+    normalize without a KeyError. tier 'other' keeps them out of the curated
+    tier filters while still appearing in All Jobs and every other filter.
+    """
+    info = COMPANIES.get(slug)
+    if info:
+        return info
+    name = (fallback_name or slug.replace("-", " ").title()).strip()
+    return {"name": name or slug, "tier": "other", "ats_type": None, "ats_token": None}

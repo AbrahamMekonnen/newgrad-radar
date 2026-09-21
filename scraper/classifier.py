@@ -300,6 +300,11 @@ _TECH_ROLE_KEYWORDS = [
     "architect", "qa engineer", "test engineer", "sdet", "robotics",
     "firmware", "embedded", "computer vision", "nlp", "data engineer",
     "analytics engineer", "web developer", "ui engineer",
+    # Common enterprise / federal tech titles (banks, government, defense) that
+    # don't say "engineer" — kept in scope now that any employer is ingestable.
+    "computer scientist", "information technology", "it specialist",
+    "data analyst", "database", "network engineer", "systems administrator",
+    "cloud architect", "solutions architect", "applications developer",
 ]
 
 
