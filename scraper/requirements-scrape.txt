@@ -10,3 +10,8 @@ beautifulsoup4>=4.12.0
 telethon>=1.34.0
 pypdf>=4.0
 python-calamine>=0.2  # fast .xlsx parsing for DOL H1B LCA disclosure files
+# Content decoders for the stealth session's Accept-Encoding (it advertises
+# br/zstd). Without these, requests can't decode br/zstd responses and .content
+# is raw compressed bytes — which then poison the response cache. Required.
+brotli>=1.1
+zstandard>=0.22

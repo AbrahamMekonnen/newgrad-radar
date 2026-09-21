@@ -339,26 +339,19 @@ def is_within_window(date: datetime, days: int = FUNDING_WINDOW_DAYS) -> bool:
 # RSS Feed Sources
 # =============================================================================
 
+# Feed URLs verified live 2026-09. TechCrunch moved its funding feed from
+# /category/funding/ (now 404) to the /tag/funding/ tag feed. Sifted and
+# Crunchbase block server-side RSS fetches (403); VentureBeat rate-limits (429)
+# but succeeds intermittently. Dead/blocked feeds fail per-feed and are skipped,
+# so they never take down the scan.
 RSS_FEEDS = {
     "techcrunch_funding": {
-        "url": "https://techcrunch.com/category/funding/feed/",
+        "url": "https://techcrunch.com/tag/funding/feed/",
         "name": "TechCrunch Funding",
     },
     "techcrunch_startups": {
         "url": "https://techcrunch.com/category/startups/feed/",
         "name": "TechCrunch Startups",
-    },
-    "venturebeat": {
-        "url": "https://venturebeat.com/category/business/funding/feed/",
-        "name": "VentureBeat Funding",
-    },
-    "sifted": {
-        "url": "https://sifted.eu/sector/funding/feed",
-        "name": "Sifted EU Funding",
-    },
-    "crunchbase_daily": {
-        "url": "https://news.crunchbase.com/feed/",
-        "name": "Crunchbase News",
     },
 }
 
@@ -555,7 +548,7 @@ def fetch_funding_from_rss() -> list[FundingRound]:
                 scraper_id='funding_signals',
                 source_name='rss_feeds',
                 items_processed=len(funding_rounds),
-                progress={'seen_urls': list(seen_urls)[-1000]}  # Keep last 1000 URLs
+                progress={'seen_urls': list(seen_urls)[-1000:]}  # Keep last 1000 URLs
             )
 
         # Rate limiting - use infrastructure if available, else basic delay
