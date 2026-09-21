@@ -561,6 +561,16 @@
     trigger.click();
     return true;
   };
+  const visibleAtsErrors = () => {
+    const selectors = '[role=alert], [aria-live=assertive], .field-error, .error-message, .input-error, .flash-error, [aria-invalid=true]';
+    const text = [...document.querySelectorAll(selectors)]
+      .filter((item) => item.getClientRects().length > 0)
+      .map((item) => String(item.textContent || item.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const body = String(document.body?.innerText || '').split(/\n+/).map((value) => value.trim())
+      .filter((value) => /captcha|error|unable|failed|try again|required field/i.test(value));
+    return [...new Set([...text, ...body])].filter((value) => !value.includes('HireRadar')).slice(0, 12);
+  };
   const submitPreparedForm = async (data) => {
     // Submit when the user opted into auto-submit (data.autoSubmit) OR the server
     // prep already flagged it — but NOT on the stale prep flag alone. This is
@@ -571,13 +581,13 @@
     // A click is an attempt, not proof of submission. Keep it in flight long
     // enough for the ATS response, then permit one controlled retry if the page
     // neither navigated nor displayed a success state.
-    if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 15000) return true;
-    if ((data.submitAttempts || 0) >= 2) {
+    if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 30000) return true;
+    if ((data.submitAttempts || 0) >= 1) {
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
-        detail: { detail: 'The ATS did not accept two submit attempts; the application was not marked submitted.' },
+        detail: { detail: JSON.stringify({ message: 'The ATS did not confirm the submission; the application was not marked submitted.', errors: visibleAtsErrors() }) },
       });
-      banner('The ATS did not accept two submit attempts. Review the visible form error; HireRadar has not marked this application as submitted.', true);
+      banner('The ATS did not confirm submission. HireRadar captured the visible ATS errors and did not mark it submitted.', true);
       return false;
     }
     const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
@@ -843,4 +853,5 @@
     }
   })();
 })();
+
 
