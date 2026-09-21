@@ -174,9 +174,13 @@
   };
   const unresolvedChoiceSignatures = new Map();
   const resolutionState = new Map();
-  const visibleOptions = () => [...document.querySelectorAll(
-    '[role="option"], [data-option-index], .dropdown-results > *'
-  )].filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
+  const visibleOptions = (owner) => {
+    const controlledId = owner?.getAttribute?.('aria-controls') || owner?.getAttribute?.('aria-owns');
+    const controlled = controlledId && document.getElementById(controlledId);
+    const root = controlled || document;
+    return [...root.querySelectorAll('[role="option"], [data-option-index], .dropdown-results > *')]
+      .filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
+  };
 
   const fillCombo = async (element, field) => {
     const wanted = answerLabel(field);
@@ -188,7 +192,7 @@
 
     element.click();
     await wait(500);
-    let candidates = visibleOptions();
+    let candidates = visibleOptions(element);
     let option = candidates.find((item) => optionMatches(item.textContent, wanted))
       || semanticOption(field, wanted, candidates);
     const initialSignature = candidates.map((item) => normalize(item.textContent)).join('|');
@@ -199,7 +203,7 @@
       element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
       await wait(isLocation ? 1800 : 350);
-      candidates = visibleOptions();
+      candidates = visibleOptions(element);
       option = candidates.find((item) => optionMatches(item.textContent, wanted))
         || semanticOption(field, wanted, candidates);
     }
@@ -330,25 +334,10 @@
         if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'select', options: choices });
         continue;
       }
-      if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
-        element.click();
-        await wait(500);
-        let candidates = visibleOptions();
-        let local = candidates.some((item) => optionMatches(item.textContent, wanted))
-          || !!semanticOption(field, wanted, candidates);
-        if (!candidates.length && element instanceof HTMLInputElement && !String(element.value || '').trim()) {
-          setNativeValue(element, wanted);
-          element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
-          await wait(500);
-          candidates = visibleOptions();
-          local = candidates.some((item) => optionMatches(item.textContent, wanted))
-            || !!semanticOption(field, wanted, candidates);
-        }
-        const choices = candidates.map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
-        if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'combobox', options: choices });
-        element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        if (!local && element instanceof HTMLInputElement) setNativeValue(element, '');
-      }
+      // Combobox planning is intentionally non-interactive. Opening every React-Select
+      // control caused visible focus thrashing and could make controls compete.
+      // fillCombo inspects only this control's listbox when it is actually filled.
+      if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) continue;
     }
     if (!unresolved.length) return new Map();
     const resolved = await send({ type: 'RESOLVE_FIELDS', fields: unresolved }, 30000);
@@ -513,7 +502,7 @@
       const element = findField(field);
       if ((!field.options || !field.options.length) && element && (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete'))) {
         element.click(); await wait(500);
-        field.options = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        field.options = visibleOptions(element).map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       }
       const options = (field.options || []).map((value) => String(value).trim()).filter(Boolean);
@@ -828,3 +817,4 @@
     }
   })();
 })();
+
