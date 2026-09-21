@@ -641,7 +641,22 @@
         });
       }
       const completed = new Set();
-      const plannedAnswers = await planChoiceAnswers(fields);
+      if (data.browserWorker) await send({
+        type: 'PROGRESS', stage: 'filling',
+        detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length }) },
+      });
+      let plannerTimedOut = false;
+      const plannedAnswers = await Promise.race([
+        planChoiceAnswers(fields),
+        wait(45000).then(() => { plannerTimedOut = true; return new Map(); }),
+      ]);
+      if (data.browserWorker) await send({
+        type: 'PROGRESS', stage: 'filling',
+        detail: {
+          total: fields.length,
+          detail: JSON.stringify({ message: plannerTimedOut ? 'Form planning timed out; continuing without guesses.' : 'Form planning complete.', resolvedChoices: plannedAnswers.size }),
+        },
+      });
       for (const field of fields) {
         const planned = plannedAnswers.get(field.name);
         if (planned) { field.value = planned.value; field.source = planned.source; }
