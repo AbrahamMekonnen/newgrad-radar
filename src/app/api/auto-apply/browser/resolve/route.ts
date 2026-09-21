@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption } from '@/lib/form-option-matching';
-import { exactSuppliedOption, isSensitiveFact, mayUseAi, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   };
   for (const f of fields as LiveField[]) {
     const q = norm(f.label);
-    const saved = custom[f.label] || custom[q];
+    const saved = findSavedAnswer(custom, f.label);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
     if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;

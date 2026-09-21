@@ -27,3 +27,15 @@ export const exactSuppliedOption = (field: ResolutionField, value: unknown) => {
 };
 
 
+
+const normalizedQuestion = (value: unknown) => String(value || '').toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
+export const findSavedAnswer = (answers: Record<string, string>, label: unknown) => {
+  const raw = String(label || '');
+  const q = normalizedQuestion(raw);
+  if (answers[raw] !== undefined) return answers[raw];
+  if (answers[q] !== undefined) return answers[q];
+  const matches = Object.entries(answers).map(([key, value]) => ({ key: normalizedQuestion(key), value }))
+    .filter(({ key }) => key.length >= 20 && (q.startsWith(key) || key.startsWith(q)))
+    .sort((a, b) => b.key.length - a.key.length);
+  return matches[0]?.value;
+};

@@ -1,4 +1,4 @@
-import { exactSuppliedOption, isSensitiveFact, mayUseAi, optionSetHash } from '../field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionSetHash } from '../field-resolution';
 describe('field resolution policy', () => {
   it('allows AI only on the third attempt', () => {
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 2 })).toBe(false);
@@ -16,6 +16,10 @@ describe('field resolution policy', () => {
   it('produces stable option hashes', () => {
     const field = { name: 'degree', label: 'Degree', options: ['Bachelor', 'Master'] };
     expect(optionSetHash(field)).toBe(optionSetHash({ ...field }));
+  });
+  it('matches a saved answer when an ATS appends explanatory text', () => {
+    const saved = { 'are you a current government employee': 'No' };
+    expect(findSavedAnswer(saved, 'Are you a current government employee? Exceptions: teachers and assistants')).toBe('No');
   });
 });
 
