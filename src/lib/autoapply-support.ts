@@ -36,7 +36,10 @@ export function browserApplyUrl(ats?: string | null, url?: string | null): strin
   if (a === 'lever' && /jobs\.lever\.co\//i.test(value) && !/\/apply(?:[/?#]|$)/i.test(value)) {
     return value.replace(/\/+$/, '') + '/apply';
   }
-  if (a === 'greenhouse' && /greenhouse\.io/i.test(value) && !value.includes('#app')) {
+  if (a === 'greenhouse' && /careers\.roblox\.com/i.test(value)) {
+    const id = value.match(/[?&]gh_jid=(\d+)/)?.[1] || value.match(/\/jobs\/(\d+)/)?.[1];
+    if (id) return 'https://job-boards.greenhouse.io/roblox/jobs/' + id + '#app';
+  }  if (a === 'greenhouse' && /greenhouse\.io/i.test(value) && !value.includes('#app')) {
     return value + '#app';
   }
   return value;

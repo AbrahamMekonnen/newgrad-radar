@@ -432,6 +432,14 @@
       return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: element.type || element.getAttribute('role'), options }];
     }).filter((field) => field.label);
   };
+  const smartRecruitersDirectUrl = () => {
+    const scripts = [...document.scripts].map((script) => script.textContent || '').join('\n');
+    const company = scripts.match(/cident:\s*['"]([^'"]+)['"]/)?.[1];
+    const publication = scripts.match(/puuid:\s*['"]([^'"]+)['"]/)?.[1];
+    if (!company || !publication) return '';
+    return 'https://jobs.smartrecruiters.com/oneclick-ui/company/' + encodeURIComponent(company)
+      + '/publication/' + encodeURIComponent(publication) + '?dcr_ci=' + encodeURIComponent(company);
+  };
   const openApplicationForm = () => {
     const actions = [...document.querySelectorAll('a, button')];
     const stableTrigger = document.querySelector('#st-apply, .job-apply .js-oneclick');
@@ -500,6 +508,21 @@
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
       const label = bad && (bad.labels?.[0]?.textContent || bad.getAttribute('aria-label') || bad.name || bad.id);
+      if (bad?.type === 'radio') {
+        const group = [...form.querySelectorAll('input[type="radio"]')].filter((item) => item.name === bad.name);
+        const container = bad.closest('.application-question, fieldset, [role="radiogroup"], [class*="question"]');
+        const heading = container?.querySelector('legend, .application-label .text, .application-label, [class*="question-label"]');
+        const question = String(heading?.textContent || container?.textContent || '').replace(/\s+/g, ' ').trim();
+        const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
+        if (question && data.browserWorker) {
+          const resolved = await send({ type: 'RESOLVE_FIELDS', fields: [{ name: bad.name, label: question, type: 'radio', options }] }, 30000);
+          const answer = resolved?.answers?.[0];
+          if (answer && await fill({ name: bad.name, label: question, type: 'radio', options, value: answer.value, source: answer.source })) {
+            banner('HireRadar resolved the required choice and is retrying submission...');
+            return true;
+          }
+        }
+      }
       const diagnostic = bad ? {
         name: bad.name || '',
         id: bad.id || '',
@@ -557,15 +580,17 @@
       // job page opens an embedded one-click application whose child frame owns
       // filling and submission.
       if (!isTopFrame && !isSmartRecruiters) return;
-      if (isTopFrame && isSmartRecruiters) {
+      if (isTopFrame && isSmartRecruiters && !location.pathname.includes('/oneclick-ui/')) {
         if (data.browserWorker) await send({
           type: 'PROGRESS', stage: 'filling',
           detail: { detail: 'SmartRecruiters job page attached; opening the application form.' },
         });
+        const directUrl = smartRecruitersDirectUrl();
+        if (directUrl) { location.assign(directUrl); return; }
         const opened = openApplicationForm();
         if (!opened && data.browserWorker) await send({
           type: 'PROGRESS', stage: 'waiting_for_user',
-          detail: { detail: 'SmartRecruiters application action was not found.' },
+          detail: { detail: 'SmartRecruiters application action and publication URL were not found.' },
         });
         return;
       }
