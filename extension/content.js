@@ -173,6 +173,7 @@
     return null;
   };
   const unresolvedChoiceSignatures = new Map();
+  const resolutionState = new Map();
   const visibleOptions = () => [...document.querySelectorAll(
     '[role="option"], [data-option-index], .dropdown-results > *'
   )].filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
@@ -494,6 +495,43 @@
       return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: element.type || element.getAttribute('role'), options }];
     }).filter((field) => field.label);
   };
+  const fieldAccepted = (field) => {
+    const element = findField(field);
+    if (!element) return false;
+    if (element.type === 'radio') return [...document.querySelectorAll('input[type="radio"]')].some((item) => item.name === element.name && item.checked);
+    if (element.type === 'checkbox') return element.checked;
+    if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
+      const container = element.closest('[class*=select], [class*=field], [class*=question]') || element.parentElement;
+      const selected = container?.querySelector('[aria-selected=true], [class*=singleValue], [class*=value-container]');
+      return Boolean(String(element.value || selected?.textContent || '').trim());
+    }
+    return Boolean(String(element.value || element.textContent || '').trim());
+  };
+  const resolveFieldBounded = async (field, validationMessage = '') => {
+    const state = resolutionState.get(field.name) || { attempt: 0, signatures: new Set(), planId: null };
+    for (let attempt = Math.max(1, state.attempt + 1); attempt <= 3; attempt++) {
+      const element = findField(field);
+      if ((!field.options || !field.options.length) && element && (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete'))) {
+        element.click(); await wait(500);
+        field.options = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }
+      const options = (field.options || []).map((value) => String(value).trim()).filter(Boolean);
+      const signature = JSON.stringify([attempt, options.map(normalize), validationMessage, field.currentValue || '']);
+      if (state.signatures.has(signature)) break;
+      state.signatures.add(signature); state.attempt = attempt; resolutionState.set(field.name, state);
+      const response = await send({ type: 'RESOLVE_FIELDS', planId: state.planId, fields: [{ ...field, attempt, currentValue: String(findField(field)?.value || ''), validation: { message: validationMessage, accepted: false } }] }, attempt === 3 ? 45000 : 30000);
+      state.planId = response?.planId || state.planId;
+      const answer = response?.answers?.find((item) => item.name === field.name && item.safeToApply !== false);
+      if (!answer) continue;
+      field.value = answer.value;
+      const applied = await fill({ ...field, value: answer.value, source: answer.source });
+      await wait(150);
+      if (applied && fieldAccepted(field)) { state.accepted = true; resolutionState.set(field.name, state); return { accepted: true, answer }; }
+      validationMessage = findField(field)?.validationMessage || 'The ATS did not retain the selected value.';
+    }
+    state.exhausted = true; resolutionState.set(field.name, state); return { accepted: false };
+  };
   const smartRecruitersDirectUrl = () => {
     const scripts = [...document.scripts].map((script) => script.textContent || '').join('\n');
     const company = scripts.match(/cident:\s*['"]([^'"]+)['"]/)?.[1];
@@ -577,9 +615,8 @@
         const question = String(heading?.textContent || container?.textContent || '').replace(/\s+/g, ' ').trim();
         const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
         if (question && data.browserWorker) {
-          const resolved = await send({ type: 'RESOLVE_FIELDS', fields: [{ name: bad.name, label: question, type: 'radio', options }] }, 30000);
-          const answer = resolved?.answers?.[0];
-          if (answer && await fill({ name: bad.name, label: question, type: 'radio', options, value: answer.value, source: answer.source })) {
+          const result = await resolveFieldBounded({ name: bad.name, label: question, type: 'radio', options }, bad.validationMessage || '');
+          if (result.accepted) {
             banner('HireRadar resolved the required choice and is retrying submission...');
             return true;
           }
@@ -721,16 +758,12 @@
           // Best-effort: a resolver hiccup must never block prepared fills.
           const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
           if (newLive.length) {
-            newLive.forEach((field) => resolvedLive.add(field.name));
             try {
-              const resolved = await send({ type: 'RESOLVE_FIELDS', fields: newLive }, 30000);
-              for (const answer of resolved?.answers || []) {
-                const live = newLive.find((field) => field.name === answer.name);
-                if (live) { try { await fill({ ...live, value: answer.value, source: answer.source }); } catch { /* skip */ } }
-              }
-              data.liveNeedsUser = [...(data.liveNeedsUser || []), ...(resolved?.needsUser || [])];
+              const results = await Promise.allSettled(newLive.map((field) => resolveFieldBounded(field)));
+              results.forEach((result, index) => { if (result.status === 'fulfilled' && result.value.accepted) resolvedLive.add(newLive[index].name); });
+              data.liveNeedsUser = [...new Set([...(data.liveNeedsUser || []), ...newLive.filter((_, index) => results[index].status !== 'fulfilled' || !results[index].value.accepted).map((field) => field.name)])];
               persist(data);
-            } catch { /* live resolution best-effort */ }
+            } catch { /* bounded live resolution is best-effort */ }
           }
           if (remaining === fields.length && openApplicationForm()) return;
           if (data.browserWorker && !data.lastSubmitAttemptAt) {

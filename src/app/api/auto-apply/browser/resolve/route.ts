@@ -2,12 +2,13 @@ import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption } from '@/lib/form-option-matching';
+import { exactSuppliedOption, isSensitiveFact, mayUseAi, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 const norm = (v: unknown) => String(v || '').toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
-type LiveField = { name: string; label: string; type?: string; options?: string[] };
+type LiveField = ResolutionField;
 
 export async function OPTIONS() { return new NextResponse(null, { status: 204, headers: cors }); }
 
@@ -18,29 +19,31 @@ export async function POST(request: NextRequest) {
   const { data: device } = await store.from('autoapply_browser_devices').select('user_id,revoked_at')
     .eq('device_token_hash', hash(token)).maybeSingle();
   if (!device || device.revoked_at) return NextResponse.json({ error: 'Unpaired browser' }, { status: 401, headers: cors });
-  const { jobId, fields } = await request.json().catch(() => ({}));
+  const { jobId, fields, planId: requestedPlanId } = await request.json().catch(() => ({}));
   if (!jobId || !Array.isArray(fields) || fields.length > 50) return NextResponse.json({ error: 'Invalid fields' }, { status: 400, headers: cors });
   const { data: job } = await store.from('autoapply_job_queue').select('job_title,company_name')
     .eq('id', jobId).eq('user_id', device.user_id).maybeSingle();
   if (!job) return NextResponse.json({ error: 'Application not found' }, { status: 404, headers: cors });
   const { data: profile } = await store.from('user_profiles').select('*').eq('user_id', device.user_id).maybeSingle();
   const custom = (profile?.custom_answers || {}) as Record<string, string>;
-  const answers: { name: string; value: string; source: string }[] = [];
+  const planId = requestedPlanId || crypto.randomUUID();
+  const answers: { name: string; value: string; source: string; confidence: number; reason: string; matchedOption?: string; safeToApply: boolean; attempt: number; optionSetHash: string }[] = [];
   const prose: LiveField[] = [];
   const unresolved: LiveField[] = [];
-  const pick = (f: LiveField, value: unknown) => {
+  const pick = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched verified candidate data') => {
     if (value === null || value === undefined || value === '') return false;
     let chosen = String(value);
-    if (f.options?.length) {
-      chosen = matchAvailableOption(f.label, chosen, f.options) || '';
+    const options = optionLabels(f);
+    if (options.length) {
+      chosen = matchAvailableOption(f.label, chosen, options) || '';
       if (!chosen) return false;
     }
-    answers.push({ name: f.name, value: chosen, source: 'profile' }); return true;
+    answers.push({ name: f.name, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f) }); return true;
   };
   for (const f of fields as LiveField[]) {
     const q = norm(f.label);
     const saved = custom[f.label] || custom[q];
-    if (pick(f, saved)) continue;
+    if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
     if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
@@ -53,13 +56,14 @@ export async function POST(request: NextRequest) {
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
-    if (/sponsor|work authorization|authorized to work/.test(q) && pick(f, profile?.work_authorization || profile?.sponsorship_status)) continue;
+    if (/sponsor/.test(q) && pick(f, profile?.sponsorship_status)) continue;
+    if (/work authorization|authorized to work/.test(q) && pick(f, profile?.work_authorization)) continue;
     if (/previously worked|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
     }
-    if (/why |describe|tell us|project|accomplishment|experience|additional information|cover letter/.test(q) && !f.options?.length) prose.push(f);
+    if (mayUseAi(f)) prose.push(f);
     else unresolved.push(f);
   }
 
@@ -84,10 +88,16 @@ QUESTIONS: ${JSON.stringify(prose)}`;
       const result = await ai.json();
       try {
         const parsed = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-        for (const item of parsed.answers || []) if (item.name && item.value) answers.push({ name: item.name, value: item.value, source: 'ai' });
+        for (const item of parsed.answers || []) {
+          const field = prose.find((candidate) => candidate.name === item.name);
+          if (!field || !item.value || isSensitiveFact(field.label)) continue;
+          const value = field.options?.length ? exactSuppliedOption(field, item.value) : String(item.value).trim();
+          if (value) pick(field, value, 'ai', 'Generated from supplied candidate context on the final bounded attempt');
+        }
       } catch { /* unresolved fields remain for the user */ }
     }
   }
   const answered = new Set(answers.map((a) => a.name));
-  return NextResponse.json({ answers, needsUser: [...unresolved, ...prose].filter((f) => !answered.has(f.name)).map((f) => f.name) }, { headers: cors });
+  const needsContext = [...unresolved, ...prose].filter((f) => !answered.has(f.name)).map((f) => ({ name: f.name, reason: isSensitiveFact(f.label) ? 'A confirmed user answer is required for this sensitive fact.' : 'No truthful answer matched the current ATS options.', attempt: f.attempt || 1 }));
+  return NextResponse.json({ planId, answers, needsContext, needsUser: needsContext.map((f) => f.name) }, { headers: cors });
 }
