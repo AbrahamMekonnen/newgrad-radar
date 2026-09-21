@@ -51,7 +51,7 @@
       : buttons[0];
     if (target) {
       target.click();
-      await wait(150);
+      await wait(500);
     }
   };
 
@@ -186,7 +186,7 @@
     if (existing && existing !== 'select' && !isLocation) return true;
 
     element.click();
-    await wait(150);
+    await wait(500);
     let candidates = visibleOptions();
     let option = candidates.find((item) => optionMatches(item.textContent, wanted))
       || semanticOption(field, wanted, candidates);
@@ -331,13 +331,19 @@
       }
       if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
         element.click();
-        if (element instanceof HTMLInputElement && !String(element.value || '').trim()) {
+        await wait(500);
+        let candidates = visibleOptions();
+        let local = candidates.some((item) => optionMatches(item.textContent, wanted))
+          || !!semanticOption(field, wanted, candidates);
+        if (!candidates.length && element instanceof HTMLInputElement && !String(element.value || '').trim()) {
           setNativeValue(element, wanted);
           element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
+          await wait(500);
+          candidates = visibleOptions();
+          local = candidates.some((item) => optionMatches(item.textContent, wanted))
+            || !!semanticOption(field, wanted, candidates);
         }
-        await wait(500);
-        const choices = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
-        const local = choices.some((choice) => optionMatches(choice, wanted));
+        const choices = candidates.map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'combobox', options: choices });
         element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         if (!local && element instanceof HTMLInputElement) setNativeValue(element, '');
