@@ -177,15 +177,6 @@
       element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
       await wait(isLocation ? 1800 : 350);
       option = visibleOptions().find((item) => optionMatches(item.textContent, wanted));
-      if (!option && visibleOptions().length) {
-        const choices = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
-        const resolved = await send({
-          type: 'RESOLVE_FIELDS',
-          fields: [{ name: field.name, label: field.label, type: 'combobox', options: choices }],
-        }, 30000);
-        const answer = resolved?.answers?.[0]?.value;
-        if (answer) option = visibleOptions().find((item) => normalize(item.textContent) === normalize(answer));
-      }
     }
     if (!option) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -265,15 +256,6 @@
       const wanted = answerLabel(field);
       let option = [...element.options].find((item) => String(item.value) === String(value))
         || [...element.options].find((item) => optionMatches(item.textContent, wanted));
-      if (!option) {
-        const choices = [...element.options].map((item) => item.textContent.trim()).filter(Boolean);
-        const resolved = await send({
-          type: 'RESOLVE_FIELDS',
-          fields: [{ name: field.name, label: field.label, type: 'select', options: choices }],
-        }, 30000);
-        const answer = resolved?.answers?.[0]?.value;
-        if (answer) option = [...element.options].find((item) => normalize(item.textContent) === normalize(answer));
-      }
       if (!option) return false;
       element.value = option.value;
       element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -308,6 +290,36 @@
     return true;
   };
 
+  const planChoiceAnswers = async (fields) => {
+    const unresolved = [];
+    for (const field of fields) {
+      const element = findField(field);
+      if (!element) continue;
+      const wanted = answerLabel(field);
+      if (element instanceof HTMLSelectElement) {
+        const choices = [...element.options].map((item) => item.textContent.trim()).filter(Boolean);
+        const local = [...element.options].some((item) => String(item.value) === String(field.value) || optionMatches(item.textContent, wanted));
+        if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'select', options: choices });
+        continue;
+      }
+      if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
+        element.click();
+        if (element instanceof HTMLInputElement && !String(element.value || '').trim()) {
+          setNativeValue(element, wanted);
+          element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
+        }
+        await wait(500);
+        const choices = visibleOptions().map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        const local = choices.some((choice) => optionMatches(choice, wanted));
+        if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'combobox', options: choices });
+        element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        if (!local && element instanceof HTMLInputElement) setNativeValue(element, '');
+      }
+    }
+    if (!unresolved.length) return new Map();
+    const resolved = await send({ type: 'RESOLVE_FIELDS', fields: unresolved }, 30000);
+    return new Map((resolved?.answers || []).map((answer) => [answer.name, answer]));
+  };
   const banner = (message, error = false) => {
     let box = document.getElementById('newgrad-radar-helper');
     if (!box) {
@@ -629,6 +641,11 @@
         });
       }
       const completed = new Set();
+      const plannedAnswers = await planChoiceAnswers(fields);
+      for (const field of fields) {
+        const planned = plannedAnswers.get(field.name);
+        if (planned) { field.value = planned.value; field.source = planned.source; }
+      }
       const resolvedLive = new Set();  // live field names already sent for resolution
       let running = false;
       const run = async () => {
