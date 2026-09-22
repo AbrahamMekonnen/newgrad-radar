@@ -279,10 +279,19 @@ def send_digest_notifications(
     if push_enabled and ntfy_topic:
         mode_label = "Daily" if mode == "daily" else "Weekly"
         title = f"{mode_label} Job Digest: {total_jobs} new jobs"
-        alert_names = list(jobs_by_alert.keys())
-        message = f"Alerts: {', '.join(alert_names[:3])}"
-        if len(alert_names) > 3:
-            message += f" and {len(alert_names) - 3} more"
+        # Show the actual companies + roles, not the user's alert labels (which
+        # people name things like "kk"/"test" and mean nothing in a push).
+        lines, seen = [], set()
+        for jobs in jobs_by_alert.values():
+            for j in jobs:
+                key = (j.get("company_name"), j.get("title"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                lines.append(f"{j.get('company_name', 'Unknown')} - {j.get('title', '')}".strip(" -"))
+        message = "\n".join(lines[:5])
+        if len(lines) > 5:
+            message += f"\n…and {len(lines) - 5} more"
 
         if dry_run:
             print(f"    [DRY RUN] Digest push to {ntfy_topic}: {title}")

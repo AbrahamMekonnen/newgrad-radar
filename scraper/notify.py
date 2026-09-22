@@ -10,7 +10,8 @@ def send_ntfy(
     title: str,
     message: str,
     url: Optional[str] = None,
-    priority: str = "default"
+    priority: str = "default",
+    tags: Optional[list] = None,
 ) -> bool:
     """Send push notification via ntfy.sh.
 
@@ -26,7 +27,7 @@ def send_ntfy(
     """
     headers = {
         "Title": title,
-        "Tags": "briefcase",
+        "Tags": ",".join(tags) if tags else "briefcase",
         "Priority": priority,
     }
 
