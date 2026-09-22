@@ -207,7 +207,9 @@ def send_instant_alert(
 
     # Send push notification
     if push_enabled and ntfy_topic:
-        title = f"{alert_name}: {job['company_name']}"
+        # Lead with the company + role the user actually wants — never the alert
+        # label (which people name things like "kk").
+        title = f"New job at {job['company_name']}"
         message = f"{job['title']}\n{job.get('location', 'Remote')}"
 
         if dry_run:

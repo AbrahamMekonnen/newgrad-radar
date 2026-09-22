@@ -34,6 +34,27 @@ export interface AlertFilters {
 
 export type DeliveryMode = 'instant' | 'daily_digest' | 'weekly_digest';
 
+// A readable label built from the alert's own filters, so users never have to
+// invent a name (which produced junk like "kk"). Notifications lead with the
+// matched company/role regardless — this label is only for the alerts list.
+export function deriveAlertName(f: AlertFilters): string {
+  const exp = (f.experience_levels || []).map((e) => EXPERIENCE_LABELS[e]).filter(Boolean);
+  const roles = (f.role_types || []).map((r) => ROLE_LABELS[r]).filter(Boolean);
+  const tiers = (f.tiers || []).map((t) => TIER_LABELS[t]).filter(Boolean);
+  const modes = (f.work_modes || []).map((m) => WORK_MODE_LABELS[m]).filter(Boolean);
+  const locs = f.locations || [];
+  const kw = f.title_keywords || [];
+
+  const roleLabel = roles.length
+    ? roles.slice(0, 2).join(', ') + (roles.length > 2 ? '+' : '')
+    : (kw.length ? kw.slice(0, 2).join(', ') : 'All roles');
+  const lead = [exp[0] || '', roleLabel].filter(Boolean).join(' ').trim();
+  const where = [tiers.slice(0, 2).join(', '), locs.slice(0, 2).join(', '), modes[0] || '']
+    .filter(Boolean).join(' · ');
+  const label = [lead || 'All jobs', where].filter(Boolean).join(' · ');
+  return (label || 'Job alert').slice(0, 60);
+}
+
 export interface JobAlert {
   id: string;
   user_id: string;
@@ -147,12 +168,13 @@ export function AlertEditor({ isOpen, onClose, onSave, editingAlert }: AlertEdit
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
     setSaving(true);
     try {
       await onSave({
         ...(editingAlert ? { id: editingAlert.id } : {}),
-        name: name.trim(),
+        // Name is optional — fall back to a filter-derived label so the alerts
+        // list is always readable without forcing users to name anything.
+        name: name.trim() || deriveAlertName(filters),
         delivery_mode: deliveryMode,
         push_enabled: pushEnabled,
         email_enabled: emailEnabled,
@@ -220,14 +242,20 @@ export function AlertEditor({ isOpen, onClose, onSave, editingAlert }: AlertEdit
       className="max-w-2xl max-h-[90vh] overflow-y-auto"
     >
       <div className="space-y-6">
-        {/* Alert Name */}
-        <Input
-          label="Alert Name"
-          id="alert-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g., AI Engineer at Top Companies"
-        />
+        {/* Alert Name — optional; auto-named from filters when left blank. */}
+        <div>
+          <Input
+            label="Alert name (optional)"
+            id="alert-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={deriveAlertName(filters)}
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Leave blank to auto-name it &ldquo;{deriveAlertName(filters)}&rdquo;. Your
+            notifications always show the company and role, not this name.
+          </p>
+        </div>
 
         {/* Company Tiers */}
         <div>
