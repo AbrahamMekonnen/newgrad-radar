@@ -483,10 +483,12 @@
     if (element.type === 'checkbox') return element.checked;
     if (String(element.value || '').trim()) return true;
     if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
-      const container = element.closest('[class*=select], [class*=field], [class*=question]') || element.parentElement;
-      const selected = container?.querySelector('[aria-selected=true], [class*=singleValue], [class*=single-value], [class*=value-container]');
-      const text = String(selected?.textContent || '').trim();
-      return Boolean(text && !/^select|^choose/i.test(text));
+      let container = element.parentElement;
+      for (let depth = 0; container && depth < 6; depth++, container = container.parentElement) {
+        const selected = container.querySelector(':scope > [class*=singleValue], :scope > [class*=single-value], [aria-selected=true]');
+        const text = String(selected?.textContent || '').trim();
+        if (text && !/^select|^choose/i.test(text)) return true;
+      }
     }
     return false;
   };
