@@ -302,6 +302,26 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
           </Link>
         </div>
 
+        {/* Job Alerts */}
+        <div className="p-6">
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Job Alerts</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Create alerts for specific roles, companies, or locations and get notified the moment a match is posted.
+          </p>
+          <Link
+            href="/settings/alerts"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            Manage Job Alerts
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+
         {/* All jobs notification */}
         <div className="p-6">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">All Jobs Notifications</h2>
