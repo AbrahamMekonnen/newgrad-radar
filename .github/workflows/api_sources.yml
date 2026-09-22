@@ -186,7 +186,7 @@ jobs:
               # Upsert
               if not dry_run:
                   print('Upserting to database...')
-                  new_count, updated_count = upsert_jobs(classified, False)
+                  new_count, updated_count, _ = upsert_jobs(classified, False)
                   print(f'New jobs: {new_count}, Updated: {updated_count}')
               else:
                   print('[DRY RUN] Would upsert jobs')

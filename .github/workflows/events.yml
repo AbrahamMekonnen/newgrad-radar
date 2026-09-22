@@ -213,7 +213,7 @@ jobs:
               print(f'New grad positions: {len(classified)}')
 
               if not dry_run and classified:
-                  new_count, updated_count = upsert_jobs(classified, False)
+                  new_count, updated_count, _ = upsert_jobs(classified, False)
                   print(f'New: {new_count}, Updated: {updated_count}')
               elif classified:
                   print('[DRY RUN] Would upsert')
