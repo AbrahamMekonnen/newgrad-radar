@@ -186,6 +186,7 @@
     const wanted = answerLabel(field);
     const existing = normalize(element.value || element.textContent);
     const isLocation = /location/i.test(String(element.id || element.name || ''));
+    const isCountry = /country/i.test(String(field.label || element.id || element.name || ''));
     const selectedLocation = isLocation && document.querySelector('#selected-location, input[name="selectedLocation"]');
     if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
     if (existing && existing !== 'select' && !isLocation) return true;
@@ -202,10 +203,18 @@
       setNativeValue(element, wanted);
       element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
-      await wait(isLocation ? 1800 : 350);
+      await wait(isLocation ? 1800 : isCountry ? 700 : 350);
       candidates = visibleOptions(element);
       option = candidates.find((item) => optionMatches(item.textContent, wanted))
         || semanticOption(field, wanted, candidates);
+    }
+    if (!option && isCountry && element instanceof HTMLInputElement) {
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+      await wait(300);
+      if (controlHasValue(element)) return true;
     }
     if (!option) {
       const signature = candidates.map((item) => normalize(item.textContent)).join('|') || initialSignature;
