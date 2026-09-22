@@ -355,6 +355,26 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
             ) if job.get(k) is not None},
         })
 
+    # Register every company first: jobs.company_slug has a FK to companies.slug,
+    # so an untracked employer (bank, government agency, new startup) must exist
+    # in the companies table or its job insert is rejected. Upsert on slug with
+    # merge semantics, so curated rows keep their logo_url/careers_url.
+    company_rows = {}
+    for record in records:
+        slug = record["company_slug"]
+        if slug and slug not in company_rows:
+            company_rows[slug] = {
+                "slug": slug,
+                "name": record.get("company_name") or slug,
+                "tier": record.get("tier") or "other",
+            }
+    comp_list = list(company_rows.values())
+    for i in range(0, len(comp_list), 500):
+        try:
+            client.table("companies").upsert(comp_list[i:i + 500], on_conflict="slug").execute()
+        except Exception as ce:
+            print(f"Error upserting companies chunk {i // 500}: {ce}")
+
     candidate_new_ids = {record["id"] for record in records if record["id"] not in existing_ids}
     successful_ids: set[str] = set()
     CHUNK = 500
