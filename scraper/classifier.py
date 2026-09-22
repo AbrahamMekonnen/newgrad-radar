@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 from typing import Optional
 
 try:
@@ -227,6 +228,49 @@ def call_gemini(prompt: str) -> Optional[str]:
         return None
 
 
+# Reuse the shared multi-provider LLM chain (Gemini -> groq -> cerebras ->
+# openrouter -> mistral -> together -> github) so a single provider's quota /
+# rate limit no longer drops classification all the way to keyword heuristics.
+_IQ_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "sources", "interview_questions")
+if _IQ_PATH not in sys.path:
+    sys.path.insert(0, _IQ_PATH)
+
+
+def _llm_enrich():
+    try:
+        import llm_enrich
+        return llm_enrich
+    except Exception:
+        return None
+
+
+def llm_available() -> bool:
+    """True if ANY LLM provider (Gemini or a fallback) is configured."""
+    m = _llm_enrich()
+    if m is not None:
+        try:
+            return m.llm_available()
+        except Exception:
+            pass
+    return configure_genai()
+
+
+def call_llm(prompt: str) -> Optional[str]:
+    """Generate via the shared provider chain; fall back to direct Gemini."""
+    m = _llm_enrich()
+    if m is not None:
+        try:
+            text = m._generate(prompt)
+            if text and text.strip():
+                return text
+        except Exception as e:
+            print(f"LLM provider chain error: {e}")
+    if configure_genai():
+        return call_gemini(prompt)
+    return None
+
+
 def detect_role_types(title: str) -> list[str]:
     """Detect role types from job title using pattern matching."""
     title_lower = title.lower()
@@ -331,8 +375,9 @@ def classify_jobs(jobs: list[dict]) -> list[dict]:
     if not jobs:
         return []
 
-    # Try to use Gemini
-    if configure_genai():
+    # Use any available LLM provider (Gemini or a configured fallback);
+    # only drop to keyword heuristics when NONE is available or all fail.
+    if llm_available():
         return _classify_with_gemini(jobs)
 
     # Fallback to heuristics
@@ -355,7 +400,7 @@ def _classify_with_gemini(jobs: list[dict]) -> list[dict]:
         ]
 
         prompt = CLASSIFICATION_PROMPT.format(jobs="\n".join(job_texts))
-        response = call_gemini(prompt)
+        response = call_llm(prompt)
 
         if response:
             try:
