@@ -777,17 +777,28 @@
             }
             return;
           }
-          for (const field of fields) {
+          for (const [fieldIndex, field] of fields.entries()) {
             if (completed.has(field.name)) continue;
-            // One field throwing must never abort the rest of the fill.
-            try { if (await fill(field)) completed.add(field.name); } catch { /* skip */ }
+            if (data.browserWorker) void send({
+              type: 'PROGRESS', stage: 'filling',
+              detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', field: field.name, label: field.label, index: fieldIndex + 1 }) },
+            });
+            try {
+              const filled = await Promise.race([fill(field), wait(10000).then(() => false)]);
+              if (filled) completed.add(field.name);
+            } catch { /* skip this field and continue */ }
           }
           const remaining = fields.length - completed.size;
+          if (data.browserWorker) await send({
+            type: 'PROGRESS', stage: 'filling',
+            detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Prepared field pass complete.', remaining }) },
+          });
           // Resolve live fields that the server prep missed — including ones the
           // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
           // so a field that appears after the first pass still gets resolved.
           // Best-effort: a resolver hiccup must never block prepared fills.
           const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
+          if (data.browserWorker && newLive.length) await send({ type: 'PROGRESS', stage: 'filling', detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Resolving required live fields.', fields: newLive.map((field) => ({ name: field.name, label: field.label })) }) } });
           if (newLive.length) {
             try {
               const results = await Promise.race([
