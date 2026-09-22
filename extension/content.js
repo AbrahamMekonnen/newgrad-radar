@@ -476,6 +476,20 @@
       : [];
     return { name, label: fieldLabelFor(element), type: element.type || element.getAttribute('role'), options };
   };
+  const controlHasValue = (element) => {
+    if (element.type === 'radio') {
+      return [...document.querySelectorAll('input[type=\"radio\"]')].some((item) => item.name === element.name && item.checked);
+    }
+    if (element.type === 'checkbox') return element.checked;
+    if (String(element.value || '').trim()) return true;
+    if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
+      const container = element.closest('[class*=select], [class*=field], [class*=question]') || element.parentElement;
+      const selected = container?.querySelector('[aria-selected=true], [class*=singleValue], [class*=single-value], [class*=value-container]');
+      const text = String(selected?.textContent || '').trim();
+      return Boolean(text && !/^select|^choose/i.test(text));
+    }
+    return false;
+  };
   const scanUnfilledFields = () => {
     const submit = [...document.querySelectorAll('button, input[type="submit"]')].find((item) => /submit|apply/i.test(String(item.textContent || item.value || '')));
     const root = submit?.form || submit?.closest('form') || document.querySelector('form');
@@ -502,21 +516,14 @@
         return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options }];
       }
 
-      if (element.type === 'checkbox' ? element.checked : String(element.value || '').trim()) return [];
+      if (controlHasValue(element)) return [];
       return [descriptor];
     }).filter((field) => field.label);
   };
   const fieldAccepted = (field) => {
     const element = findField(field);
     if (!element) return false;
-    if (element.type === 'radio') return [...document.querySelectorAll('input[type="radio"]')].some((item) => item.name === element.name && item.checked);
-    if (element.type === 'checkbox') return element.checked;
-    if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
-      const container = element.closest('[class*=select], [class*=field], [class*=question]') || element.parentElement;
-      const selected = container?.querySelector('[aria-selected=true], [class*=singleValue], [class*=value-container]');
-      return Boolean(String(element.value || selected?.textContent || '').trim());
-    }
-    return Boolean(String(element.value || element.textContent || '').trim());
+    return controlHasValue(element) || Boolean(String(element.textContent || '').trim());
   };
   const resolveFieldBounded = async (field, validationMessage = '') => {
     const state = resolutionState.get(field.name) || { attempt: 0, signatures: new Set(), planId: null };
