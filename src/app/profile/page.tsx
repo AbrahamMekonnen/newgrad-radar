@@ -45,6 +45,9 @@ function LinkCard({
 
 function ProfileContent({ userId, email }: { userId: string; email: string }) {
   const [weeklyGoal, setWeeklyGoal] = useState<number>(10);
+  // Separate text state for the free-typed input, so per-keystroke clamping
+  // doesn't fight the user (which broke typing multi-digit numbers on mobile).
+  const [goalText, setGoalText] = useState<string>('10');
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -55,7 +58,7 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
       .select('weekly_goal')
       .eq('user_id', userId)
       .single();
-    if (data?.weekly_goal) setWeeklyGoal(data.weekly_goal);
+    if (data?.weekly_goal) { setWeeklyGoal(data.weekly_goal); setGoalText(String(data.weekly_goal)); }
     setLoading(false);
   }, [userId, supabase]);
 
@@ -64,6 +67,7 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
   // Saves immediately (no separate button), matching the previous behavior.
   const saveWeeklyGoal = async (goal: number) => {
     setWeeklyGoal(goal);
+    setGoalText(String(goal));
     const { error } = await supabase
       .from('user_profiles')
       .update({ weekly_goal: goal })
@@ -71,6 +75,13 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
     if (error) {
       await supabase.from('user_profiles').insert({ user_id: userId, weekly_goal: goal });
     }
+  };
+
+  // Commit the free-typed value on blur: clamp to a sane range and save.
+  const commitGoalText = () => {
+    const parsed = parseInt(goalText, 10);
+    const clamped = Number.isFinite(parsed) ? Math.max(1, Math.min(999, parsed)) : weeklyGoal;
+    saveWeeklyGoal(clamped);
   };
 
   const docIcon = (
@@ -124,11 +135,15 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
             <span className="text-sm text-gray-500 dark:text-gray-400">or</span>
             <input
               type="number"
+              inputMode="numeric"
               min="1"
-              max="100"
-              value={weeklyGoal}
-              onChange={(e) => setWeeklyGoal(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-              onBlur={(e) => saveWeeklyGoal(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              max="999"
+              value={goalText}
+              // Let the user type freely (no per-keystroke clamp — that broke
+              // multi-digit entry on mobile); commit + clamp on blur / Enter.
+              onChange={(e) => setGoalText(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={commitGoalText}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               className="w-20 px-3 py-1.5 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">apps/week</span>
