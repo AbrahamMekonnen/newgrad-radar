@@ -129,6 +129,32 @@
       type: 'ashby',
       hosts: ['jobs.ashbyhq.com'],
       formSelectors: ['#form[role="tabpanel"]', '.ashby-application-form', 'form[data-form-type="application"]'],
+      findField(doc, field) {
+        const name = String(field?.name || '');
+        if (!name) return null;
+        const entry = [...doc.querySelectorAll('[data-field-path]')]
+          .find((item) => item.getAttribute('data-field-path') === name);
+        return entry?.querySelector('input, textarea, select, [role="combobox"]') || null;
+      },
+      findInvalid(root) {
+        const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
+        const nativeInvalid = controls.find((item) => item.willValidate && !item.checkValidity());
+        if (nativeInvalid) return nativeInvalid;
+        const entries = [...root.querySelectorAll('[data-field-path]')];
+        for (const entry of entries) {
+          const heading = entry.querySelector('.ashby-application-form-question-title, label');
+          if (!heading || (!heading.className.includes('required') && !/\*\s*$/.test(heading.textContent || ''))) continue;
+          const items = [...entry.querySelectorAll('input, textarea, select, [role="combobox"]')];
+          if (!items.length) continue;
+          const satisfied = items.some((item) => {
+            if (item.type === 'checkbox' || item.type === 'radio') return item.checked;
+            if (item.type === 'file') return item.files?.length > 0;
+            return String(item.value || '').trim().length > 0;
+          });
+          if (!satisfied) return items[0];
+        }
+        return null;
+      },
       findSubmit(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');
         if (!panel) return null;

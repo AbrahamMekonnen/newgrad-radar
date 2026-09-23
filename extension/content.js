@@ -71,6 +71,8 @@
   };
 
   const findField = (field) => {
+    const adapterField = ATS?.detect(location.href)?.findField?.(document, field);
+    if (adapterField) return adapterField;
     const aliases = {
       location: ['candidate-location'],
       city: ['candidate-location'],
@@ -660,9 +662,9 @@
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
     const form = submit.form || submit.closest('form') || adapter?.validationRoot?.(submit) || document.querySelector('form');
-    if (form?.checkValidity && !form.checkValidity()) {
-      const bad = [...form.querySelectorAll('input, select, textarea')]
-        .find((el) => el.willValidate && !el.checkValidity());
+    const bad = adapter?.findInvalid?.(form) || [...(form?.querySelectorAll?.('input, select, textarea') || [])]
+      .find((el) => el.willValidate && !el.checkValidity());
+    if (bad) {
       const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
       if (adapter?.repairInvalid && await adapter.repairInvalid({
         invalid: bad, label, fields: data.fields || [], fillCombo, wait,

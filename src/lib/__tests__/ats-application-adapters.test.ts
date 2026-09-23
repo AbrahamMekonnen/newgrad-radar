@@ -60,6 +60,22 @@ describe('browser ATS adapters', () => {
     expect(ledger.begin(accepted)).toBe(false);
   });
 
+  it('maps Ashby data-field-path containers to controls and validates required entries', () => {
+    const control = { value: '', type: 'text', willValidate: false, checkValidity: () => true };
+    const heading = { className: 'ashby-required', textContent: 'Start date*' };
+    const entry = {
+      getAttribute: (name: string) => name === 'data-field-path' ? 'start-date-id' : null,
+      querySelector: (selector: string) => selector.includes('question-title') ? heading : control,
+      querySelectorAll: () => [control],
+    };
+    const root = {
+      querySelectorAll: (selector: string) => selector === '[data-field-path]' ? [entry] : [control],
+    };
+    expect(ATS.adapters.ashby.findField(root, { name: 'start-date-id' })).toBe(control);
+    expect(ATS.adapters.ashby.findInvalid(root)).toBe(control);
+    control.value = '2026-10-01';
+    expect(ATS.adapters.ashby.findInvalid(root)).toBeNull();
+  });
   it('finds Ashby submit controls inside its non-form application panel', () => {
     const submit = {
       textContent: 'Submit Application', value: '',
