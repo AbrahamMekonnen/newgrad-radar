@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     if (/5 days|five days|full week.*office|office.*full week/.test(q) && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
     if (/receive information|marketing communication|training opportunities|promotional/.test(q) && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the conservative promotional-communications opt-out')) continue;
+    if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
     if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
