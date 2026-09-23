@@ -9,18 +9,9 @@ import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
+import { generateNtfyTopic } from '@/lib/ntfy';
 
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
-
-// A long, hard-to-guess ntfy topic. Topics are effectively public (anyone who
-// knows the string can subscribe), so we generate a random one instead of
-// letting users pick something weak.
-function generateNtfyTopic(): string {
-  const rand =
-    (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))
-      .replace(/-/g, '');
-  return `hireradar-${rand.slice(0, 24)}`;
-}
 
 export default function SettingsPage() {
   return (

@@ -12,6 +12,7 @@ import { CompanyFilterModal } from '@/components/companies/CompanyFilterModal';
 import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWithFiltersModal';
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
+import { ensureNtfyProvisioned } from '@/lib/ntfy';
 
 type TabType = 'my-companies' | 'add-companies';
 
@@ -230,6 +231,9 @@ function MyListContent({ userId }: { userId: string }) {
         setTrackedCompanies((prev) => [...prev, company]);
         // Enable notifications by default for new companies
         setNotifySlugs((prev) => new Set(prev).add(slug));
+        // Adding a company opts it into notifications, so make sure the user
+        // can actually receive them (and prompt phone setup once).
+        void ensurePushReady();
       }
     }
   };
@@ -280,7 +284,21 @@ function MyListContent({ userId }: { userId: string }) {
     }
   };
 
+  // Make sure the user can actually RECEIVE watchlist pushes (push_enabled +
+  // ntfy_topic) before we rely on the notifier, and nudge them to finish the
+  // one-time phone setup the first time.
+  const ensurePushReady = async () => {
+    const { newlyProvisioned } = await ensureNtfyProvisioned(supabase, userId);
+    if (newlyProvisioned) {
+      showToast(
+        'Notifications on! Open Settings → Notifications and subscribe to your topic in the ntfy app to get these on your phone.',
+        'info',
+      );
+    }
+  };
+
   const handleNotifyToggle = async (slug: string, enabled: boolean) => {
+    if (enabled) void ensurePushReady();
     // Update UI immediately (optimistic update)
     setNotifySlugs((prev) => {
       const next = new Set(prev);
@@ -310,6 +328,7 @@ function MyListContent({ userId }: { userId: string }) {
     // Update UI immediately (optimistic update)
     if (enabled) {
       setNotifySlugs(new Set(slugs));
+      void ensurePushReady();
     } else {
       setNotifySlugs(new Set());
     }

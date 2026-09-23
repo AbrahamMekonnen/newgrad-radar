@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ensureNtfyProvisioned } from '@/lib/ntfy';
 
 // Rate limiting for company creation
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -271,6 +272,10 @@ export async function POST(request: NextRequest) {
       if (listError && listError.code !== '23505') {
         // Log but don't fail - company was added successfully
         console.log('Note: Company added but could not add to user list:', listError);
+      } else {
+        // Tracking a company opts it into notifications, so make sure the user
+        // can actually receive them (push_enabled + ntfy_topic). Best-effort.
+        await ensureNtfyProvisioned(supabase, user.id);
       }
     }
 
