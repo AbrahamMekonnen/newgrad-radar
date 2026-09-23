@@ -138,6 +138,7 @@ describe('browser ATS adapters', () => {
   it('requires positive ATS success evidence', () => {
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Application form').confirmed).toBe(false);
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Thank you for applying').confirmed).toBe(true);
+    expect(ATS.successEvidence('https://jobs.ashbyhq.com/acme/1', 'Thank you for submitting your application. We will be in touch if there is a fit.').confirmed).toBe(true);
   });
 
   it('infers US phone country only from structured contact facts', () => {

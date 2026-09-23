@@ -75,7 +75,8 @@
     const urlMatched = ['thank you', 'application submitted', 'application success', 'submission confirmation']
       .some((phrase) => target.includes(phrase));
     const textMatched = [
-      'thank you for applying', 'thanks for applying', 'application has been submitted',
+      'thank you for applying', 'thanks for applying', 'thank you for submitting your application',
+      'we will be in touch if there is a fit', 'application has been submitted',
       'application was submitted', 'successfully submitted your application',
       'we received your application', 'we have received your application',
       'your application was received', 'your application has been received',

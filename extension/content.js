@@ -421,6 +421,8 @@
     const successText = [
       'thank you for applying',
       'thanks for applying',
+      'thank you for submitting your application',
+      'we will be in touch if there is a fit',
       'application has been submitted',
       'application was submitted',
       'application submitted',
