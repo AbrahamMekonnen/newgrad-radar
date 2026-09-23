@@ -59,7 +59,11 @@ def notify_users(new_jobs: list[dict], users_by_job: dict[str, list[dict]], dry_
     Returns:
         Number of notifications sent
     """
+    import os
     sent_count = 0
+    # Land taps on the persistent Notified Jobs -> All Jobs list.
+    app_url = (os.getenv("APP_URL") or "https://newgrad-radar.vercel.app").rstrip("/")
+    notified_url = f"{app_url}/applications?section=alerts&notif=all_jobs"
 
     for job in new_jobs:
         users = users_by_job.get(job["id"], [])
@@ -88,13 +92,13 @@ def notify_users(new_jobs: list[dict], users_by_job: dict[str, list[dict]], dry_
                 continue
 
             sent = False
-            if ntfy_topic and send_ntfy(topic=ntfy_topic, title=title, message=message, url=job.get("url")):
+            if ntfy_topic and send_ntfy(topic=ntfy_topic, title=title, message=message, url=notified_url):
                 sent = True
             # Web Push + persist to Notified Jobs (all-jobs source).
             if user_id:
                 from webpush import push_to_user
                 from db import get_client, record_notified_jobs
-                if push_to_user(get_client(), user_id, title, message, url=job.get("url")) > 0:
+                if push_to_user(get_client(), user_id, title, message, url=notified_url) > 0:
                     sent = True
                 record_notified_jobs(user_id, [job["id"]], "all_jobs")
             if sent:

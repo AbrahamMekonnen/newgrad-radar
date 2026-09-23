@@ -205,7 +205,7 @@ def send_instant_alert(
     result = {"push_sent": False, "email_sent": False}
 
     app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
-    history_url = f"{app_url}/applications?section=alerts"
+    history_url = f"{app_url}/applications?section=alerts&notif=alert"
 
     # Send push notification (ntfy + Web Push, independently)
     if push_enabled and (ntfy_topic or user_id):
@@ -259,7 +259,7 @@ def send_digest_notifications(
     """
     result = {"push_count": 0, "email_count": 0}
     app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
-    history_url = f"{app_url}/applications?section=alerts"
+    history_url = f"{app_url}/applications?section=alerts&notif=alert"
 
     if not matches:
         return result
@@ -566,7 +566,7 @@ def build_single_alert_email(alert_name: str, job: dict) -> str:
         HTML email body string
     """
     app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
-    history_url = f"{app_url}/applications?section=alerts"
+    history_url = f"{app_url}/applications?section=alerts&notif=alert"
     role_badges = ""
     for role in job.get("role_types", []):
         role_badges += f'<span style="display: inline-block; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px;">{role}</span>'
@@ -639,7 +639,7 @@ def build_digest_alert_email(jobs_by_alert: dict[str, list[dict]], mode: str) ->
         HTML email body string
     """
     app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
-    history_url = f"{app_url}/applications?section=alerts"
+    history_url = f"{app_url}/applications?section=alerts&notif=alert"
     mode_label = "Daily" if mode == "daily" else "Weekly"
     total_jobs = sum(len(jobs) for jobs in jobs_by_alert.values())
     total_alerts = len(jobs_by_alert)

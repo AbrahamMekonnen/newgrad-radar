@@ -22,6 +22,13 @@ export function AlertedJobs() {
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [tab, setTab] = useState<SourceKey>('all');
 
+  // Deep-link: /applications?section=alerts&notif=watchlist opens that sub-tab,
+  // so tapping a notification lands right on the matching list.
+  useEffect(() => {
+    const n = new URLSearchParams(window.location.search).get('notif');
+    if (n === 'watchlist' || n === 'alert' || n === 'all_jobs') setTab(n);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const response = await fetch('/api/alerts/history', { cache: 'no-store' });

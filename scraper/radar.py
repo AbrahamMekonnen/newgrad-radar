@@ -290,10 +290,11 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
 
             # Push notification (ntfy + Web Push, independently)
             if prefs.get("push_enabled"):
-                # Deep-link into the in-app filtered view so tapping shows THIS
-                # company's job cards, not the generic board.
+                # Deep-link to the persistent Notified Jobs -> Watchlist list, so
+                # tapping lands on the applyable to-do list (not the generic board
+                # or a one-off view they lose after closing).
                 app_url = (os.getenv("APP_URL") or "https://newgrad-radar.vercel.app").rstrip("/")
-                url = f"{app_url}/?company={company_slug}"
+                url = f"{app_url}/applications?section=alerts&notif=watchlist"
                 if len(matching_jobs) == 1:
                     job = matching_jobs[0]
                     title = f"New job at {company_name}"
