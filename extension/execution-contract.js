@@ -34,10 +34,13 @@
   });
 
   const uploadPending = (doc) => {
-    const selectors = '[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=progress], [class*=spinner]';
-    if ([...doc.querySelectorAll(selectors)].some(visible)) return true;
-    const text = normalize(doc.body?.innerText || '');
-    return /uploading|parsing your resume|processing resume|updating your forms|still saving/.test(text);
+    const selectors = '[aria-busy=true], progress, [role=progressbar], [role=status], [aria-live], [class*=uploading], [class*=progress], [class*=spinner]';
+    return [...doc.querySelectorAll(selectors)].some((element) => {
+      if (!visible(element)) return false;
+      if (element.getAttribute('aria-busy') === 'true' || element.tagName === 'PROGRESS' || element.getAttribute('role') === 'progressbar') return true;
+      const text = normalize(element.textContent || element.getAttribute('aria-label') || '');
+      return /uploading|parsing your resume|processing resume|updating your forms|still saving|please wait/.test(text);
+    });
   };
 
   const findNextAction = (doc) => [...doc.querySelectorAll('button, input[type=button], input[type=submit]')]

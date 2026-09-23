@@ -49,9 +49,11 @@ describe('browser execution contract', () => {
   });
 
   it('detects upload processing and native required-field failures', () => {
-    const busy = element('', {});
+    const busy = element('', { getAttribute: (name: string) => name === 'aria-busy' ? 'true' : null });
     const doc = { querySelectorAll: () => [busy], body: { innerText: '' } };
     expect(EXEC.uploadPending(doc)).toBe(true);
+    const staleCopy = { querySelectorAll: () => [], body: { innerText: 'Parsing your resume. Autofilling key fields...' } };
+    expect(EXEC.uploadPending(staleCopy)).toBe(false);
     const invalid = { willValidate: true, checkValidity: () => false };
     const root = { querySelectorAll: () => [invalid] };
     expect(EXEC.requiredInvalid(root)).toBe(invalid);

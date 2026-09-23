@@ -628,8 +628,22 @@
     }
     const adapter = ATS?.detect(location.href, data.atsType);
     if (EXEC?.uploadPending?.(document)) {
-      banner('HireRadar is waiting for the ATS to finish uploading and processing files...');
-      return true;
+      data.uploadWaitStartedAt ||= now;
+      persist(data);
+      if (now - data.uploadWaitStartedAt < 45000) {
+        banner('HireRadar is waiting for the ATS to finish uploading and processing files...');
+        return true;
+      }
+      if (data.browserWorker) await send({
+        type: 'PROGRESS', stage: 'waiting_for_user',
+        detail: { detail: JSON.stringify({ message: 'ATS file processing did not finish.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'upload_timeout', ats: data.atsType, category: 'processing' }) }) },
+      });
+      banner('The ATS did not finish processing the uploaded file.', true);
+      return false;
+    }
+    if (data.uploadWaitStartedAt) {
+      delete data.uploadWaitStartedAt;
+      persist(data);
     }
     const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
     const submit = adapter?.findSubmit?.(document) || controls
