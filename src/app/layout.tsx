@@ -1,10 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Navbar } from "@/components/layout/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,6 +37,21 @@ export const metadata: Metadata = {
     title: "HireRadar - Tech Jobs at Every Level",
     description: "Track software engineering jobs at top tech companies",
   },
+  // PWA: installable app metadata.
+  applicationName: "HireRadar",
+  appleWebApp: {
+    capable: true,
+    title: "HireRadar",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -83,6 +100,10 @@ export default function RootLayout({
 
           {/* Floating Feedback Button */}
           <FeedbackButton />
+
+          {/* PWA: register the service worker + offer install */}
+          <ServiceWorkerRegistrar />
+          <InstallPrompt />
         </ThemeProvider>
       </body>
     </html>
