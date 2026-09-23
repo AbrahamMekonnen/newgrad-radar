@@ -27,6 +27,16 @@ function isIos(): boolean {
   return iOSDevice || iPadOs;
 }
 
+// Only offer install on phones/tablets. The installed desktop window is a
+// degraded experience (and desktop gets Web Push in the normal browser with no
+// install), so we never prompt to install on desktop.
+function isMobile(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /android|iphone|ipad|ipod|mobile/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && (navigator as unknown as { maxTouchPoints: number }).maxTouchPoints > 1);
+}
+
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosGuide, setShowIosGuide] = useState(false);
@@ -34,11 +44,12 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (isStandalone()) return; // already installed
+    if (!isMobile()) return; // desktop: don't offer install (use in-browser push)
     try {
       if (localStorage.getItem(DISMISS_KEY)) return; // user dismissed before
     } catch { /* ignore */ }
 
-    // Android / desktop Chromium: the browser hands us the install event.
+    // Android: the browser hands us the install event.
     const onBip = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);

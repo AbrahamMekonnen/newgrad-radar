@@ -32,20 +32,21 @@ export async function ensureNtfyProvisioned(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ topic: string | null; newlyProvisioned: boolean }> {
+  // Web Push has replaced ntfy as the delivery channel, so we no longer mint a
+  // topic here — we just flip push_enabled on so the sender targets this user.
+  // Actual delivery comes from their Web Push subscription (subscribeToPush).
   const { data } = await supabase
     .from('user_preferences')
-    .select('ntfy_topic, push_enabled')
+    .select('push_enabled')
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (data?.ntfy_topic && data?.push_enabled) {
-    return { topic: data.ntfy_topic, newlyProvisioned: false };
+  if (data?.push_enabled) {
+    return { topic: null, newlyProvisioned: false };
   }
 
-  const topic = data?.ntfy_topic || generateNtfyTopic();
   const payload: Record<string, unknown> = {
     user_id: userId,
-    ntfy_topic: topic,
     push_enabled: true,
     updated_at: new Date().toISOString(),
   };
@@ -57,8 +58,8 @@ export async function ensureNtfyProvisioned(
     .from('user_preferences')
     .upsert(payload, { onConflict: 'user_id' });
   if (error) {
-    console.error('ensureNtfyProvisioned failed:', error);
+    console.error('ensurePushEnabled failed:', error);
     return { topic: null, newlyProvisioned: false };
   }
-  return { topic, newlyProvisioned: true };
+  return { topic: null, newlyProvisioned: true };
 }

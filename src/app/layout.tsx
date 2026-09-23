@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/ui/CommandPalette";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { NotificationGateProvider } from "@/components/pwa/NotificationGate";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -77,6 +78,7 @@ export default function RootLayout({
         </div>
 
         <ThemeProvider>
+          <NotificationGateProvider>
           {/* Skip to content link for keyboard users */}
           <a
             href="#main-content"
@@ -104,6 +106,7 @@ export default function RootLayout({
           {/* PWA: register the service worker + offer install */}
           <ServiceWorkerRegistrar />
           <InstallPrompt />
+          </NotificationGateProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -5,11 +5,9 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { UserPreferences, RoleType, ROLE_LABELS } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
-import { generateNtfyTopic } from '@/lib/ntfy';
 import { subscribeToPush, isPushSupported } from '@/lib/webpush';
 
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
@@ -216,7 +214,7 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
               )}
               {pushDeviceState === 'unsupported' && (
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                  This browser can&rsquo;t receive web push here. On iPhone, use Safari and &ldquo;Add to Home Screen&rdquo; first; or use the ntfy option below.
+                  This browser can&rsquo;t receive web push here. On iPhone, open Safari and &ldquo;Add to Home Screen&rdquo; first, then open the app and try again.
                 </p>
               )}
               {!isPushSupported() && pushDeviceState === 'idle' && (
@@ -237,49 +235,6 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
                 </p>
               )}
             </div>
-            <Checkbox
-              label="Push notifications (via ntfy.sh)"
-              checked={preferences.push_enabled}
-              onChange={(checked) =>
-                setPreferences({
-                  ...preferences,
-                  push_enabled: checked,
-                  // Auto-generate a secure topic the first time push is enabled.
-                  ntfy_topic: checked && !preferences.ntfy_topic ? generateNtfyTopic() : preferences.ntfy_topic,
-                })
-              }
-            />
-            {preferences.push_enabled && (
-              <div className="ml-6 space-y-3">
-                <div>
-                  <Input
-                    label="Your ntfy.sh Topic"
-                    value={preferences.ntfy_topic || ''}
-                    onChange={(e) => setPreferences({ ...preferences, ntfy_topic: e.target.value })}
-                    placeholder="hireradar-xxxxxxxx"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPreferences({ ...preferences, ntfy_topic: generateNtfyTopic() })}
-                    className="mt-1 text-xs font-medium text-indigo-600 hover:text-indigo-500"
-                  >
-                    Generate a new random topic
-                  </button>
-                </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-900 mb-2">How to set up push notifications:</p>
-                  <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-                    <li>We generated a private topic above — keep it secret (anyone with it can see your alerts).</li>
-                    <li>Download the <strong>ntfy</strong> app on your phone (iOS/Android)</li>
-                    <li>In the app, tap &quot;+&quot; and subscribe to that exact topic</li>
-                    <li>Save your settings here — done!</li>
-                  </ol>
-                  <p className="text-xs text-blue-700 mt-2">
-                    No account needed. Topics are auto-created when you subscribe.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

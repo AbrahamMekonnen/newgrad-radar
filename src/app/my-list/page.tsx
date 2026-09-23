@@ -13,7 +13,7 @@ import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWit
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { ensureNtfyProvisioned } from '@/lib/ntfy';
-import { subscribeToPush } from '@/lib/webpush';
+import { useNotificationGate } from '@/components/pwa/NotificationGate';
 
 type TabType = 'my-companies' | 'add-companies';
 
@@ -27,6 +27,7 @@ export default function MyListPage() {
 
 function MyListContent({ userId }: { userId: string }) {
   const { toasts, showToast, removeToast } = useToast();
+  const { requireNotifications } = useNotificationGate();
   const [activeTab, setActiveTab] = useState<TabType>('my-companies');
   const [trackedCompanies, setTrackedCompanies] = useState<Company[]>([]);
   const [autoApplySlugs, setAutoApplySlugs] = useState<Set<string>>(new Set());
@@ -289,22 +290,13 @@ function MyListContent({ userId }: { userId: string }) {
   // ntfy_topic) before we rely on the notifier, and nudge them to finish the
   // one-time phone setup the first time.
   const ensurePushReady = async () => {
-    const { newlyProvisioned } = await ensureNtfyProvisioned(supabase, userId);
-    // Subscribe THIS browser/device to Web Push (prompts permission on the tap).
-    const res = await subscribeToPush();
-    if (res.ok) {
-      if (newlyProvisioned) {
-        showToast("Notifications on — you'll get job alerts on this device.", 'success');
-      }
-    } else if (res.reason === 'denied') {
-      showToast('Notifications are blocked. Enable them in your browser site settings to get alerts.', 'info');
-    } else if (newlyProvisioned) {
-      // Web Push unsupported here (e.g. iOS before install) — point to the app install / ntfy.
-      showToast(
-        'Notifications on! Install the app (Add to Home Screen) or set up ntfy in Settings to receive them on your phone.',
-        'info',
-      );
-    }
+    // Mark the user as wanting push server-side so the sender targets them...
+    await ensureNtfyProvisioned(supabase, userId);
+    // ...then prompt (with context) to enable notifications on this device.
+    const ok = await requireNotifications({
+      reason: 'so we can notify you the moment a company you track posts a new job.',
+    });
+    if (ok) showToast("Notifications on — you'll get alerts for your tracked companies.", 'success');
   };
 
   const handleNotifyToggle = async (slug: string, enabled: boolean) => {

@@ -9,6 +9,7 @@ import { ResumeScore } from '@/lib/resume-scorer';
 import { tracker, buildLogPayload, ApplicationAttempt, ErrorCategory } from '@/lib/autoapply-tracker';
 import { ATSType } from '@/lib/ats-registry';
 import { isAutoApplySupported } from '@/lib/autoapply-support';
+import { useNotificationGate } from '@/components/pwa/NotificationGate';
 
 interface AutoApplyButtonProps {
   jobId: string;
@@ -77,6 +78,7 @@ export function AutoApplyButton({
   queuedStatus,
 }: AutoApplyButtonProps) {
   const [loading, setLoading] = useState(false);
+  const { requireNotifications } = useNotificationGate();
 
   const needsOptimization = resumeScore && resumeScore.suggestion !== 'good';
 
@@ -85,6 +87,13 @@ export function AutoApplyButton({
       onOptimizeFirst();
       return;
     }
+
+    // Nudge the user to enable notifications so we can ping them when this
+    // application finishes or needs their input. Non-blocking — the apply runs
+    // regardless of their choice.
+    void requireNotifications({
+      reason: 'so we can alert you when this application is submitted or needs you to finish it.',
+    });
 
     setLoading(true);
     const startTime = Date.now();
