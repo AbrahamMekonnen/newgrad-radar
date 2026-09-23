@@ -320,16 +320,12 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
             new_count += 1
 
         # Structured fields the sources extract; only include present keys so we
-        # never overwrite an existing value with None on update.
+        # never overwrite an existing value with None on update. Descriptions are
+        # NOT stored — the enrich cron fetches them on demand and discards them.
         _extra = {k: job[k] for k in (
             "salary_min", "salary_max", "salary_text",
             "sponsorship_status", "funding_stage", "deadline",
         ) if job.get(k) is not None}
-        # Store the description ONLY while the job still needs enrichment. Once
-        # the AI has consumed it (enriched_at set) the description is deleted for
-        # good — never re-add it on a later scrape (that would re-bloat the DB).
-        if job.get("description") is not None and not (existing_job and existing_job.get("enriched_at")):
-            _extra["description"] = job["description"]
 
         records.append({
             "id": job["id"],

@@ -902,10 +902,10 @@ def fetch_ats_sources() -> list[dict]:
 
     def fetch_ats_board(ats_type: str, slug: str, token: str):
         if ats_type == "greenhouse":
-            # Fetch inline content (?content=true) so we capture salary text +
-            # description in the same single request per board — this is what
-            # populates the salary/sponsorship/work-mode filters for greenhouse.
-            return greenhouse.fetch_greenhouse(token, slug, fetch_salary=True)
+            # List only — fast. Descriptions are fetched on demand by the enrich
+            # cron (per un-enriched job), so the scrape never downloads content
+            # for all ~20k jobs every run (that made it take ~100 min and fail).
+            return greenhouse.fetch_greenhouse(token, slug, fetch_salary=False)
         elif ats_type == "lever":
             jobs = lever.fetch_lever(token)
             for job in jobs:

@@ -375,12 +375,11 @@ def classify_jobs(jobs: list[dict]) -> list[dict]:
     if not jobs:
         return []
 
-    # Use any available LLM provider (Gemini or a configured fallback);
-    # only drop to keyword heuristics when NONE is available or all fail.
-    if llm_available():
-        return _classify_with_gemini(jobs)
-
-    # Fallback to heuristics
+    # Classification in the scrape hot path is HEURISTIC-only: fast,
+    # deterministic, and free. It filters to technical roles and tags a
+    # title-based experience level. The LLM refinement (experience / salary /
+    # sponsorship from the full description) runs separately and continuously in
+    # the enrich cron, so the scrape never blocks on rate-limited LLM calls.
     return _classify_with_heuristics(jobs)
 
 
