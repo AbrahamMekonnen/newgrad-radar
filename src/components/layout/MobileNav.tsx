@@ -20,6 +20,7 @@ const navLinks = [
   { href: '/my-list', label: 'Watchlist', protected: true },
   { href: '/applications', label: 'Applications', protected: true },
   { href: '/analytics', label: 'Analytics', protected: true },
+  { href: '/profile', label: 'My Profile', protected: true },
   { href: '/settings', label: 'Settings', protected: true },
 ];
 

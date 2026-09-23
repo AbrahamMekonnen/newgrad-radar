@@ -177,6 +177,14 @@ export function Navbar() {
                       aria-label="User actions"
                     >
                       <Link
+                        href="/profile"
+                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700/50 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700/50 transition-colors"
+                        onClick={() => setShowDropdown(false)}
+                        role="menuitem"
+                      >
+                        My Profile
+                      </Link>
+                      <Link
                         href="/settings"
                         className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700/50 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700/50 transition-colors"
                         onClick={() => setShowDropdown(false)}
