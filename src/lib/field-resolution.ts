@@ -13,7 +13,7 @@ export const isSensitiveFact = (label: unknown) => /citizen|citizenship|visa|spo
 export const mayUseAi = (field: ResolutionField) => {
   if ((field.attempt || 1) < 2 || isSensitiveFact(field.label)) return false;
   const q = String(field.label || '').toLowerCase();
-  return !field.options?.length || /why|describe|tell us|project|accomplishment|experience|additional information|cover letter|motivat|interest|strength|challenge|learn/.test(q);
+  return !field.options?.length || /why|describe|tell us|project|worked on|similar role|accomplishment|experience|additional information|cover letter|motivat|interest|strength|challenge|learn/.test(q);
 };
 export const exactSuppliedOption = (field: ResolutionField, value: unknown) => {
   const wanted = String(value || '').trim().toLowerCase();

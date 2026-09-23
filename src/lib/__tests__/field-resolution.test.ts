@@ -3,6 +3,7 @@ describe('field resolution policy', () => {
   it('allows AI for prose only on the final bounded attempt', () => {
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(false);
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 2 })).toBe(true);
+    expect(mayUseAi({ name: 'similar', label: 'Have you worked on similar projects?', attempt: 2, options: ['Yes', 'No'] })).toBe(true);
   });
   it('never allows AI to infer sensitive facts', () => {
     expect(isSensitiveFact('Will you require visa sponsorship?')).toBe(true);
