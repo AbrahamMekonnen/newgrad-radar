@@ -409,7 +409,9 @@
     return !current.size || !expected.length || expected.some((id) => current.has(id));
   };
 
-  const isSuccessPage = () => {
+  const isSuccessPage = (data) => {
+    const adapter = ATS?.detect(location.href, data?.atsType);
+    if ((data?.submitAttempts || 0) > 0 && adapter?.submissionComplete?.(document)) return true;
     // ATS clients often leave the old form mounted but hidden after success.
     // Only a visible, enabled submit control inside a form means the
     // application can still be submitted.
@@ -827,7 +829,7 @@
         if (running) return;
         running = true;
         try {
-          if (isSuccessPage()) {
+          if (isSuccessPage(data)) {
             try {
               await reportSuccess(data);
               banner('Application submitted successfully. HireRadar marked it as Submitted.');

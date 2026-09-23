@@ -93,6 +93,18 @@ describe('browser ATS adapters', () => {
     expect(ATS.adapters.ashby.fillCheckbox(checkbox, 'No')).toBe(true);
     expect(ATS.adapters.ashby.fieldAccepted(checkbox, 'No')).toBe(true);
   });
+  it('confirms Ashby only after the form is replaced by a positive receipt', () => {
+    const panel = {
+      textContent: 'Thank you for your interest. Our team will review your application.',
+      querySelectorAll: () => [],
+    };
+    const doc = { querySelector: () => panel };
+    expect(ATS.adapters.ashby.submissionComplete(doc)).toBe(true);
+    panel.textContent = 'Submitting your application...';
+    expect(ATS.adapters.ashby.submissionComplete(doc)).toBe(false);
+    panel.textContent = 'Your form needs corrections. Missing entry for required field.';
+    expect(ATS.adapters.ashby.submissionComplete(doc)).toBe(false);
+  });
   it('finds Ashby submit controls inside its non-form application panel', () => {
     const submit = {
       textContent: 'Submit Application', value: '',

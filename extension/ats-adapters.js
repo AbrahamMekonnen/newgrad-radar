@@ -177,6 +177,18 @@
         }
         return null;
       },
+      submissionComplete(doc) {
+        const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');
+        if (!panel) return false;
+        const visible = (item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true';
+        const hasFields = [...panel.querySelectorAll('[data-field-path]')].some(visible);
+        const hasSubmit = [...panel.querySelectorAll('button, input[type="submit"]')]
+          .some((item) => visible(item) && scoreSubmitText(item.textContent || item.value) > 0);
+        const text = normalize(panel.textContent || '');
+        if (hasFields || hasSubmit || !text) return false;
+        if (/fetching|loading|submitting|processing|updating your forms|needs corrections|missing entry|error|try again/.test(text)) return false;
+        return /thank|received|submitted|success|complete|interest|review|touch/.test(text);
+      },
       findSubmit(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');
         if (!panel) return null;
