@@ -25,10 +25,51 @@ from pathlib import Path
 
 import requests
 
-FEED_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
+# Public, daily-maintained job feeds that share the SimplifyJobs listings.json
+# schema (each record has a `url` application link + `company_name`). We harvest
+# Greenhouse/Lever/Ashby board tokens from ALL of them and validate each once, so
+# our company universe covers everything these communities track — new-grad AND
+# internships, which is where most banks, quant shops and fintechs show up.
+# Adding a feed here widens the universe with zero other changes; a dead/moved
+# feed is skipped without failing the run.
+FEED_URLS = [
+    "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/vanshb03/Summer2026-Internships/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/vanshb03/New-Grad-2025/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/Ouckah/Summer2025-Internships/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/speedyapply/2026-SWE-College-Jobs/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/speedyapply/2025-SWE-College-Jobs/main/.github/scripts/listings.json",
+]
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "companies_imported.py"
 UA = {"User-Agent": "newgrad-radar-importer"}
+
+
+def _load_feeds() -> list:
+    """Fetch every feed and concatenate their records. Feeds that 404, moved, or
+    return a non-list payload are skipped so one broken source never sinks the run."""
+    records: list = []
+    for url in FEED_URLS:
+        try:
+            r = requests.get(url, headers=UA, timeout=60)
+            if r.status_code != 200:
+                print(f"  skip {url} (HTTP {r.status_code})")
+                continue
+            data = r.json()
+            # Some feeds wrap the list; accept a bare list or {"listings":[...]} etc.
+            if isinstance(data, dict):
+                data = (data.get("listings") or data.get("data")
+                        or next((v for v in data.values() if isinstance(v, list)), []))
+            if not isinstance(data, list):
+                print(f"  skip {url} (unexpected shape)")
+                continue
+            print(f"  {len(data):>5} records  <-  {url.split('/')[4]}/{url.split('/')[5]}")
+            records.extend(data)
+        except Exception as e:
+            print(f"  skip {url} ({e})")
+    return records
 
 
 def _extract(url: str):
@@ -86,20 +127,33 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=16)
     args = ap.parse_args()
 
-    print(f"fetching feed: {FEED_URL}")
-    feed = requests.get(FEED_URL, headers=UA, timeout=60).json()
-    print(f"feed records: {len(feed)}")
+    print(f"fetching {len(FEED_URLS)} public feeds…")
+    feed = _load_feeds()
+    print(f"total records across feeds: {len(feed)}")
 
-    # distinct (ats, token) -> company name (first seen)
+    # distinct (ats, token) -> company name (first seen). Feeds vary in which key
+    # holds the employer name, so check the common ones.
+    def _name(rec: dict) -> str:
+        for k in ("company_name", "company", "organization", "employer", "name"):
+            v = rec.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return ""
+
     found: dict = {}
     for r in feed:
-        e = _extract(r.get("url") or "")
+        if not isinstance(r, dict):
+            continue
+        # A record may carry the link under different keys across feeds.
+        link = (r.get("url") or r.get("apply_link") or r.get("application_link")
+                or r.get("link") or "")
+        e = _extract(link)
         if not e or not e[1]:
             continue
         key = (e[0], e[1].lower())
         found.setdefault(key, {"ats_type": e[0], "ats_token": e[1],
-                               "name": r.get("company_name") or e[1]})
-    print(f"distinct GH/Lever/Ashby companies in feed: {len(found)}")
+                               "name": _name(r) or e[1]})
+    print(f"distinct GH/Lever/Ashby companies across feeds: {len(found)}")
 
     # drop ones we already have (by ats token)
     from companies import COMPANIES

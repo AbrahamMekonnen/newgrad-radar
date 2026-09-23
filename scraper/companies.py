@@ -257,6 +257,21 @@ except Exception:
     pass
 
 
+# Merge the curated DIRECTORY seed (well-known banks, quant shops, big
+# enterprises, semiconductors, healthcare, aerospace, retail, media that use
+# Workday/custom ATSes and so never appear in the harvested gh/lever/ashby
+# feeds). These are searchable in Recruiters + Watchlist even before we have
+# scrapable jobs for them. Hand-curated + validated-imported entries win on
+# slug collisions (setdefault), so a real ATS token is never overwritten by a
+# token-less directory row.
+try:
+    from companies_seed import SEED_COMPANIES
+    for _slug, _info in SEED_COMPANIES.items():
+        COMPANIES.setdefault(_slug, _info)
+except Exception:
+    pass
+
+
 # Build lookup tables for company name normalization
 COMPANY_NAME_TO_SLUG = {}
 COMPANY_TOKEN_TO_SLUG = {}
