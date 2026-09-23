@@ -178,7 +178,7 @@
         return null;
       },
       uploadReadyOverride(doc, waitedMs) {
-        if (waitedMs < 45000) return false;
+        if (waitedMs < 5000) return false;
         const entry = [...doc.querySelectorAll('[data-field-path]')]
           .find((item) => item.getAttribute('data-field-path') === '_systemfield_resume');
         const input = entry?.querySelector('input[type="file"]');

@@ -632,7 +632,7 @@
       persist(data);
       const waitedMs = now - data.uploadWaitStartedAt;
       if (!adapter?.uploadReadyOverride?.(document, waitedMs)) {
-        if (waitedMs < 45000) {
+        if (waitedMs < 15000) {
           banner('HireRadar is waiting for the ATS to finish uploading and processing files...');
           return true;
         }
