@@ -282,7 +282,7 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
         offset = 0
         while True:
             resp = client.table("jobs").select(
-                "id, discovery_sources, diversity_tags, work_modes, badges"
+                "id, discovery_sources, diversity_tags, work_modes, badges, enriched_at"
             ).range(offset, offset + page_size - 1).execute()
             rows = resp.data or []
             for row in rows:
@@ -319,6 +319,18 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
             badges = job.get("badges") or []
             new_count += 1
 
+        # Structured fields the sources extract; only include present keys so we
+        # never overwrite an existing value with None on update.
+        _extra = {k: job[k] for k in (
+            "salary_min", "salary_max", "salary_text",
+            "sponsorship_status", "funding_stage", "deadline",
+        ) if job.get(k) is not None}
+        # Store the description ONLY while the job still needs enrichment. Once
+        # the AI has consumed it (enriched_at set) the description is deleted for
+        # good — never re-add it on a later scrape (that would re-bloat the DB).
+        if job.get("description") is not None and not (existing_job and existing_job.get("enriched_at")):
+            _extra["description"] = job["description"]
+
         records.append({
             "id": job["id"],
             "company_slug": job["company_slug"],
@@ -340,19 +352,7 @@ def upsert_jobs(jobs: list[dict], dry_run: bool = False) -> tuple[int, int, list
             # A clear title signal (Senior/Staff/Manager/New Grad/...) overrides;
             # otherwise keep whatever the scraper/classifier set.
             "experience_level": classify_experience_from_title(job.get("title")) or job.get("experience_level"),
-            # Pass through structured fields the sources extract. These were
-            # previously DROPPED here, which is why salary/sponsorship/funding
-            # filters were always empty even though the scrapers populated them.
-            # Only include keys that are present so we never overwrite an
-            # existing value with None on update.
-            **{k: job[k] for k in (
-                "salary_min", "salary_max", "salary_text",
-                "sponsorship_status", "funding_stage", "deadline",
-                # Persist the description so downstream enrichment (salary,
-                # sponsorship, work mode, deadlines) can reuse it instead of
-                # re-fetching + discarding it every run.
-                "description",
-            ) if job.get(k) is not None},
+            **_extra,
         })
 
     # Register every company first: jobs.company_slug has a FK to companies.slug,

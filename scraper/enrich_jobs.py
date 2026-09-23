@@ -169,111 +169,65 @@ def _extract_batch(items: list) -> tuple:
 
 
 def enrich(client, limit: int, dry_run: bool, batch_size: int = 6) -> tuple:
-    from companies import COMPANIES
+    """Read each job's STORED description, let the free-provider AI fill the job
+    card (experience/salary/sponsorship/real-job), then DELETE the description —
+    it has served its only purpose, keeping the DB lean.
 
-    # Only jobs whose experience level we COULDN'T classify from the title go to
-    # the AI — jobs with an explicit level (Senior/Intern/New Grad/…) are left
-    # alone, so we never pay tokens for them. Salary/sponsorship are extracted
-    # opportunistically for these same jobs (descriptions often lack them, and we
-    # never invent values). ATS-backed only.
-    cols = "id,title,url,ats_type,company_slug,experience_level,salary_min,salary_max,sponsorship_status"
-    try:
-        rows = (client.table("jobs").select(cols)
-                .eq("is_active", True).is_("enriched_at", "null")
-                .is_("experience_level", "null")
-                .in_("ats_type", ["greenhouse", "lever", "ashby"])
-                .order("posted", desc=True).limit(limit).execute().data) or []
-    except Exception as e:
-        if "enriched_at" in str(e):
-            logger.warning("enriched_at column missing — run migration 037 to enable "
-                           "incremental tracking; proceeding without it for now.")
-            rows = (client.table("jobs").select(cols)
-                    .eq("is_active", True).is_("experience_level", "null")
-                    .in_("ats_type", ["greenhouse", "lever", "ashby"])
-                    .order("posted", desc=True).limit(limit).execute().data) or []
-        else:
-            raise
-    logger.info(f"{len(rows)} jobs missing experience level -> AI")
-
-    by_company = defaultdict(list)
-    for j in rows:
-        by_company[(j["company_slug"], j["ats_type"])].append(j)
+    Processes any active job that still has a description and hasn't been
+    enriched. On an LLM quota/rate-limit failure the batch is left untouched so
+    a later run (continuous free cron) retries it.
+    """
+    cols = "id,title,description,experience_level,salary_min,salary_max,sponsorship_status"
+    rows = (client.table("jobs").select(cols)
+            .eq("is_active", True).is_("enriched_at", "null")
+            .not_.is_("description", "null")
+            .order("posted", desc=True).limit(limit).execute().data) or []
+    logger.info(f"{len(rows)} described jobs -> AI enrichment")
 
     updated = 0
     non_jobs = 0
-    for (slug, ats), jobs in by_company.items():
-        token = (COMPANIES.get(slug) or {}).get("ats_token") or _url_token(jobs[0]["url"], ats)
-        if not token:
+    for start_i in range(0, len(rows), batch_size):
+        chunk = rows[start_i:start_i + batch_size]
+        items = [(i, j["title"], j.get("description") or "") for i, j in enumerate(chunk)]
+        result, ok = _extract_batch(items)
+        if not ok:
+            logger.warning("LLM call failed after retries - leaving batch for a later run")
             continue
-        board = _fetch_board(ats, token)
-        if not board:  # try url-parsed token as a fallback
-            alt = _url_token(jobs[0]["url"], ats)
-            if alt and alt != token:
-                board = _fetch_board(ats, alt)
-        if not board:
-            continue
+        for i, j in enumerate(chunk):
+            fields = result.get(str(i)) or {}
+            patch = {}
+            # experience_level - only if the title didn't already give us one
+            lvl = (fields.get("experience_level") or "").lower()
+            if not j.get("experience_level") and lvl in _VALID_LEVELS:
+                patch["experience_level"] = lvl
+            # salary - only if missing; never invent
+            if j.get("salary_min") is None:
+                smin = fields.get("salary_min") if isinstance(fields.get("salary_min"), (int, float)) else None
+                smax = fields.get("salary_max") if isinstance(fields.get("salary_max"), (int, float)) else None
+                if smin:
+                    patch["salary_min"] = int(smin)
+                if smax:
+                    patch["salary_max"] = int(smax)
+            # sponsorship - only if missing/unknown
+            spon = (fields.get("sponsorship_status") or "").lower()
+            if j.get("sponsorship_status") in (None, "unknown") and spon in _VALID_SPON and spon != "unknown":
+                patch["sponsorship_status"] = spon
+            # real-job flag
+            if fields.get("is_real_job") is False:
+                patch["is_job"] = False
+                non_jobs += 1
+            # Card is filled: mark enriched AND drop the description to free space.
+            patch["enriched_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+            patch["description"] = None
 
-        # match jobs -> descriptions
-        matched = []
-        for j in jobs:
-            entry = _match(j, board)
-            if entry and entry.get("desc"):
-                matched.append((j, entry))
-
-        # AI in batches
-        ai_ok_ids = set()
-        for start in range(0, len(matched), batch_size):
-            chunk = matched[start:start + batch_size]
-            items = [(i, j["title"], e["desc"]) for i, (j, e) in enumerate(chunk)]
-            result, ok = _extract_batch(items)
-            if not ok:
-                # Call failed (quota/rate-limit) — leave these jobs unmarked so a
-                # later run retries them, and stop hammering the provider.
-                logger.warning("LLM call failed after retries — leaving batch for a later run")
-                continue
-            for i, (j, entry) in enumerate(chunk):
-                ai_ok_ids.add(j["id"])
-                fields = result.get(str(i)) or {}
-                patch = {}
-                # experience_level — only if missing
-                lvl = (fields.get("experience_level") or "").lower()
-                if not j.get("experience_level") and lvl in _VALID_LEVELS:
-                    patch["experience_level"] = lvl
-                # salary — prefer Ashby structured comp, else AI; only if missing
-                if j.get("salary_min") is None:
-                    smin, smax = _ashby_salary(entry.get("comp"))
-                    if smin is None and smax is None:
-                        smin = fields.get("salary_min") if isinstance(fields.get("salary_min"), (int, float)) else None
-                        smax = fields.get("salary_max") if isinstance(fields.get("salary_max"), (int, float)) else None
-                    if smin:
-                        patch["salary_min"] = int(smin)
-                    if smax:
-                        patch["salary_max"] = int(smax)
-                # sponsorship — only if missing/unknown
-                spon = (fields.get("sponsorship_status") or "").lower()
-                if j.get("sponsorship_status") in (None, "unknown") and spon in _VALID_SPON and spon != "unknown":
-                    patch["sponsorship_status"] = spon
-                # real-job flag
-                if fields.get("is_real_job") is False:
-                    patch["is_job"] = False
-                    non_jobs += 1
-                patch["enriched_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-
-                if dry_run:
-                    shown = {k: v for k, v in patch.items() if k != "enriched_at"}
-                    logger.info(f"[dry] {j['title'][:45]} -> {shown or 'no new fields'}")
-                    updated += 1
-                else:
-                    _update_job(client, j["id"], patch)
-                    updated += 1
-            time.sleep(1.5)  # pace to stay under provider rate limits
-        # mark matched-but-nothing and unmatched jobs enriched too, so we don't
-        # reprocess them forever (a later --refresh can revisit).
-        if not dry_run:
-            done_ids = {j["id"] for j, _ in matched}
-            for j in jobs:
-                if j["id"] not in done_ids:
-                    _update_job(client, j["id"], {"enriched_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+            if dry_run:
+                shown = {k: v for k, v in patch.items() if k not in ("enriched_at", "description")}
+                logger.info(f"[dry] {j['title'][:45]} -> {shown or 'no new fields'} (+clear desc)")
+                updated += 1
+            else:
+                _update_job(client, j["id"], patch)
+                updated += 1
+        time.sleep(1.5)  # pace to stay under free-provider rate limits
     return updated, non_jobs
 
 
