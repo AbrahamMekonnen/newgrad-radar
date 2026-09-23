@@ -177,17 +177,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })().then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
   return true;
 });
-void chrome.storage.session.get(null).then(async (items) => {
-  for (const [key, job] of Object.entries(items)) {
-    if (!key.startsWith('job:')) continue;
-    const tabId = Number(key.slice(4));
-    try {
-      await chrome.tabs.get(tabId);
-      currentByTab.set(tabId, job);
-    } catch {
-      await chrome.storage.session.remove(key);
-      await report(job, 'failed', { detail: 'ATS tab no longer exists.' }).catch(() => undefined);
+void (async () => {
+  const version = chrome.runtime.getManifest().version;
+  const local = await chrome.storage.local.get(['runtimeVersion']);
+  const items = await chrome.storage.session.get(null);
+  const managed = Object.entries(items).filter(([key]) => key.startsWith('job:'));
+
+  // Reloading an unpacked extension restarts its worker but can preserve the
+  // session entries and tabs created by the previous version. Never restore
+  // old content scripts after an upgrade: close only HireRadar-managed tabs,
+  // clear their session records, and let their expired leases return safely.
+  if (local.runtimeVersion !== version) {
+    const keys = managed.map(([key]) => key);
+    const tabs = keys.map((key) => Number(key.slice(4))).filter(Number.isFinite);
+    if (keys.length) await chrome.storage.session.remove(keys);
+    await Promise.allSettled(tabs.map((tabId) => chrome.tabs.remove(tabId)));
+    await chrome.storage.local.set({ runtimeVersion: version });
+  } else {
+    for (const [key, job] of managed) {
+      const tabId = Number(key.slice(4));
+      try {
+        await chrome.tabs.get(tabId);
+        currentByTab.set(tabId, job);
+      } catch {
+        await chrome.storage.session.remove(key);
+        await report(job, 'failed', { detail: 'ATS tab no longer exists.' }).catch(() => undefined);
+      }
     }
   }
   void poll();
-});
+})();
