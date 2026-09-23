@@ -675,6 +675,15 @@
         return true;
       }
       if (openApplicationForm()) return true;
+      const closedText = normalize(document.body?.innerText || '');
+      if (/no longer accepting applications|job is no longer available|position has been filled|job not found/.test(closedText)) {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'failed',
+          detail: { detail: 'The ATS indicates that this posting is closed or no longer accepting applications.' },
+        });
+        banner('This posting is closed or no longer accepting applications.', true);
+        return false;
+      }
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
         detail: { detail: 'The form is filled, but no visible ATS submit button was found.' },
