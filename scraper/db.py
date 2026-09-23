@@ -563,8 +563,12 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
                 return datetime.min.replace(tzinfo=timezone.utc)
             try:
                 if isinstance(posted_at, str):
-                    return datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
-                return posted_at if posted_at.tzinfo else posted_at.replace(tzinfo=timezone.utc)
+                    dt = datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
+                else:
+                    dt = posted_at
+                # Always return tz-aware, or sorting mixes naive/aware and raises
+                # "can't compare offset-naive and offset-aware datetimes".
+                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
             except (ValueError, TypeError):
                 return datetime.min.replace(tzinfo=timezone.utc)
 

@@ -249,28 +249,39 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
     emailed_users: dict[str, list[dict]] = {}
 
     for company_slug, jobs in jobs_by_company.items():
-        # Get users tracking this company
-        query_result = client.table("user_lists").select(
-            "user_id, notifications_enabled, filters, "
-            "user_preferences!inner(ntfy_topic, push_enabled, email_enabled, role_filters)"
-        ).eq("company_slug", company_slug).execute()
+        # Users tracking this company. There's NO foreign key between user_lists
+        # and user_preferences (both reference auth.users independently), so we
+        # can't embed user_preferences via PostgREST (it raises PGRST200 and
+        # previously crashed the whole notify step). Fetch both and join in
+        # Python.
+        list_rows = (client.table("user_lists")
+                     .select("user_id, notifications_enabled, filters")
+                     .eq("company_slug", company_slug).execute().data) or []
+        if not list_rows:
+            continue
+        user_ids = [row["user_id"] for row in list_rows]
 
-        # Also get user emails from auth.users via user_profiles
+        prefs_rows = (client.table("user_preferences")
+                      .select("user_id, ntfy_topic, push_enabled, email_enabled, role_filters")
+                      .in_("user_id", user_ids).execute().data) or []
+        prefs_by_user = {p["user_id"]: p for p in prefs_rows}
+
+        # User emails via user_profiles.
         user_emails = {}
-        user_ids = [row["user_id"] for row in query_result.data or []]
-        if user_ids:
-            profiles = client.table("user_profiles").select("user_id, email").in_("user_id", user_ids).execute()
-            for p in profiles.data or []:
-                if p.get("email"):
-                    user_emails[p["user_id"]] = p["email"]
+        profiles = client.table("user_profiles").select("user_id, email").in_("user_id", user_ids).execute()
+        for p in profiles.data or []:
+            if p.get("email"):
+                user_emails[p["user_id"]] = p["email"]
 
-        for row in query_result.data or []:
+        for row in list_rows:
             user_id = row["user_id"]
             # Honour the per-company watchlist toggle: if the user turned
             # notifications OFF for this company, skip it entirely.
             if row.get("notifications_enabled") is False:
                 continue
-            prefs = row.get("user_preferences", {})
+            prefs = prefs_by_user.get(user_id)
+            if not prefs:
+                continue  # user has no prefs row (never enabled notifications)
             # Per-company filters override the global role_filters.
             jf = row.get("filters") or {}
             role_filters = jf.get("roles") or jf.get("role_types") or prefs.get("role_filters") or []
