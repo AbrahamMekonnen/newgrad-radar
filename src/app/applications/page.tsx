@@ -146,7 +146,7 @@ function ApplicationsContent({ userId }: { userId: string }) {
       </div>
 
       {/* Section Tabs */}
-      <div className="flex gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <button
           onClick={() => setActiveSection('saved')}
           className={cn(

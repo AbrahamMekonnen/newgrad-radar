@@ -123,6 +123,35 @@ body {
 }
 
 /* ================================
+   Mobile app feel (PWA)
+   ================================ */
+html {
+  /* Stop iOS from inflating text and killing the tap-flash so taps feel native. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+html, body {
+  /* No horizontal page scroll — a website tell. Content must fit the viewport. */
+  overflow-x: hidden;
+  max-width: 100%;
+}
+body {
+  /* Contain overscroll so pull-to-refresh / rubber-banding doesn't reveal the
+     browser chrome behind the app. */
+  overscroll-behavior-y: contain;
+}
+/* iOS zooms in when a focused input is < 16px, then zooms back out on blur —
+   that's the "gets smaller and bigger" jump. Force >= 16px on small screens. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ================================
    Premium Card Styles
    ================================ */
 
