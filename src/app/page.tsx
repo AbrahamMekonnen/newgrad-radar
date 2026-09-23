@@ -124,6 +124,24 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  // Deep-link filter: /?company=<slug> (used by watchlist notifications) shows
+  // only that company's jobs. Read from the URL on the client to avoid a
+  // useSearchParams Suspense deopt.
+  const [companyParam, setCompanyParam] = useState<string | null>(null);
+  const [companyLabel, setCompanyLabel] = useState<string>('');
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('company');
+    if (c) setCompanyParam(c.toLowerCase());
+  }, []);
+  const clearCompanyFilter = () => {
+    setCompanyParam(null);
+    setCompanyLabel('');
+    // Drop ?company= from the URL without a navigation.
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+  useEffect(() => {
+    if (companyParam && jobs.length && jobs[0]?.company_name) setCompanyLabel(jobs[0].company_name);
+  }, [companyParam, jobs]);
   const [selectedTiers, setSelectedTiers] = useState<Tier[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<RoleType[]>([]);
   const [sponsorshipFilter, setSponsorshipFilter] = useState<SponsorshipStatus | null>(null);
@@ -257,6 +275,11 @@ export default function HomePage() {
       .eq('is_active', true)
       // Hide listings the enricher flagged as non-jobs (conferences/events/ads).
       .neq('is_job', false);
+
+    // Deep-link: only this company's jobs (from a watchlist notification).
+    if (companyParam) {
+      query = query.eq('company_slug', companyParam);
+    }
 
     // Apply sort order based on sortBy
     if (sortBy === 'salary') {
@@ -451,7 +474,7 @@ export default function HomePage() {
     // `page` is intentionally omitted from deps: Load More passes the target
     // page via pageOverride, so fetchJobs must NOT be recreated on page change
     // (that would refire the reset effect below and wipe appended results).
-  }, [search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, selectedLocations, sortBy, supabase]);
+  }, [search, selectedTiers, selectedRoles, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, selectedLocations, sortBy, companyParam, supabase]);
 
   const fetchSavedJobs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -667,7 +690,7 @@ export default function HomePage() {
       fetchAutoApplyData();
     };
     loadData();
-  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, sortBy, fetchJobs, fetchJobsWithRecruiters, fetchSavedJobs, fetchAutoApplyData]);
+  }, [search, selectedTiers, selectedRoles, selectedLocations, sponsorshipFilter, selectedFundingStages, selectedSources, salaryMin, salaryMax, hasRecruiters, smartFilters, experienceLevels, diversityTags, workModes, badges, sortBy, companyParam, fetchJobs, fetchJobsWithRecruiters, fetchSavedJobs, fetchAutoApplyData]);
 
   // Fetch interview-question counts for all companies ONCE (bulk), so job-card
   // badges don't each fire their own request.
@@ -1129,6 +1152,22 @@ export default function HomePage() {
           </Button>
         </div>
       </HeroAnimated>
+
+      {companyParam && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-blue-200/60 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/10 px-4 py-3">
+          <p className="text-sm text-gray-700 dark:text-gray-200">
+            Showing jobs at{' '}
+            <span className="font-semibold capitalize">{companyLabel || companyParam.replace(/-/g, ' ')}</span>
+            {' '}from your watchlist.
+          </p>
+          <button
+            onClick={clearCompanyFilter}
+            className="whitespace-nowrap text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Show all jobs
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-8">
         {/* Desktop sidebar filters with slide-in animation */}
