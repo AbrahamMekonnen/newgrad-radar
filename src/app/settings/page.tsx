@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
-import { subscribeToPush, isPushSupported } from '@/lib/webpush';
+import { subscribeToPush, unsubscribeFromPush, isPushSupported } from '@/lib/webpush';
 
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
 
@@ -126,6 +126,12 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
     setPushDeviceState(res.ok ? 'done' : res.reason === 'denied' ? 'denied' : 'unsupported');
   };
 
+  const disablePushOnDevice = async () => {
+    setPushDeviceState('working');
+    await unsubscribeFromPush();
+    setPushDeviceState('idle');
+  };
+
   const toggleRole = (role: RoleType) => {
     if (!preferences) return;
     const roles = preferences.role_filters || [];
@@ -216,16 +222,27 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Get job alerts as browser/phone notifications — no separate app. On iPhone, add HireRadar to your Home Screen first.
               </p>
-              <button
-                type="button"
-                onClick={enablePushOnDevice}
-                disabled={pushDeviceState === 'working' || pushDeviceState === 'done'}
-                className="mt-3 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-lg transition-colors"
-              >
-                {pushDeviceState === 'working' ? 'Enabling…'
-                  : pushDeviceState === 'done' ? 'Enabled on this device ✓'
-                  : 'Enable on this device'}
-              </button>
+              {pushDeviceState === 'done' ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <span className="text-sm font-medium text-green-600 dark:text-green-400">Enabled on this device ✓</span>
+                  <button
+                    type="button"
+                    onClick={disablePushOnDevice}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition-colors"
+                  >
+                    Turn off on this device
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={enablePushOnDevice}
+                  disabled={pushDeviceState === 'working'}
+                  className="mt-3 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-lg transition-colors"
+                >
+                  {pushDeviceState === 'working' ? 'Working…' : 'Enable on this device'}
+                </button>
+              )}
               {pushDeviceState === 'denied' && (
                 <p className="mt-2 text-xs text-red-600 dark:text-red-400">
                   Notifications are blocked. Allow them for this site in your browser settings, then try again.

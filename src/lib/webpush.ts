@@ -60,3 +60,37 @@ export async function subscribeToPush(): Promise<SubscribeResult> {
     return { ok: false, reason: 'error' };
   }
 }
+
+/** Turn push OFF for this browser/device: unsubscribe locally and remove the
+ *  stored subscription so the sender stops targeting it. */
+export async function unsubscribeFromPush(): Promise<boolean> {
+  if (!isPushSupported()) return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      await fetch('/api/push/subscribe', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint }),
+      });
+    }
+    return true;
+  } catch (e) {
+    console.warn('unsubscribeFromPush failed:', e);
+    return false;
+  }
+}
+
+/** True if this browser currently has an active push subscription. */
+export async function hasActivePushSubscription(): Promise<boolean> {
+  if (!isPushSupported() || Notification.permission !== 'granted') return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return !!(await reg.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
