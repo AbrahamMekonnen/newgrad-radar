@@ -174,6 +174,9 @@
   };
   const unresolvedChoiceSignatures = new Map();
   const resolutionState = new Map();
+  const fieldKey = (field) => normalize(field.label)
+    ? [normalize(field.label), normalize(field.type)].filter(Boolean).join('|')
+    : [String(field.name || ''), normalize(field.type)].filter(Boolean).join('|');
   const visibleOptions = (owner) => {
     const controlledId = owner?.getAttribute?.('aria-controls') || owner?.getAttribute?.('aria-owns');
     const controlled = controlledId && document.getElementById(controlledId);
@@ -537,8 +540,10 @@
     return controlHasValue(element) || Boolean(String(element.textContent || '').trim());
   };
   const resolveFieldBounded = async (field, validationMessage = '') => {
-    const state = resolutionState.get(field.name) || { attempt: 0, signatures: new Set(), planId: null };
-    for (let attempt = Math.max(1, state.attempt + 1); attempt <= 3; attempt++) {
+    const key = fieldKey(field);
+    const state = resolutionState.get(key) || { attempt: 0, signatures: new Set(), planId: null };
+    if (state.accepted || state.exhausted || state.attempt >= 2) return { accepted: Boolean(state.accepted) };
+    for (let attempt = Math.max(1, state.attempt + 1); attempt <= 2; attempt++) {
       const element = findField(field);
       if ((!field.options || !field.options.length) && element && (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete'))) {
         element.click(); await wait(500);
@@ -548,18 +553,18 @@
       const options = (field.options || []).map((value) => String(value).trim()).filter(Boolean);
       const signature = JSON.stringify([attempt, options.map(normalize), validationMessage, field.currentValue || '']);
       if (state.signatures.has(signature)) break;
-      state.signatures.add(signature); state.attempt = attempt; resolutionState.set(field.name, state);
-      const response = await send({ type: 'RESOLVE_FIELDS', planId: state.planId, fields: [{ ...field, attempt, currentValue: String(findField(field)?.value || ''), validation: { message: validationMessage, accepted: false } }] }, attempt === 3 ? 45000 : 30000);
+      state.signatures.add(signature); state.attempt = attempt; resolutionState.set(key, state);
+      const response = await send({ type: 'RESOLVE_FIELDS', planId: state.planId, fields: [{ ...field, attempt, currentValue: String(findField(field)?.value || ''), validation: { message: validationMessage, accepted: false } }] }, 30000);
       state.planId = response?.planId || state.planId;
       const answer = response?.answers?.find((item) => item.name === field.name && item.safeToApply !== false);
       if (!answer) continue;
       field.value = answer.value;
       const applied = await fill({ ...field, value: answer.value, source: answer.source });
       await wait(150);
-      if (applied && fieldAccepted(field)) { state.accepted = true; resolutionState.set(field.name, state); return { accepted: true, answer }; }
+      if (applied && fieldAccepted(field)) { state.accepted = true; resolutionState.set(key, state); return { accepted: true, answer }; }
       validationMessage = findField(field)?.validationMessage || 'The ATS did not retain the selected value.';
     }
-    state.exhausted = true; resolutionState.set(field.name, state); return { accepted: false };
+    state.exhausted = true; resolutionState.set(key, state); return { accepted: false };
   };
   const smartRecruitersDirectUrl = () => {
     const scripts = [...document.scripts].map((script) => script.textContent || '').join('\n');
@@ -795,7 +800,9 @@
         const planned = plannedAnswers.get(field.name);
         if (planned) { field.value = planned.value; field.source = planned.source; }
       }
-      const resolvedLive = new Set();  // live field names already sent for resolution
+      // Stable label/type keys survive React rerenders. Mark a field before
+      // resolving it so mutations cannot enqueue the same control again.
+      const attemptedLive = new Set();
       let running = false;
       const run = async () => {
         if (running) return;
@@ -830,16 +837,16 @@
           // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
           // so a field that appears after the first pass still gets resolved.
           // Best-effort: a resolver hiccup must never block prepared fills.
-          const newLive = scanUnfilledFields().filter((field) => !resolvedLive.has(field.name));
+          const newLive = scanUnfilledFields().filter((field) => !attemptedLive.has(fieldKey(field)));
           if (data.browserWorker && newLive.length) await send({ type: 'PROGRESS', stage: 'filling', detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Resolving required live fields.', fields: newLive.map((field) => ({ name: field.name, label: field.label })) }) } });
           if (newLive.length) {
             try {
+              newLive.forEach((field) => attemptedLive.add(fieldKey(field)));
               const results = await Promise.race([
                 Promise.allSettled(newLive.map((field) => resolveFieldBounded(field))),
                 wait(45000).then(() => null),
               ]);
               if (results) {
-                results.forEach((result, index) => { if (result.status === 'fulfilled' && result.value.accepted) resolvedLive.add(newLive[index].name); });
                 data.liveNeedsUser = [...new Set([...(data.liveNeedsUser || []), ...newLive.filter((_, index) => results[index].status !== 'fulfilled' || !results[index].value.accepted).map((field) => field.name)])];
               }
               persist(data);
