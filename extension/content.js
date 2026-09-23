@@ -7,6 +7,7 @@
     .replace(/[^a-z0-9]+/g, ' ').trim();
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const ATS = globalThis.HireRadarATS;
+  const EXEC = globalThis.HireRadarExecution;
 
   // Messaging that can never throw. chrome.runtime.sendMessage throws
   // "Extension context invalidated" (synchronously) when this content script is
@@ -236,26 +237,6 @@
     option.click();
     element.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
-  };
-  const diagnoseField = (field) => {
-    const id = String(field.name || '');
-    const question = normalize(field.label);
-    const nodes = [...document.querySelectorAll('[name], [role], label, button')]
-      .filter((node) => {
-        const name = String(node.getAttribute('name') || '');
-        const text = normalize(node.textContent);
-        return (id && name.includes(id)) || (question && text.includes(question));
-      })
-      .slice(0, 12)
-      .map((node) => ({
-        tag: node.tagName,
-        name: node.getAttribute('name'),
-        role: node.getAttribute('role'),
-        type: node.getAttribute('type'),
-        text: String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300),
-        htmlFor: node.getAttribute('for'),
-      }));
-    return { name: field.name, label: field.label, wanted: answerLabel(field), nodes };
   };
   const fillScopedChoice = (field) => {
     const question = normalize(field.label);
@@ -626,14 +607,30 @@
     // neither navigated nor displayed a success state.
     if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 30000) return true;
     if ((data.submitAttempts || 0) >= 1) {
-      if (data.browserWorker) await send({
-        type: 'PROGRESS', stage: 'waiting_for_user',
-        detail: { detail: JSON.stringify({ message: 'The ATS did not confirm the submission; the application was not marked submitted.', errors: visibleAtsErrors() }) },
-      });
-      banner('The ATS did not confirm submission. HireRadar captured the visible ATS errors and did not mark it submitted.', true);
-      return false;
+      const errors = visibleAtsErrors();
+      const decision = EXEC?.shouldRetrySubmit?.({ attempts: data.submitAttempts, errors })
+        || { retry: false, category: 'unconfirmed' };
+      if (decision.retry) {
+        data.lastSubmitAttemptAt = 0;
+        persist(data);
+        banner('The ATS is still processing. HireRadar will make one controlled retry...');
+      } else {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'waiting_for_user',
+          detail: { detail: JSON.stringify({
+            message: 'The ATS did not confirm the submission; the application was not marked submitted.',
+            diagnostic: EXEC?.safeDiagnostic?.({ code: 'submit_unconfirmed', ats: data.atsType, category: decision.category, attempt: data.submitAttempts }),
+          }) },
+        });
+        banner('The ATS did not confirm submission. HireRadar did not mark it submitted.', true);
+        return false;
+      }
     }
     const adapter = ATS?.detect(location.href, data.atsType);
+    if (EXEC?.uploadPending?.(document)) {
+      banner('HireRadar is waiting for the ATS to finish uploading and processing files...');
+      return true;
+    }
     const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
     const submit = adapter?.findSubmit?.(document) || controls
       .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true' && item.closest('form'))
@@ -648,6 +645,12 @@
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score)[0]?.item;
     if (!submit) {
+      const next = adapter?.findNext?.(document) || EXEC?.findNextAction?.(document);
+      if (next) {
+        banner('HireRadar completed this step and is continuing the application...');
+        next.click();
+        return true;
+      }
       if (openApplicationForm()) return true;
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'waiting_for_user',
@@ -668,8 +671,7 @@
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
     const form = submit.form || submit.closest('form') || adapter?.validationRoot?.(submit) || document.querySelector('form');
-    const bad = adapter?.findInvalid?.(form) || [...(form?.querySelectorAll?.('input, select, textarea') || [])]
-      .find((el) => el.willValidate && !el.checkValidity());
+    const bad = adapter?.findInvalid?.(form) || EXEC?.requiredInvalid?.(form);
     if (bad) {
       const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
       if (adapter?.repairInvalid && await adapter.repairInvalid({
@@ -702,26 +704,17 @@
           }
         }
       }
-      const ancestry = bad ? Array.from({ length: 5 }, (_, depth) => {
-        let node = bad; for (let i = 0; i < depth; i++) node = node?.parentElement;
-        return node ? { tag: node.tagName, className: String(node.className || '').slice(0, 300), role: node.getAttribute('role'), ariaControls: node.getAttribute('aria-controls'), ariaLabelledBy: node.getAttribute('aria-labelledby'), text: String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300) } : null;
-      }).filter(Boolean) : [];
-      const diagnostic = bad ? {
-        name: bad.name || '',
-        id: bad.id || '',
-        type: bad.type || bad.tagName,
-        label: String(label || '').replace(/\s+/g, ' ').trim().slice(0, 300),
-        message: bad.validationMessage || '',
-        checked: typeof bad.checked === 'boolean' ? bad.checked : undefined,
-        files: bad.files?.length,
-        value: bad.type === 'file' ? undefined : String(bad.value || '').slice(0, 100),
-        role: bad.getAttribute('role'),
-        ariaControls: bad.getAttribute('aria-controls'),
-        ariaAutocomplete: bad.getAttribute('aria-autocomplete'),
-        placeholder: bad.getAttribute('placeholder'),
-        className: String(bad.className || '').slice(0, 300),
-        ancestry,
-      } : { label: 'unknown required field' };
+      const descriptor = liveFieldFor(bad, 9999);
+      const diagnostic = EXEC?.safeDiagnostic?.({
+        code: 'required_field_unresolved',
+        ats: data.atsType,
+        fieldKey: fieldKey(descriptor),
+        controlType: bad.type || bad.tagName,
+        optionCount: bad instanceof HTMLSelectElement ? bad.options.length : undefined,
+        answerSource: (data.fields || []).find((field) => fieldKey(field) === fieldKey(descriptor))?.source,
+        retained: controlHasValue(bad, descriptor),
+        category: 'validation',
+      }) || { code: 'required_field_unresolved' };
       if (data.browserWorker) {
         await send({
           type: 'PROGRESS',
@@ -801,6 +794,7 @@
         });
       }
       const completed = new Set();
+      const preparedLedger = ATS?.createFieldLedger?.(2);
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'filling',
         detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length }) },
@@ -842,17 +836,24 @@
             if (completed.has(field.name)) {
               if (fieldAccepted(field)) continue;
               completed.delete(field.name);
+              preparedLedger?.reject(field);
             }
+            if (preparedLedger && !preparedLedger.begin(field)) continue;
             if (data.browserWorker) void send({
               type: 'PROGRESS', stage: 'filling',
-              detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', field: field.name, label: field.label, index: fieldIndex + 1 }) },
+              detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'field_filling', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts }), index: fieldIndex + 1 }) },
             });
             try {
               const filled = await Promise.race([fill(field), wait(10000).then(() => false)]);
               if (filled) {
                 await wait(200);
-                if (fieldAccepted(field)) completed.add(field.name);
-                else completed.delete(field.name);
+                if (fieldAccepted(field)) {
+                  completed.add(field.name);
+                  preparedLedger?.verify(field);
+                } else {
+                  completed.delete(field.name);
+                  preparedLedger?.reject(field);
+                }
               }
             } catch { /* skip this field and continue */ }
           }
@@ -860,7 +861,10 @@
           // completed field from the current DOM before deciding the form is ready.
           await wait(500);
           for (const field of fields) {
-            if (completed.has(field.name) && !fieldAccepted(field)) completed.delete(field.name);
+            if (completed.has(field.name) && !fieldAccepted(field)) {
+              completed.delete(field.name);
+              preparedLedger?.reject(field);
+            }
           }
           const remaining = fields.length - completed.size;
           if (data.browserWorker) await send({
@@ -872,7 +876,7 @@
           // so a field that appears after the first pass still gets resolved.
           // Best-effort: a resolver hiccup must never block prepared fills.
           const newLive = scanUnfilledFields().filter((field) => !attemptedLive.has(fieldKey(field)));
-          if (data.browserWorker && newLive.length) await send({ type: 'PROGRESS', stage: 'filling', detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Resolving required live fields.', fields: newLive.map((field) => ({ name: field.name, label: field.label })) }) } });
+          if (data.browserWorker && newLive.length) await send({ type: 'PROGRESS', stage: 'filling', detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Resolving required live fields.', diagnostics: newLive.map((field) => EXEC?.safeDiagnostic?.({ code: 'live_field_resolution', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type })) }) } });
           if (newLive.length) {
             try {
               newLive.forEach((field) => attemptedLive.add(fieldKey(field)));
@@ -894,7 +898,7 @@
               detail: {
                 filled: completed.size,
                 total: fields.length,
-                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', unresolved: fields.filter((field) => !completed.has(field.name)).map(diagnoseField) }) : 'All prepared fields were filled.',
+                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', diagnostics: fields.filter((field) => !completed.has(field.name)).map((field) => EXEC?.safeDiagnostic?.({ code: 'prepared_field_unresolved', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts })) }) : 'All prepared fields were filled.',
               },
             });
           }

@@ -206,11 +206,27 @@
       type: 'workday',
       hostPattern: /\.myworkdayjobs\.com$/i,
       formSelectors: ['form', '[data-automation-id="applyFlowPage"]'],
+      findNext(doc) {
+        return doc.querySelector('[data-automation-id="bottom-navigation-next-button"], [data-automation-id="continueButton"], button[data-automation-id*="next"]');
+      },
+      labelFor(element) {
+        const group = element.closest('[data-automation-id="formField"], [data-automation-id="questionnaireQuestion"], fieldset');
+        const label = group?.querySelector('label, legend, [data-automation-id="promptQuestion"]');
+        return String(label?.textContent || element.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+      },
     },
     smartrecruiters: {
       type: 'smartrecruiters',
       hostPattern: /\.smartrecruiters\.com$/i,
       formSelectors: ['form', '[data-test="application-form"]'],
+      findNext(doc) {
+        return doc.querySelector('[data-test="next-button"], [data-testid="next-button"], button[name="next"]');
+      },
+      labelFor(element) {
+        const group = element.closest('[data-test*="question"], .form-group, fieldset');
+        const label = group?.querySelector('label, legend, [data-test*="label"]');
+        return String(label?.textContent || element.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+      },
     },
     generic: { type: 'generic', hosts: [], formSelectors: ['form'] },
   };

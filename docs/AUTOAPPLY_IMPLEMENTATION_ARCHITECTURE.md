@@ -1298,3 +1298,24 @@ The first production-capable release must demonstrate:
 ## 27. Immediate next work
 
 Implementation begins with Milestone A and the first five prototypes. Do not begin with the installer UI, broad ATS coverage, or remote takeover. Submission truth, device identity, durable commands, and one complete Greenhouse path form the critical dependency chain for everything else.
+
+## 28. Browser execution reliability contract (implemented in v0.11.0)
+
+The browser extension now applies one shared execution contract across provider adapters:
+
+- stable field identity uses normalized question and control type rather than generated DOM names
+- prepared and dynamic fields receive at most two attempts
+- every filled field is reread after React rerenders before it is considered retained
+- native selects and custom option controls must select an option the ATS actually exposes
+- boolean controls distinguish an explicit No from an unanswered unchecked input
+- location and other autocomplete fields require a retained ATS suggestion
+- visible upload, parsing, progress, and saving states block submission
+- Workday and SmartRecruiters expose adapter-specific multistep continuation controls
+- only processing, rate-limit, timeout, and network failures qualify for one bounded submit retry
+- CAPTCHA, validation, closed-job, expired-session, duplicate, and unknown failures stop for review
+- progress diagnostics contain stable keys, control types, sources, counts, categories, and attempts; they exclude values, answer text, question copy, resume content, and credentials
+- submission remains provisional until an adapter or shared receipt detector finds positive ATS confirmation
+
+Verified submission finalization is transactional. `autoapply_submission_receipts` provides one immutable receipt per user and job. The recording RPC updates the queue and `saved_jobs` together, while browser claiming reconciles duplicate queue rows to an existing receipt instead of reopening the ATS.
+
+Each new ATS adapter must satisfy the shared contract tests for field lookup, option selection, required validation, step navigation, loading detection, bounded retries, safe diagnostics, and success evidence before it is enabled for automatic submission.

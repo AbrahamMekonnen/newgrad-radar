@@ -102,17 +102,15 @@ export async function PATCH(request: NextRequest) {
   const now = new Date().toISOString();
   const progress = { stage, detail: String(detail || '').slice(0, 1000), filled, total, at: now };
   if (stage === 'submitted') {
-    const { error } = await db.from('autoapply_job_queue').update({
-      status: 'submitted', submitted_at: now, browser_stage: stage, browser_progress: progress,
-      browser_lease_expires_at: null,
-      submit_log: { status: 'browser_confirmed', detail: 'The ATS displayed a verified submission success page.', at: now },
-    }).eq('id', row.id).eq('browser_lease_id', leaseId);
+    const { data: receipt, error } = await db.rpc('record_browser_autoapply_submission', {
+      p_queue_id: row.id,
+      p_user_id: row.user_id,
+      p_device_id: device.id,
+      p_lease_id: leaseId,
+    });
     if (error) return json({ error: 'Could not record submission' }, 500);
-    const { error: syncError } = await db.from('saved_jobs').upsert({
-      user_id: row.user_id, job_id: row.job_id, status: 'applied', applied_at: now, updated_at: now,
-    }, { onConflict: 'user_id,job_id' });
-    if (syncError) return json({ error: 'Submission recorded but dashboard sync failed' }, 500);
-    return json({ ok: true, submittedAt: now });
+    if (!receipt?.ok) return json({ error: receipt?.error === 'lease_expired' ? 'Lease expired' : 'Could not record submission' }, 409);
+    return json({ ok: true, submittedAt: receipt.submittedAt, alreadyRecorded: receipt.alreadyRecorded === true });
   }
   const status = stage === 'waiting_for_user' ? 'waiting_for_user'
     : stage === 'failed' ? 'waiting_for_browser' : 'browser_filling';

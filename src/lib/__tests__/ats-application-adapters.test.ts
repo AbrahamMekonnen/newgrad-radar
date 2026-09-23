@@ -117,6 +117,12 @@ describe('browser ATS adapters', () => {
     expect(ATS.adapters.ashby.findSubmit(doc)).toBe(submit);
     expect(ATS.adapters.ashby.validationRoot(submit)).toBe(panel);
   });
+  it('provides ATS-specific multistep controls for Workday and SmartRecruiters', () => {
+    const workdayNext = {};
+    const smartNext = {};
+    expect(ATS.adapters.workday.findNext({ querySelector: () => workdayNext })).toBe(workdayNext);
+    expect(ATS.adapters.smartrecruiters.findNext({ querySelector: () => smartNext })).toBe(smartNext);
+  });
   it('requires positive ATS success evidence', () => {
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Application form').confirmed).toBe(false);
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Thank you for applying').confirmed).toBe(true);
