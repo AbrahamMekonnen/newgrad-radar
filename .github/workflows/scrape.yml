@@ -44,7 +44,12 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45 (not 30): the scrape + AI-enrich batch + a large one-time cleanup
+    # backlog can legitimately run long. A too-tight cap KILLS a
+    # working run mid-flight, which looks like a random "job failed after a
+    # while" — the exact thing we're avoiding. Cleanup is now batched so steady
+    # state is well under this.
+    timeout-minutes: 45
     permissions:
       contents: read
       models: read
@@ -119,8 +124,10 @@ jobs:
             python enrich_jobs.py --limit 400 || echo "::warning::job enrichment had errors"
             # As soon as new jobs land, match them to users' auto-apply criteria
             # and prepare the applications — no waiting for a separate schedule.
-            python -m autoapply.rules --limit 30
-            python -m autoapply.prepare_worker --limit 100
+            # Non-fatal: these are post-scrape side effects; a failure here must
+            # not fail the run and discard an otherwise-successful scrape.
+            python -m autoapply.rules --limit 30 || echo "::warning::autoapply rules had errors"
+            python -m autoapply.prepare_worker --limit 100 || echo "::warning::autoapply prepare had errors"
           fi
 
       - name: Summary

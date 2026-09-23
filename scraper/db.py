@@ -463,6 +463,20 @@ def record_notified_jobs(user_id: str, job_ids: list[str], source: str) -> None:
         pass
 
 
+def _bulk_deactivate(client, job_ids: list, chunk: int = 200) -> None:
+    """Set is_active=False for many jobs using chunked IN queries.
+
+    The old code issued one UPDATE-by-id HTTP request per job. When rotation had
+    a 25k-job overflow that meant ~25,000 sequential requests, making the scrape
+    take 40+ minutes and risk the job timeout / hang. Batching into IN queries
+    turns that into ~dozens of requests.
+    """
+    for i in range(0, len(job_ids), chunk):
+        batch = job_ids[i:i + chunk]
+        if batch:
+            client.table("jobs").update({"is_active": False}).in_("id", batch).execute()
+
+
 def cleanup_jobs(dry_run: bool = False) -> dict:
     """Clean up old jobs and enforce max active job limit.
 
@@ -522,7 +536,13 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
                     if isinstance(posted_at, str):
                         posted_dt = datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
                     else:
-                        posted_dt = posted_at if posted_at.tzinfo else posted_at.replace(tzinfo=timezone.utc)
+                        posted_dt = posted_at
+                    # Force tz-aware: a bare date/timestamp (no offset) parses
+                    # naive and would raise "can't compare offset-naive and
+                    # offset-aware" against the aware cutoff — silently skipping
+                    # age-out for that job. Normalize so rotation always applies.
+                    if posted_dt.tzinfo is None:
+                        posted_dt = posted_dt.replace(tzinfo=timezone.utc)
 
                     if posted_dt < cutoff_old:
                         old_job_ids.append(job["id"])
@@ -535,9 +555,8 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
                 except (ValueError, TypeError):
                     pass  # Skip jobs with invalid dates
 
-        # Deactivate old jobs
-        for job_id in old_job_ids:
-            client.table("jobs").update({"is_active": False}).eq("id", job_id).execute()
+        # Deactivate old jobs (batched IN queries, not one request per job)
+        _bulk_deactivate(client, old_job_ids)
 
         result["old_deactivated"] = len(old_job_ids)
         if old_job_ids:
@@ -592,8 +611,8 @@ def cleanup_jobs(dry_run: bool = False) -> dict:
         # Deactivate oldest non-priority jobs to get under limit
         to_deactivate = non_priority_jobs[:overflow]
 
+        _bulk_deactivate(client, [job["id"] for job in to_deactivate])
         for job in to_deactivate:
-            client.table("jobs").update({"is_active": False}).eq("id", job["id"]).execute()
             result["deactivated_jobs"].append({
                 "id": job["id"],
                 "title": job["title"],

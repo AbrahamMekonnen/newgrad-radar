@@ -1515,37 +1515,55 @@ def main():
             if len(cleanup_result["deactivated_jobs"]) > 10:
                 print(f"    ... and {len(cleanup_result['deactivated_jobs']) - 10} more")
 
-    # 6. Notify users about new jobs
+    # 6. Notify users about new jobs.
+    #
+    # CRITICAL: notifications are a best-effort side effect that runs AFTER all
+    # scraping has already saved jobs to the DB. A crash here (e.g. a PostgREST
+    # schema quirk, a bad provider, one malformed row) must never fail the whole
+    # run and throw away a successful scrape — that's the "job fails after a
+    # while and I never see the results" pattern. So every notifier is guarded
+    # independently: one failing channel is logged as a GitHub annotation (so it
+    # stays visible) and the rest still run. The run stays green.
+    def _notify_guard(label: str, fn):
+        try:
+            return fn()
+        except Exception as e:
+            import traceback
+            print(f"::warning title=Notify failed ({label})::{e}")
+            traceback.print_exc()
+            return None
+
     if not args.skip_notify and new_count > 0:
         print("\nSending notifications...")
+        new_jobs = newly_inserted_jobs  # the actual new jobs, not just the count
+        push_total = email_total = all_sent = 0
 
-        # Get the actual new jobs (not just count)
-        # We need to compare against what was in DB before
-        new_jobs = newly_inserted_jobs
-
-        # Notify users tracking specific companies (My List)
+        # Notify users tracking specific companies (My List / Watchlist)
         print("  Notifying tracked company users...")
-        tracked_result = notify_tracked_company_users(new_jobs, dry_run)
-        print(f"  Sent {tracked_result['push_sent']} push + {tracked_result['email_sent']} email notifications")
+        tracked_result = _notify_guard("watchlist", lambda: notify_tracked_company_users(new_jobs, dry_run))
+        if tracked_result:
+            push_total += tracked_result.get("push_sent", 0)
+            email_total += tracked_result.get("email_sent", 0)
+            print(f"  Sent {tracked_result['push_sent']} push + {tracked_result['email_sent']} email notifications")
 
         # Process smart job alerts (instant delivery)
         print("  Processing smart job alerts...")
-        alert_stats = process_instant_alerts(new_jobs, dry_run)
-        if alert_stats["users_notified"] > 0:
+        alert_stats = _notify_guard("smart-alerts", lambda: process_instant_alerts(new_jobs, dry_run))
+        if alert_stats and alert_stats.get("users_notified", 0) > 0:
+            push_total += alert_stats.get("push_sent", 0)
+            email_total += alert_stats.get("email_sent", 0)
             print(f"  Smart alerts: {alert_stats['push_sent']} push + {alert_stats['email_sent']} email to {alert_stats['users_notified']} users")
 
         # Notify users with scope='all'
-        users_by_job = {}
-        for job in new_jobs:
-            if not dry_run:
-                users_by_job[job["id"]] = get_users_to_notify(job)
-            else:
-                users_by_job[job["id"]] = []
+        def _notify_all():
+            users_by_job = {}
+            for job in new_jobs:
+                users_by_job[job["id"]] = [] if dry_run else get_users_to_notify(job)
+            return notify_users(new_jobs, users_by_job, dry_run)
 
-        all_sent = notify_users(new_jobs, users_by_job, dry_run)
+        all_sent = _notify_guard("all-jobs", _notify_all) or 0
         print(f"  Sent {all_sent} 'all jobs' push notifications")
-        total = tracked_result['push_sent'] + tracked_result['email_sent'] + all_sent
-        print(f"  Total notifications: {total}")
+        print(f"  Total notifications: {push_total + email_total + all_sent}")
 
     # Summary
     print("\n" + "=" * 40)
