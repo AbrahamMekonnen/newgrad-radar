@@ -427,7 +427,12 @@ def mark_inactive(active_ids: set[str], dry_run: bool = False) -> int:
 
 
 def get_users_to_notify(job: dict) -> list[dict]:
-    """Get users who should be notified about this job.
+    """Get the GLOBAL "All Jobs" audience for this job.
+
+    Only users with notify_scope = 'all'. Watchlist (per-company) notifications
+    are owned exclusively by notify_tracked_company_users(), so users tracking a
+    company are NOT looked up here — otherwise a watchlisted match would fire two
+    pushes for the same job (once here, once in the tracked-company pass).
 
     Args:
         job: The job dict to find matching users for
@@ -442,16 +447,6 @@ def get_users_to_notify(job: dict) -> list[dict]:
         # Get users with notify_scope = 'all'
         result = client.table("user_preferences").select("*").eq("notify_scope", "all").execute()
         users.extend(result.data)
-
-        # Get users tracking this specific company
-        result = client.table("user_lists").select(
-            "user_id, user_preferences(*)"
-        ).eq("company_slug", job["company_slug"]).execute()
-
-        for row in result.data:
-            if row.get("user_preferences"):
-                users.append(row["user_preferences"])
-
     except Exception as e:
         print(f"Error fetching users to notify: {e}")
 
