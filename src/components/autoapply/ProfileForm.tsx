@@ -495,6 +495,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['reserve_or_guard', 'Serving in the Reserves or National Guard?', ['Yes', 'No']],
             ['onsite_five_days', 'Available onsite five days per week?', ['Yes', 'No']],
             ['travel', 'Willing to travel for work?', ['Yes', 'No']],
+            ['marketing_communications', 'Receive optional recruiting or training marketing?', ['Yes', 'No']],
             ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
             ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],
             ['ethnicity_preference', 'Default ethnicity response', ['Decline to self-identify', 'Hispanic or Latino', 'Not Hispanic or Latino']],

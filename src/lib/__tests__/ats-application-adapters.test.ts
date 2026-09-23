@@ -12,6 +12,14 @@ describe('browser ATS adapters', () => {
     expect(ATS.detect(url).type).toBe(expected);
   });
 
+  it('lets Lever read the surrounding question instead of select option text', () => {
+    const row = {
+      querySelector: () => ({ textContent: 'Receive information about training opportunities?' }),
+      textContent: 'Receive information about training opportunities? Select... Yes No',
+    };
+    const element = { closest: () => row };
+    expect(ATS.adapters.lever.labelFor(element)).toBe('Receive information about training opportunities?');
+  });
   it('maps a detailed degree to an option the ATS actually exposes', () => {
     expect(ATS.matchOption('Degree', 'Bachelor of Science in Computer Science', [
       'Associate degree / college diploma', "Bachelor's degree", "Master's degree",

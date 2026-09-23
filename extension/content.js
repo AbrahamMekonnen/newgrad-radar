@@ -473,6 +473,8 @@
   };
 
   const fieldLabelFor = (element) => {
+    const adapterLabel = ATS?.detect(location.href)?.labelFor?.(element);
+    if (adapterLabel) return adapterLabel.slice(0, 1000);
     const labelledBy = String(element.getAttribute('aria-labelledby') || '').split(/\s+/)
       .map((id) => document.getElementById(id)?.textContent || '').filter(Boolean).join(' ');
     const container = element.closest('.application-question, fieldset, [class*=field], [class*=question], [class*=phone], [data-testid]');
