@@ -22,9 +22,9 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data } = await admin()
+  const { data, count } = await admin()
     .from('autoapply_job_queue')
-    .select('id, job_id, job_title, company_name, company_slug, job_url, ats_type, status, ready_pct, needs_user, prepared_data, prepared_at, submit_log, submitted_at, created_at, updated_at, prepare_log')
+    .select('id, job_id, job_title, company_name, company_slug, job_url, ats_type, status, ready_pct, needs_user, prepared_data, prepared_at, submit_log, submitted_at, created_at, updated_at, prepare_log', { count: 'exact' })
     .eq('user_id', user.id)
     // Keep the full lifecycle visible so the Applications page can live-track
     // queued, preparing, ready, failed, and completed applications.
@@ -32,7 +32,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(200);
 
-  return NextResponse.json({ applications: data || [] });
+  return NextResponse.json({ applications: data || [], total: count || 0 });
 }
 
 // PATCH: update status ('applied' | 'skipped') and/or save edited fields.

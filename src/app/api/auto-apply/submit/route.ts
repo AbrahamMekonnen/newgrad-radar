@@ -47,7 +47,12 @@ export async function POST(request: NextRequest) {
 
   const db = admin();
   let q = db.from('autoapply_job_queue')
-    .update({ status: 'waiting_for_browser', execution_channel: 'user_browser' })
+    .update({
+      status: 'waiting_for_browser',
+      execution_channel: 'user_browser',
+      // This authenticated Submit action is explicit authorization for the browser worker.
+      authorization_source: 'direct_click',
+    })
     .eq('user_id', user.id)
     .eq('status', 'prepared');
   q = all ? q : q.eq('id', id);

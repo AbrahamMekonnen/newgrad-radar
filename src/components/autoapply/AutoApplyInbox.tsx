@@ -32,6 +32,7 @@ const AUTO_SOURCES = new Set(['profile', 'matched', 'market', 'eeo', 'file']);
 export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
   const { toasts, showToast, removeToast } = useToast();
   const [apps, setApps] = useState<App[]>([]);
+  const [totalApps, setTotalApps] = useState(0);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
@@ -46,6 +47,7 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       const res = await fetch('/api/auto-apply/inbox');
       const data = await res.json();
       setApps(data.applications || []);
+      setTotalApps(typeof data.total === 'number' ? data.total : (data.applications || []).length);
     } catch { /* ignore */ }
     if (!silent) setLoading(false);
   }, []);
@@ -253,9 +255,9 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {apps.length === 0
+          {totalApps === 0
             ? 'No applications are in the queue yet. Choose Auto Apply on a job card or set criteria in Settings.'
-            : `${apps.length} application${apps.length === 1 ? '' : 's'} in your live queue.`}
+            : `${totalApps} application${totalApps === 1 ? '' : 's'} in your live queue. Showing the newest ${apps.length}.`}
         </p>
         {pairingCode && (
           <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/30 p-3 text-sm">
