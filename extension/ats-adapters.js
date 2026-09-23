@@ -136,6 +136,24 @@
           .find((item) => item.getAttribute('data-field-path') === name);
         return entry?.querySelector('input, textarea, select, [role="combobox"]') || null;
       },
+      fillCheckbox(element, wanted) {
+        const entry = element.closest('[data-field-path]');
+        const target = /^(?:false|no|0)$/i.test(String(wanted).trim()) ? 'no'
+          : /^(?:true|yes|1)$/i.test(String(wanted).trim()) ? 'yes' : '';
+        const option = target && entry?.querySelector(`.ashby-application-form-input-yesno-option[data-option="${target}"]`);
+        if (!option) return false;
+        if (option.getAttribute('aria-pressed') !== 'true') option.click();
+        return true;
+      },
+      fieldAccepted(element, wanted) {
+        if (element?.type !== 'checkbox') return null;
+        const entry = element.closest('[data-field-path]');
+        const yesNo = entry?.querySelector('.ashby-application-form-input-yesno');
+        if (!yesNo) return null;
+        const target = /^(?:false|no|0)$/i.test(String(wanted).trim()) ? 'no'
+          : /^(?:true|yes|1)$/i.test(String(wanted).trim()) ? 'yes' : '';
+        return Boolean(target && yesNo.querySelector(`[data-option="${target}"][aria-pressed="true"]`));
+      },
       findInvalid(root) {
         const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
         const nativeInvalid = controls.find((item) => item.willValidate && !item.checkValidity());
@@ -147,7 +165,11 @@
           const items = [...entry.querySelectorAll('input, textarea, select, [role="combobox"]')];
           if (!items.length) continue;
           const satisfied = items.some((item) => {
-            if (item.type === 'checkbox' || item.type === 'radio') return item.checked;
+            if (item.type === 'checkbox') {
+              const yesNo = entry.querySelector('.ashby-application-form-input-yesno');
+              return yesNo ? Boolean(yesNo.querySelector('[data-option][aria-pressed="true"]')) : item.checked;
+            }
+            if (item.type === 'radio') return item.checked;
             if (item.type === 'file') return item.files?.length > 0;
             return String(item.value || '').trim().length > 0;
           });

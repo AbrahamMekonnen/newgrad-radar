@@ -76,6 +76,23 @@ describe('browser ATS adapters', () => {
     control.value = '2026-10-01';
     expect(ATS.adapters.ashby.findInvalid(root)).toBeNull();
   });
+  it('explicitly selects and verifies Ashby false-valued Yes/No answers', () => {
+    let pressed = false;
+    const option = {
+      click: () => { pressed = true; },
+      getAttribute: (name: string) => name === 'aria-pressed' && pressed ? 'true' : 'false',
+    };
+    const yesNo = {
+      querySelector: (selector: string) => selector.includes('data-option="no"') || (pressed && selector.includes('aria-pressed="true"')) ? option : null,
+    };
+    const entry = {
+      querySelector: (selector: string) => selector.includes('input-yesno-option') ? option
+        : selector.includes('input-yesno') ? yesNo : null,
+    };
+    const checkbox = { type: 'checkbox', closest: () => entry };
+    expect(ATS.adapters.ashby.fillCheckbox(checkbox, 'No')).toBe(true);
+    expect(ATS.adapters.ashby.fieldAccepted(checkbox, 'No')).toBe(true);
+  });
   it('finds Ashby submit controls inside its non-form application panel', () => {
     const submit = {
       textContent: 'Submit Application', value: '',

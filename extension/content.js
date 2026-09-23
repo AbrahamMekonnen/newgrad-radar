@@ -222,7 +222,7 @@
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
       await wait(300);
-      if (controlHasValue(element)) return true;
+      if (controlHasValue(element, field)) return true;
     }
     if (!option) {
       const signature = candidates.map((item) => normalize(item.textContent)).join('|') || initialSignature;
@@ -330,6 +330,8 @@
       return true;
     }
     if (element.type === 'checkbox') {
+      const adapter = ATS?.detect(location.href);
+      if (adapter?.fillCheckbox?.(element, answerLabel(field))) return true;
       const checked = !['false', 'no', '0', ''].includes(normalize(value));
       if (element.checked !== checked) element.click();
       return true;
@@ -496,7 +498,9 @@
       : [];
     return { name, label: fieldLabelFor(element), type: element.type || element.getAttribute('role'), options };
   };
-  const controlHasValue = (element) => {
+  const controlHasValue = (element, field) => {
+    const adapterAccepted = ATS?.detect(location.href)?.fieldAccepted?.(element, answerLabel(field || {}));
+    if (adapterAccepted !== null && adapterAccepted !== undefined) return adapterAccepted;
     if (element.type === 'radio') {
       return [...document.querySelectorAll('input[type=\"radio\"]')].some((item) => item.name === element.name && item.checked);
     }
@@ -538,14 +542,14 @@
         return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options }];
       }
 
-      if (controlHasValue(element)) return [];
+      if (controlHasValue(element, descriptor)) return [];
       return [descriptor];
     }).filter((field) => field.label);
   };
   const fieldAccepted = (field) => {
     const element = findField(field);
     if (!element) return false;
-    return controlHasValue(element) || Boolean(String(element.textContent || '').trim());
+    return controlHasValue(element, field) || Boolean(String(element.textContent || '').trim());
   };
   const resolveFieldBounded = async (field, validationMessage = '') => {
     const key = fieldKey(field);
