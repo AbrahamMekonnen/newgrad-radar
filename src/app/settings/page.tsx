@@ -95,6 +95,25 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
 
   const [pushDeviceState, setPushDeviceState] = useState<'idle' | 'working' | 'done' | 'denied' | 'unsupported'>('idle');
 
+  // Reflect the REAL push state on load so the button doesn't reset to "Enable"
+  // after a refresh, and re-sync the subscription to the server so it persists.
+  useEffect(() => {
+    (async () => {
+      if (!isPushSupported()) return;
+      if (Notification.permission === 'denied') { setPushDeviceState('denied'); return; }
+      if (Notification.permission !== 'granted') return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          setPushDeviceState('done');
+          // Make sure the server still has this subscription (idempotent).
+          subscribeToPush();
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   const enablePushOnDevice = async () => {
     setPushDeviceState('working');
     // Make sure push is enabled server-side too, so the sender will target us.
