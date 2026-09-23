@@ -657,6 +657,27 @@
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
       const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
+      // Greenhouse renders phone country as a React Select plus an empty
+      // required proxy input. Fill the visible combobox so React updates the
+      // proxy; writing to the proxy directly does not satisfy ATS state.
+      if (bad && /country/i.test(String(label || '')) && data.browserWorker) {
+        const explicitCountry = (data.fields || []).find((field) =>
+          field.category === 'country' || /^country$/i.test(String(field.label || '').trim()))?.value;
+        const phone = String((data.fields || []).find((field) => field.category === 'phone')?.value || '').replace(/\D/g, '');
+        const locationValue = String((data.fields || []).find((field) => field.category === 'location')?.value || '');
+        const inferredCountry = explicitCountry || ((phone.length === 11 && phone.startsWith('1'))
+          || /\b(?:usa|united states|ca|ny|dc|va|tx|wa|ma|md|nj|fl|il)\b/i.test(locationValue) ? 'United States' : '');
+        const shell = bad.closest('.select__container, .select, [class*=phone]');
+        const countryCombo = shell?.querySelector('input[role=combobox], input[aria-autocomplete=true]');
+        if (countryCombo && inferredCountry) {
+          const applied = await fillCombo(countryCombo, { name: 'phone-country', label: 'Country', value: inferredCountry, values: [] });
+          await wait(300);
+          if (applied && bad.checkValidity()) {
+            banner('HireRadar selected the phone country and is retrying submission...');
+            return true;
+          }
+        }
+      }
       if (bad?.type === 'radio') {
         const group = [...form.querySelectorAll('input[type="radio"]')].filter((item) => item.name === bad.name);
         const container = bad.closest('.application-question, fieldset, [role="radiogroup"], [class*="question"]');
