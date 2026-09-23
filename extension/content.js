@@ -675,6 +675,15 @@
         return true;
       }
       if (openApplicationForm()) return true;
+      const formControls = document.querySelectorAll('form input, form textarea, form select, form button').length;
+      if (formControls === 0) {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'failed',
+          detail: { detail: 'The posting does not expose an application form or Apply action.' },
+        });
+        banner('This posting does not currently expose an application form.', true);
+        return false;
+      }
       const closedText = normalize(document.body?.innerText || '');
       if (/no longer accepting applications|job is no longer available|position has been filled|job not found/.test(closedText)) {
         if (data.browserWorker) await send({
@@ -786,6 +795,9 @@
       if (!data) return;
       const isTopFrame = window.top === window;
       const isSmartRecruiters = normalize(data.atsType) === 'smartrecruiters';
+      const isEmbeddedGreenhouse = !isTopFrame
+        && normalize(data.atsType) === 'greenhouse'
+        && /job-boards\.greenhouse\.io\/embed\/job_app/i.test(location.href);
       // SmartRecruiters uses a different publication identifier in its embedded
       // application URL, so the child frame cannot be compared by job URL ID.
       if (!isSmartRecruiters && !sameJob(data)) return;
@@ -793,7 +805,7 @@
       // decorative/analytics frames. SmartRecruiters is the exception: its top
       // job page opens an embedded one-click application whose child frame owns
       // filling and submission.
-      if (!isTopFrame && !isSmartRecruiters) return;
+      if (!isTopFrame && !isSmartRecruiters && !isEmbeddedGreenhouse) return;
       if (isTopFrame && isSmartRecruiters && !location.pathname.includes('/oneclick-ui/')) {
         if (data.browserWorker) await send({
           type: 'PROGRESS', stage: 'filling',
