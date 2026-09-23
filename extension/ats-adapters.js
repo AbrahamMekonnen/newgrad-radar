@@ -177,6 +177,13 @@
         }
         return null;
       },
+      uploadReadyOverride(doc, waitedMs) {
+        if (waitedMs < 45000) return false;
+        const entry = [...doc.querySelectorAll('[data-field-path]')]
+          .find((item) => item.getAttribute('data-field-path') === '_systemfield_resume');
+        const input = entry?.querySelector('input[type="file"]');
+        return Boolean(input?.files?.length);
+      },
       submissionComplete(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');
         if (!panel) return false;

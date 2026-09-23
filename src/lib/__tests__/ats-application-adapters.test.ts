@@ -93,6 +93,18 @@ describe('browser ATS adapters', () => {
     expect(ATS.adapters.ashby.fillCheckbox(checkbox, 'No')).toBe(true);
     expect(ATS.adapters.ashby.fieldAccepted(checkbox, 'No')).toBe(true);
   });
+  it('allows Ashby past a stale upload indicator only after 45 seconds with a retained file', () => {
+    const input = { files: [{ name: 'resume.pdf' }] };
+    const entry = {
+      getAttribute: () => '_systemfield_resume',
+      querySelector: () => input,
+    };
+    const doc = { querySelectorAll: () => [entry] };
+    expect(ATS.adapters.ashby.uploadReadyOverride(doc, 44999)).toBe(false);
+    expect(ATS.adapters.ashby.uploadReadyOverride(doc, 45000)).toBe(true);
+    input.files = [];
+    expect(ATS.adapters.ashby.uploadReadyOverride(doc, 60000)).toBe(false);
+  });
   it('confirms Ashby only after the form is replaced by a positive receipt', () => {
     const panel = {
       textContent: 'Thank you for your interest. Our team will review your application.',
