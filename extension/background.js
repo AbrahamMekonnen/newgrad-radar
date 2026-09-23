@@ -159,11 +159,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }    if (message.type === 'PROGRESS') {
       const tabId = sender.tab?.id;
       if (!tabId) return { ok: false };
-      const result = await chrome.storage.session.get('job:' + tabId);
+      const keys = ['job:' + tabId, 'submitted:' + tabId];
+      const result = await chrome.storage.session.get(keys);
       const job = currentByTab.get(tabId) || result['job:' + tabId];
-      if (!job) return { ok: false };
+      // Greenhouse can navigate to its success page before the original
+      // content script receives our acknowledgement. That new page reports the
+      // same success; accept it when this tab already has a recorded receipt.
+      if (!job) return message.stage === 'submitted' && !!result['submitted:' + tabId]
+        ? { ok: true, alreadySubmitted: true } : { ok: false };
       await report(job, message.stage, message.detail || {});
       if (message.stage === 'submitted') {
+        await chrome.storage.session.set({ ['submitted:' + tabId]: { jobId: job.id, at: Date.now() } });
         currentByTab.delete(tabId);
         await chrome.storage.session.remove('job:' + tabId);
         void poll();
