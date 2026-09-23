@@ -60,6 +60,27 @@
     return contained.length === 1 ? contained[0] : null;
   };
 
+  const matchLocationOption = (wanted, options) => {
+    const stateNames = {
+      al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas', ca: 'california', co: 'colorado', ct: 'connecticut', de: 'delaware', fl: 'florida', ga: 'georgia', hi: 'hawaii', id: 'idaho', il: 'illinois', in: 'indiana', ia: 'iowa', ks: 'kansas', ky: 'kentucky', la: 'louisiana', me: 'maine', md: 'maryland', ma: 'massachusetts', mi: 'michigan', mn: 'minnesota', ms: 'mississippi', mo: 'missouri', mt: 'montana', ne: 'nebraska', nv: 'nevada', nh: 'new hampshire', nj: 'new jersey', nm: 'new mexico', ny: 'new york', nc: 'north carolina', nd: 'north dakota', oh: 'ohio', ok: 'oklahoma', or: 'oregon', pa: 'pennsylvania', ri: 'rhode island', sc: 'south carolina', sd: 'south dakota', tn: 'tennessee', tx: 'texas', ut: 'utah', vt: 'vermont', va: 'virginia', wa: 'washington', wv: 'west virginia', wi: 'wisconsin', wy: 'wyoming', dc: 'district of columbia',
+    };
+    const rawTarget = normalize(wanted);
+    if (!rawTarget) return null;
+    const target = rawTarget.split(' ').map((token) => stateNames[token] || token).join(' ');
+    const candidates = (options || []).filter((option) => normalize(option));
+    const exact = candidates.find((option) => normalize(option) === rawTarget || normalize(option) === target);
+    if (exact) return exact;
+    const city = target.split(' ')[0];
+    if (!city || city.length < 3) return null;
+    const cityMatches = candidates.filter((option) => normalize(option).split(' ').includes(city));
+    if (cityMatches.length === 1) return cityMatches[0];
+    const targetTokens = new Set(target.split(' ').filter((token) => token.length > 1));
+    return cityMatches.map((option) => {
+      const tokens = new Set(normalize(option).split(' '));
+      const overlap = [...targetTokens].filter((token) => tokens.has(token)).length;
+      return { option, overlap };
+    }).sort((a, b) => b.overlap - a.overlap)[0]?.option || null;
+  };
   const scoreSubmitText = (value) => {
     const text = normalize(value);
     if (/^submit (your )?application\b/.test(text)) return 10;
@@ -102,7 +123,12 @@
       hosts: ['boards.greenhouse.io', 'job-boards.greenhouse.io'],
       formSelectors: ['form'],
       phoneCountryProxy: '.phone-input__country input:required, .phone-input__country .requiredInput',
-      async repairInvalid(context) {
+      uploadReadyOverride(doc, waitedMs) {
+        if (waitedMs < 5000) return false;
+        const visibleFiles = [...doc.querySelectorAll('input[type="file"]')]
+          .filter((input) => input.getClientRects().length > 0);
+        return visibleFiles.length > 0 && visibleFiles.every((input) => input.files?.length > 0);
+      },      async repairInvalid(context) {
         const invalid = context.invalid;
         if (!invalid || !/country/i.test(String(context.label || ''))) return false;
         const country = inferCountry(context.fields || []);
@@ -276,6 +302,6 @@
 
   return {
     adapters, detect, normalize, degreeLevel, stableFieldKey, matchOption,
-    scoreSubmitText, successEvidence, inferCountry, createFieldLedger,
+    scoreSubmitText, successEvidence, inferCountry, matchLocationOption, createFieldLedger,
   };
 });

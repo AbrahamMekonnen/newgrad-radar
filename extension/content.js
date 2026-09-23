@@ -216,6 +216,10 @@
       candidates = visibleOptions(element);
       option = candidates.find((item) => optionMatches(item.textContent, wanted))
         || semanticOption(field, wanted, candidates);
+      if (!option && isLocation) {
+        const matched = ATS?.matchLocationOption?.(wanted, candidates.map((item) => item.textContent));
+        option = matched ? candidates.find((item) => normalize(item.textContent) === normalize(matched)) : null;
+      }
     }
     if (!option && isCountry && element instanceof HTMLInputElement) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));

@@ -135,6 +135,24 @@ describe('browser ATS adapters', () => {
     expect(ATS.adapters.workday.findNext({ querySelector: () => workdayNext })).toBe(workdayNext);
     expect(ATS.adapters.smartrecruiters.findNext({ querySelector: () => smartNext })).toBe(smartNext);
   });
+  it('matches location suggestions by city when ATS expands state abbreviations', () => {
+    expect(ATS.matchLocationOption('Georgetown, TX', [
+      'Georgetown, Kentucky, United States',
+      'Georgetown, Texas, United States',
+    ])).toBe('Georgetown, Texas, United States');
+    expect(ATS.matchLocationOption('San Francisco, CA', [
+      'San Francisco, California, United States',
+    ])).toBe('San Francisco, California, United States');
+  });
+
+  it('allows Greenhouse past a stale upload status after retaining every visible file', () => {
+    const ready = { files: [{ name: 'resume.pdf' }], getClientRects: () => [1] };
+    const doc = { querySelectorAll: () => [ready] };
+    expect(ATS.adapters.greenhouse.uploadReadyOverride(doc, 4999)).toBe(false);
+    expect(ATS.adapters.greenhouse.uploadReadyOverride(doc, 5000)).toBe(true);
+    ready.files = [];
+    expect(ATS.adapters.greenhouse.uploadReadyOverride(doc, 6000)).toBe(false);
+  });
   it('requires positive ATS success evidence', () => {
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Application form').confirmed).toBe(false);
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Thank you for applying').confirmed).toBe(true);
