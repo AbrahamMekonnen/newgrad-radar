@@ -20,6 +20,18 @@ describe('browser ATS adapters', () => {
     const element = { closest: () => row };
     expect(ATS.adapters.lever.labelFor(element)).toBe('Receive information about training opportunities?');
   });
+  it('prefers the Lever application-question container over a textarea card class', () => {
+    const question = {
+      querySelector: () => null,
+      textContent: 'What other languages do you speak and what is the level?',
+    };
+    const fieldItself = { querySelector: () => null, textContent: '' };
+    const element = {
+      closest: (selector: string) => selector.startsWith('li.application-question') ? question : fieldItself,
+    };
+    expect(ATS.adapters.lever.labelFor(element))
+      .toBe('What other languages do you speak and what is the level?');
+  });
   it('maps a detailed degree to an option the ATS actually exposes', () => {
     expect(ATS.matchOption('Degree', 'Bachelor of Science in Computer Science', [
       'Associate degree / college diploma', "Bachelor's degree", "Master's degree",

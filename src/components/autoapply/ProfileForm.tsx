@@ -516,6 +516,12 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </div>
           ))}
           <Input
+            label="Other languages and proficiency"
+            value={customFact('other_languages')}
+            onChange={(e) => handleFactChange('other_languages', e.target.value)}
+            placeholder="e.g., Amharic — native; Spanish — B1, or None"
+          />
+          <Input
             label="Preferred coding language"
             value={customFact('coding_language')}
             onChange={(e) => handleFactChange('coding_language', e.target.value)}

@@ -120,7 +120,7 @@
       hosts: ['jobs.lever.co'],
       formSelectors: ['.application-form form', '.lever-form', 'form.application'],
       labelFor(element) {
-        const row = element.closest('li, .application-question, [class*=card]');
+        const row = element.closest('li.application-question, .application-question, li') || element.closest('[class*=card]');
         const heading = row?.querySelector('.application-label, label, h3, h4, [class*=question]');
         return String(heading?.textContent || row?.textContent || '').replace(/\s+/g, ' ').trim();
       },
