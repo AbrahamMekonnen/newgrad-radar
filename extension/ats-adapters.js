@@ -125,9 +125,10 @@
       phoneCountryProxy: '.phone-input__country input:required, .phone-input__country .requiredInput',
       uploadReadyOverride(doc, waitedMs) {
         if (waitedMs < 5000) return false;
-        const visibleFiles = [...doc.querySelectorAll('input[type="file"]')]
-          .filter((input) => input.getClientRects().length > 0);
-        return visibleFiles.length > 0 && visibleFiles.every((input) => input.files?.length > 0);
+        const files = [...doc.querySelectorAll('input[type="file"]')];
+        // Greenhouse hides the native input behind an Attach button. A retained
+        // resume file is stronger evidence than a stale generic status region.
+        return files.some((input) => input.files?.length > 0);
       },      async repairInvalid(context) {
         const invalid = context.invalid;
         if (!invalid || !/country/i.test(String(context.label || ''))) return false;

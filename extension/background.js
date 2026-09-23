@@ -65,6 +65,20 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
 });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === POLL_ALARM) void poll(); });
+chrome.webNavigation.onCompleted.addListener(async (details) => {
+  if (details.frameId === 0 || !/^https:\/\/job-boards\.greenhouse\.io\/embed\/job_app/i.test(details.url || '')) return;
+  const result = await chrome.storage.session.get('job:' + details.tabId);
+  const job = currentByTab.get(details.tabId) || result['job:' + details.tabId];
+  if (!job || String(job.atsType).toLowerCase() !== 'greenhouse') return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: details.tabId, frameIds: [details.frameId] },
+      files: ['ats-adapters.js', 'execution-contract.js', 'content.js'],
+    });
+  } catch (error) {
+    await report(job, 'failed', { detail: 'Could not attach to the embedded Greenhouse form: ' + error.message }).catch(() => undefined);
+  }
+});
 chrome.tabs.onCreated.addListener(async (tab) => {
   if (!tab.id || !tab.openerTabId) return;
   const result = await chrome.storage.session.get('job:' + tab.openerTabId);

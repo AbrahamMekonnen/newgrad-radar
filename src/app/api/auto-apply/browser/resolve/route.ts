@@ -61,7 +61,11 @@ export async function POST(request: NextRequest) {
     if (/hispanic|latino|ethnicity|race/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
-    if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
+    if (/currently located in|currently live in|are you based in/.test(q)) {
+      const requested = q.match(/(?:located|live|based) in ([a-z ]+)/)?.[1]?.trim();
+      const suppliedLocation = norm([profile?.location, profile?.city, profile?.state, profile?.country].filter(Boolean).join(' '));
+      if (requested && pick(f, suppliedLocation.includes(requested) ? 'Yes' : 'No', 'profile', 'Compared the requested location with the saved candidate location')) continue;
+    }    if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
     if (/location/.test(q) && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '))) continue;

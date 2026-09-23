@@ -209,9 +209,10 @@
     if (!option && initialSignature && unresolvedChoiceSignatures.get(field.name) === initialSignature) return false;
     if (!option && element instanceof HTMLInputElement) {
       element.focus();
-      setNativeValue(element, wanted);
-      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
-      element.dispatchEvent(new KeyboardEvent('keyup', { key: wanted.slice(-1) || 'a', bubbles: true }));
+      const searchValue = isLocation ? wanted.split(',')[0].trim() : wanted;
+      setNativeValue(element, searchValue);
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: searchValue }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: searchValue.slice(-1) || 'a', bubbles: true }));
       await wait(isLocation ? 1800 : isCountry ? 700 : 350);
       candidates = visibleOptions(element);
       option = candidates.find((item) => optionMatches(item.textContent, wanted))

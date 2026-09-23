@@ -33,6 +33,17 @@ describe('matchAvailableOption', () => {
       .toBe('Authorized to work now, but will require employer sponsorship in the future');
   });
 
+  it('maps a saved company-careers source to the ATS careers-site wording', () => {
+    expect(matchAvailableOption('How did you hear about this role?', 'Company careers page', [
+      'LinkedIn', 'Verkada Careers Page', 'Referral',
+    ])).toBe('Verkada Careers Page');
+  });
+
+  it('maps no previous employment to a never-worked option', () => {
+    expect(matchAvailableOption('Are you a current or former Alphabet employee?', 'No', [
+      'Current Alphabet Employee', 'Former Alphabet Employee', 'Never worked at Alphabet',
+    ])).toBe('Never worked at Alphabet');
+  });
   it('normalizes common country aliases only to available choices', () => {
     expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))
       .toBe('United States');

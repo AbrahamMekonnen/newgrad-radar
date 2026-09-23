@@ -41,6 +41,15 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
       if (option) return option;
     }
   }
+  if (/hear about|learn about|source/.test(q) && /company careers|company website|careers page/.test(target)) {
+    const option = usable.find((candidate) => /careers? (website|site|page)|company (website|site)|website/.test(norm(candidate)));
+    if (option) return option;
+  }
+
+  if (/previously worked|worked at|former employee|current or former/.test(q) && target === 'no') {
+    const option = usable.find((candidate) => /^(no|never worked|not previously)/.test(norm(candidate)));
+    if (option) return option;
+  }
   if (/degree|education level|qualification/.test(q)) {
     const level = degreeLevel(target);
     if (level) {
