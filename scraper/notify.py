@@ -69,32 +69,36 @@ def notify_users(new_jobs: list[dict], users_by_job: dict[str, list[dict]], dry_
             if not user_prefs.get("push_enabled", False):
                 continue
 
-            # Check if user has ntfy topic configured
-            ntfy_topic = user_prefs.get("ntfy_topic")
-            if not ntfy_topic:
-                continue
-
             # Check role filter
             role_filters = user_prefs.get("role_filters")
             if role_filters:
                 if not any(r in role_filters for r in job.get("role_types", [])):
                     continue
 
+            ntfy_topic = user_prefs.get("ntfy_topic")
+            user_id = user_prefs.get("user_id")
+
             # Prepare notification
             title = f"New job at {job['company_name']}"
             message = f"{job['title']}\n{job['location']}"
 
             if dry_run:
-                print(f"  [DRY RUN] Would notify {ntfy_topic}: {title}")
+                print(f"  [DRY RUN] Would notify {user_id or ntfy_topic}: {title}")
                 sent_count += 1
-            else:
-                if send_ntfy(
-                    topic=ntfy_topic,
-                    title=title,
-                    message=message,
-                    url=job.get("url")
-                ):
-                    sent_count += 1
+                continue
+
+            sent = False
+            if ntfy_topic and send_ntfy(topic=ntfy_topic, title=title, message=message, url=job.get("url")):
+                sent = True
+            # Web Push + persist to Notified Jobs (all-jobs source).
+            if user_id:
+                from webpush import push_to_user
+                from db import get_client, record_notified_jobs
+                if push_to_user(get_client(), user_id, title, message, url=job.get("url")) > 0:
+                    sent = True
+                record_notified_jobs(user_id, [job["id"]], "all_jobs")
+            if sent:
+                sent_count += 1
 
     return sent_count
 

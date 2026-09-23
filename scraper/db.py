@@ -453,6 +453,20 @@ def get_users_to_notify(job: dict) -> list[dict]:
     return users
 
 
+def record_notified_jobs(user_id: str, job_ids: list[str], source: str) -> None:
+    """Persist that a user was pushed about these jobs so they appear under
+    Applications -> Notified Jobs. `source` is 'watchlist' or 'all_jobs'.
+    Best-effort: a failure (e.g. table not migrated yet) never breaks a push."""
+    if not user_id or not job_ids:
+        return
+    try:
+        client = get_client()
+        rows = [{"user_id": user_id, "job_id": jid, "source": source} for jid in set(job_ids)]
+        client.table("notified_jobs").upsert(rows, on_conflict="user_id,job_id,source").execute()
+    except Exception:
+        pass
+
+
 def cleanup_jobs(dry_run: bool = False) -> dict:
     """Clean up old jobs and enforce max active job limit.
 

@@ -84,7 +84,7 @@ from sources import (
     crawl_custom_companies,
 )
 from classifier import classify_jobs, detect_role_types
-from db import upsert_jobs, mark_inactive, get_users_to_notify, get_client, cleanup_jobs
+from db import upsert_jobs, mark_inactive, get_users_to_notify, get_client, cleanup_jobs, record_notified_jobs
 from notify import notify_users, send_ntfy
 from webpush import push_to_user
 from email_notify import notify_user_by_email
@@ -318,6 +318,9 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
                         sent_any = True
                     if sent_any:
                         result["push_sent"] += 1
+                    # Persist so these show under Applications -> Notified Jobs
+                    # (Watchlist), returnable to apply later.
+                    record_notified_jobs(user_id, [j["id"] for j in matching_jobs], "watchlist")
 
             # Email notification - collect jobs per user for digest
             if prefs.get("email_enabled"):
