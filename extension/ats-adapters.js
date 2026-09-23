@@ -64,15 +64,20 @@
     const stateNames = {
       al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas', ca: 'california', co: 'colorado', ct: 'connecticut', de: 'delaware', fl: 'florida', ga: 'georgia', hi: 'hawaii', id: 'idaho', il: 'illinois', in: 'indiana', ia: 'iowa', ks: 'kansas', ky: 'kentucky', la: 'louisiana', me: 'maine', md: 'maryland', ma: 'massachusetts', mi: 'michigan', mn: 'minnesota', ms: 'mississippi', mo: 'missouri', mt: 'montana', ne: 'nebraska', nv: 'nevada', nh: 'new hampshire', nj: 'new jersey', nm: 'new mexico', ny: 'new york', nc: 'north carolina', nd: 'north dakota', oh: 'ohio', ok: 'oklahoma', or: 'oregon', pa: 'pennsylvania', ri: 'rhode island', sc: 'south carolina', sd: 'south dakota', tn: 'tennessee', tx: 'texas', ut: 'utah', vt: 'vermont', va: 'virginia', wa: 'washington', wv: 'west virginia', wi: 'wisconsin', wy: 'wyoming', dc: 'district of columbia',
     };
-    const rawTarget = normalize(wanted);
+    const rawWanted = String(wanted || '');
+    const rawTarget = normalize(rawWanted);
     if (!rawTarget) return null;
     const target = rawTarget.split(' ').map((token) => stateNames[token] || token).join(' ');
     const candidates = (options || []).filter((option) => normalize(option));
     const exact = candidates.find((option) => normalize(option) === rawTarget || normalize(option) === target);
     if (exact) return exact;
-    const city = target.split(' ')[0];
+    const city = normalize(rawWanted.split(',')[0]);
     if (!city || city.length < 3) return null;
-    const cityMatches = candidates.filter((option) => normalize(option).split(' ').includes(city));
+    const cityTokens = city.split(' ').filter(Boolean);
+    const cityMatches = candidates.filter((option) => {
+      const tokens = new Set(normalize(option).split(' '));
+      return cityTokens.every((token) => tokens.has(token));
+    });
     if (cityMatches.length === 1) return cityMatches[0];
     const targetTokens = new Set(target.split(' ').filter((token) => token.length > 1));
     return cityMatches.map((option) => {

@@ -43,6 +43,9 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Are you a current or former Alphabet employee?', 'No', [
       'Current Alphabet Employee', 'Former Alphabet Employee', 'Never worked at Alphabet',
     ])).toBe('Never worked at Alphabet');
+    expect(matchAvailableOption('Have you ever worked at MongoDB before?', 'No', [
+      'Yes', 'No',
+    ])).toBe('No');
   });
   it('normalizes common country aliases only to available choices', () => {
     expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))

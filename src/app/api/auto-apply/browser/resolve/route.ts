@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
     if (/sponsor/.test(q) && pick(f, profile?.require_sponsorship === true ? 'Yes' : profile?.require_sponsorship === false ? 'No' : profile?.sponsorship_status)) continue;
     if (/work authorization|authorized to work|eligible to work/.test(q) && pick(f, profile?.work_authorization)) continue;
-    if (/previously worked|former employee|current or former/.test(q)) {
+    if (/previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
