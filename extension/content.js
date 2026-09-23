@@ -615,13 +615,18 @@
       return false;
     }
     const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
-    const submit = controls.find((item) => {
-      if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
-      const text = normalize(item.textContent || item.value);
-      return ['submit application', 'submit', 'apply'].includes(text)
-        || /^submit (your )?application\b/.test(text)
-        || /^(send|complete) (your )?application\b/.test(text);
-    });
+    const submit = controls
+      .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true' && item.closest('form'))
+      .map((item) => {
+        const text = normalize(item.textContent || item.value);
+        const score = /^submit (your )?application\b/.test(text) ? 10
+          : text === 'submit' ? 9
+            : /^(send|complete) (your )?application\b/.test(text) ? 8
+              : text === 'apply' ? 1 : 0;
+        return { item, score };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.item;
     if (!submit) {
       if (openApplicationForm()) return true;
       if (data.browserWorker) await send({
