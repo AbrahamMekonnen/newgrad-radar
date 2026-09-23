@@ -16,13 +16,10 @@ const api = async (path, options = {}) => {
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
   method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, ...extra }),
 });
-const adaptiveCapacity = () => {
-  const cores = navigator.hardwareConcurrency || 8;
-  const memory = navigator.deviceMemory || 8;
-  if (cores >= 16 && memory >= 16) return 12;
-  if (cores >= 12 && memory >= 8) return 10;
-  return 8;
-};
+// Controlled learning batches keep failures reviewable and prevent a broken
+// selector from draining the full queue before its shared cause is fixed.
+const BATCH_SIZE = 7;
+const adaptiveCapacity = () => BATCH_SIZE;
 let pollRunning = false;
 async function poll() {
   if (pollRunning) return;
