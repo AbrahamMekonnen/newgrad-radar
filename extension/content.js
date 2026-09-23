@@ -671,6 +671,10 @@
           }
         }
       }
+      const ancestry = bad ? Array.from({ length: 5 }, (_, depth) => {
+        let node = bad; for (let i = 0; i < depth; i++) node = node?.parentElement;
+        return node ? { tag: node.tagName, className: String(node.className || '').slice(0, 300), role: node.getAttribute('role'), ariaControls: node.getAttribute('aria-controls'), ariaLabelledBy: node.getAttribute('aria-labelledby'), text: String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300) } : null;
+      }).filter(Boolean) : [];
       const diagnostic = bad ? {
         name: bad.name || '',
         id: bad.id || '',
@@ -680,6 +684,12 @@
         checked: typeof bad.checked === 'boolean' ? bad.checked : undefined,
         files: bad.files?.length,
         value: bad.type === 'file' ? undefined : String(bad.value || '').slice(0, 100),
+        role: bad.getAttribute('role'),
+        ariaControls: bad.getAttribute('aria-controls'),
+        ariaAutocomplete: bad.getAttribute('aria-autocomplete'),
+        placeholder: bad.getAttribute('placeholder'),
+        className: String(bad.className || '').slice(0, 300),
+        ancestry,
       } : { label: 'unknown required field' };
       if (data.browserWorker) {
         await send({
