@@ -18,6 +18,29 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
   if (exact) return exact;
 
   const q = norm(question);
+
+  if (/country/.test(q)) {
+    const aliases: Record<string, string> = {
+      us: 'united states', usa: 'united states', 'u s': 'united states',
+      uk: 'united kingdom', 'u k': 'united kingdom',
+    };
+    const country = aliases[target] || target;
+    const option = usable.find((candidate) => norm(candidate) === country);
+    if (option) return option;
+  }
+
+  if (/work authori[sz]ation|eligible to work|employment authori[sz]ation/.test(q)) {
+    const noSponsor = ['us citizen', 'permanent resident', 'green card', 'authorized without employer sponsorship'];
+    const futureSponsor = ['visa holder', 'student visa', 'f1', 'opt', 'cpt', 'authorized now but will require employer sponsorship'];
+    if (noSponsor.some((intent) => target.includes(intent))) {
+      const option = usable.find((candidate) => /authorized.*without.*sponsor|citizen|permanent resident|green card/.test(norm(candidate)));
+      if (option) return option;
+    }
+    if (futureSponsor.some((intent) => target.includes(intent))) {
+      const option = usable.find((candidate) => /authorized.*require.*sponsor|future.*sponsor|time limited visa/.test(norm(candidate)));
+      if (option) return option;
+    }
+  }
   if (/degree|education level|qualification/.test(q)) {
     const level = degreeLevel(target);
     if (level) {

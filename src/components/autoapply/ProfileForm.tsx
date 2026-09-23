@@ -92,6 +92,13 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
     batchFormUpdate({ [field]: value } as Partial<UserProfile>);
   }, [batchFormUpdate]);
 
+  const customFact = (key: string) => formData.custom_answers?.['__fact:' + key] || '';
+  const handleFactChange = (key: string, value: string) => {
+    handleChange('custom_answers', {
+      ...(formData.custom_answers || {}),
+      ['__fact:' + key]: value,
+    });
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -476,6 +483,50 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         </div>
       </section>
 
+      <section>
+        <h2 className="text-lg font-medium text-gray-900 mb-1">Reusable Application Facts</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          These answers are reused only when you provide them. HireRadar will not infer sensitive facts.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            ['government_current', 'Current government employee?', ['Yes', 'No']],
+            ['government_past_10_years', 'Government employee in the past 10 years?', ['Yes', 'No']],
+            ['reserve_or_guard', 'Serving in the Reserves or National Guard?', ['Yes', 'No']],
+            ['onsite_five_days', 'Available onsite five days per week?', ['Yes', 'No']],
+            ['travel', 'Willing to travel for work?', ['Yes', 'No']],
+            ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
+            ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],
+            ['ethnicity_preference', 'Default ethnicity response', ['Decline to self-identify', 'Hispanic or Latino', 'Not Hispanic or Latino']],
+            ['veteran_preference', 'Default veteran response', ['Decline to self-identify', 'Protected veteran', 'Not a protected veteran']],
+            ['disability_preference', 'Default disability response', ['Decline to self-identify', 'Yes', 'No']],
+          ].map(([key, label, options]) => (
+            <div key={key as string}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{label as string}</label>
+              <select
+                value={customFact(key as string)}
+                onChange={(e) => handleFactChange(key as string, e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Ask me when needed</option>
+                {(options as string[]).map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </div>
+          ))}
+          <Input
+            label="Preferred coding language"
+            value={customFact('coding_language')}
+            onChange={(e) => handleFactChange('coding_language', e.target.value)}
+            placeholder="Python 3"
+          />
+          <Input
+            label="Security clearance"
+            value={customFact('security_clearance')}
+            onChange={(e) => handleFactChange('security_clearance', e.target.value)}
+            placeholder="Leave blank if none or unknown"
+          />
+        </div>
+      </section>
       <section>
         <h2 className="text-lg font-medium text-gray-900 mb-1">AI Writing Context</h2>
         <p className="text-sm text-gray-500 mb-4">Give the agent facts and a sample of your voice so open-ended answers sound like you.</p>

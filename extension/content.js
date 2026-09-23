@@ -6,6 +6,7 @@
   const normalize = (value) => String(value || '').toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ').trim();
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const ATS = globalThis.HireRadarATS;
 
   // Messaging that can never throw. chrome.runtime.sendMessage throws
   // "Extension context invalidated" (synchronously) when this content script is
@@ -165,6 +166,8 @@
     return '';
   };
   const semanticOption = (field, wanted, candidates) => {
+    const matched = ATS?.matchOption(field.label, wanted, candidates.map((item) => item.textContent));
+    if (matched) return candidates.find((item) => normalize(item.textContent) === normalize(matched)) || null;
     const question = normalize(field.label);
     if (/degree|education level|qualification/.test(question)) {
       const level = degreeLevel(wanted);
@@ -174,9 +177,9 @@
   };
   const unresolvedChoiceSignatures = new Map();
   const resolutionState = new Map();
-  const fieldKey = (field) => normalize(field.label)
+  const fieldKey = (field) => ATS?.stableFieldKey(field) || (normalize(field.label)
     ? [normalize(field.label), normalize(field.type)].filter(Boolean).join('|')
-    : [String(field.name || ''), normalize(field.type)].filter(Boolean).join('|');
+    : [String(field.name || ''), normalize(field.type)].filter(Boolean).join('|'));
   const visibleOptions = (owner) => {
     const controlledId = owner?.getAttribute?.('aria-controls') || owner?.getAttribute?.('aria-owns');
     const controlled = controlledId && document.getElementById(controlledId);
@@ -443,7 +446,8 @@
       'application was already submitted',
       'your application is in',
     ].some((phrase) => signalText.includes(phrase));
-    return successUrl || successText;
+    const adapterEvidence = ATS?.successEvidence(location.href, signalText);
+    return adapterEvidence?.confirmed || successUrl || successText;
   };
 
   const persist = (data) => sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
@@ -624,10 +628,10 @@
       .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true' && item.closest('form'))
       .map((item) => {
         const text = normalize(item.textContent || item.value);
-        const score = /^submit (your )?application\b/.test(text) ? 10
+        const score = ATS?.scoreSubmitText(text) ?? (/^submit (your )?application\b/.test(text) ? 10
           : text === 'submit' ? 9
             : /^(send|complete) (your )?application\b/.test(text) ? 8
-              : text === 'apply' ? 1 : 0;
+              : text === 'apply' ? 1 : 0);
         return { item, score };
       })
       .filter(({ score }) => score > 0)
@@ -657,26 +661,12 @@
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
       const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
-      // Greenhouse renders phone country as a React Select plus an empty
-      // required proxy input. Fill the visible combobox so React updates the
-      // proxy; writing to the proxy directly does not satisfy ATS state.
-      if (bad && /country/i.test(String(label || '')) && data.browserWorker) {
-        const explicitCountry = (data.fields || []).find((field) =>
-          field.category === 'country' || /^country$/i.test(String(field.label || '').trim()))?.value;
-        const phone = String((data.fields || []).find((field) => field.category === 'phone')?.value || '').replace(/\D/g, '');
-        const locationValue = String((data.fields || []).find((field) => field.category === 'location')?.value || '');
-        const inferredCountry = explicitCountry || ((phone.length === 11 && phone.startsWith('1'))
-          || /\b(?:usa|united states|ca|ny|dc|va|tx|wa|ma|md|nj|fl|il)\b/i.test(locationValue) ? 'United States' : '');
-        const shell = bad.closest('.select__container, .select, [class*=phone]');
-        const countryCombo = shell?.querySelector('input[role=combobox], input[aria-autocomplete=true]');
-        if (countryCombo && inferredCountry) {
-          const applied = await fillCombo(countryCombo, { name: 'phone-country', label: 'Country', value: inferredCountry, values: [] });
-          await wait(300);
-          if (applied && bad.checkValidity()) {
-            banner('HireRadar selected the phone country and is retrying submission...');
-            return true;
-          }
-        }
+      const adapter = ATS?.detect(location.href, data.atsType);
+      if (adapter?.repairInvalid && await adapter.repairInvalid({
+        invalid: bad, label, fields: data.fields || [], fillCombo, wait,
+      })) {
+        banner('HireRadar repaired the ATS-specific field and is retrying submission...');
+        return true;
       }
       if (bad?.type === 'radio') {
         const group = [...form.querySelectorAll('input[type="radio"]')].filter((item) => item.name === bad.name);

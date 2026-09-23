@@ -850,3 +850,63 @@ Implement incrementally:
 12. Add Ashby and Lever only after Greenhouse passes fixtures and canaries.
 
 The existing handoff path remains available during migration and is removed only after the durable extension executor passes end-to-end recovery and confirmation tests.
+
+## 14. ATS adapter execution contract
+
+Every supported ATS must implement the same observable contract before live-volume testing:
+
+1. Detect the ATS from the declared type and current hostname.
+2. Discover the application form and enumerate visible controls.
+3. Normalize the candidate's verified intent to an option that exists on the page.
+4. Track fields by normalized question text and type so React-generated IDs cannot restart work.
+5. Fill a field at most twice and lock it after the ATS retains the value.
+6. Use deterministic profile facts for identity, education, authorization, legal, EEO, salary, location, and preferences.
+7. Use AI only for non-sensitive prose on the second and final bounded attempt.
+8. Run native validation, then invoke an ATS-specific repair only for the exact invalid control.
+9. Select the highest-confidence submit control inside the application form.
+10. Make one submission attempt and require positive ATS success evidence.
+11. Record submission idempotently in the queue and saved-job pipeline.
+12. Emit a diagnostic containing the field label, offered options, attempted intent, validation message, adapter, and terminal state when user input is required.
+
+The generic DOM implementation is a fallback for discovery and diagnostics. Greenhouse, Lever, Ashby, Workday, and SmartRecruiters use named adapters. A named adapter owns only behavior that differs from the common runner.
+
+### 14.1 Field state machine
+
+Each field follows:
+
+discovered -> planned -> filling -> verified
+
+A failed fill may transition once to retry. A second failure transitions to needs_user. DOM mutation never moves a verified field back to planned.
+
+Sensitive facts are never inferred. Missing sensitive facts transition directly to needs_user; a user-confirmed answer may be stored in the reusable fact bank.
+
+### 14.2 Current implementation
+
+Extension v0.10.0 introduces extension/ats-adapters.js with:
+
+- named adapters for Greenhouse, Lever, Ashby, Workday, and SmartRecruiters
+- stable field identities
+- two-attempt field ledgers
+- deterministic option matching for degree, country, and yes/no intent
+- ATS submit-control scoring
+- positive submission-evidence checks
+- Greenhouse phone-country repair
+- idempotent browser submission receipts
+
+The profile stores reusable government, service, onsite, travel, coding-language, clearance, citizenship/residency, and optional EEO answers in custom_answers. These values are used only when explicitly supplied.
+
+### 14.3 Adapter rollout gate
+
+Test adapters in this order: Greenhouse, Lever, Ashby, SmartRecruiters, then Workday. Before a live application, each adapter must pass fixtures for:
+
+- native text, radio, checkbox, select, and file controls
+- React or portal dropdowns
+- conditional fields
+- required hidden proxy controls
+- native validation diagnostics
+- exact submit-control selection
+- success-page detection
+- duplicate success reporting
+- missing sensitive facts
+
+A live test is successful only when the ATS confirms receipt and both autoapply_job_queue and saved_jobs agree. Filled or clicked forms do not count as submitted.

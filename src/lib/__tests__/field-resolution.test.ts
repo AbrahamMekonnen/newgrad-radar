@@ -1,8 +1,8 @@
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionSetHash } from '../field-resolution';
 describe('field resolution policy', () => {
-  it('allows AI only on the third attempt', () => {
-    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 2 })).toBe(false);
-    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 3 })).toBe(true);
+  it('allows AI for prose only on the final bounded attempt', () => {
+    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(false);
+    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 2 })).toBe(true);
   });
   it('never allows AI to infer sensitive facts', () => {
     expect(isSensitiveFact('Will you require visa sponsorship?')).toBe(true);

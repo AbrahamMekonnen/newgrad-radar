@@ -20,4 +20,21 @@ describe('matchAvailableOption', () => {
   it('matches an exact available answer', () => {
     expect(matchAvailableOption('Work authorization', 'No', ['Yes', 'No'])).toBe('No');
   });
+
+  it('maps internal work authorization values to an offered ATS choice', () => {
+    const options = [
+      'Authorized to work without employer sponsorship',
+      'Authorized to work now, but will require employer sponsorship in the future',
+      'Not currently authorized to work',
+    ];
+    expect(matchAvailableOption('What is your work authorization status?', 'us_citizen', options))
+      .toBe('Authorized to work without employer sponsorship');
+    expect(matchAvailableOption('What is your work authorization status?', 'student_visa', options))
+      .toBe('Authorized to work now, but will require employer sponsorship in the future');
+  });
+
+  it('normalizes common country aliases only to available choices', () => {
+    expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))
+      .toBe('United States');
+  });
 });

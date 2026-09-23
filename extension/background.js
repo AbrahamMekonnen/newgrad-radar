@@ -92,7 +92,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     return;
   }
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['ats-adapters.js', 'content.js'] });
   } catch (error) {
     await report(job, 'failed', { detail: 'Could not start the ATS page helper: ' + error.message }).catch(() => undefined);
   }

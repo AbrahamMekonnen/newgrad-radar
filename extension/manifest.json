@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
   "permissions": [
     "storage",
@@ -47,6 +47,7 @@
         "https://www.samsara.com/*"
       ],
       "js": [
+        "ats-adapters.js",
         "content.js"
       ],
       "all_frames": true,

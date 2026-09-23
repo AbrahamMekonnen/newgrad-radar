@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
   if (!job) return NextResponse.json({ error: 'Application not found' }, { status: 404, headers: cors });
   const { data: profile } = await store.from('user_profiles').select('*').eq('user_id', device.user_id).maybeSingle();
   const custom = (profile?.custom_answers || {}) as Record<string, string>;
+  const fact = (key: string) => custom['__fact:' + key];
   const planId = requestedPlanId || crypto.randomUUID();
   const answers: { name: string; value: string; source: string; confidence: number; reason: string; matchedOption?: string; safeToApply: boolean; attempt: number; optionSetHash: string }[] = [];
   const prose: LiveField[] = [];
@@ -44,6 +45,18 @@ export async function POST(request: NextRequest) {
     const q = norm(f.label);
     const saved = findSavedAnswer(custom, f.label);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
+    if (/current.*government employee|currently.*government/.test(q) && pick(f, fact('government_current'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
+    if (/government.*past 10 years|former.*government|within the past 10 years/.test(q) && pick(f, fact('government_past_10_years'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
+    if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
+    if (/5 days|five days|full week.*office|office.*full week/.test(q) && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
+    if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
+    if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;
+    if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
+    if (/gender|sex/.test(q) && pick(f, fact('gender_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    if (/hispanic|latino|ethnicity|race/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
@@ -56,8 +69,8 @@ export async function POST(request: NextRequest) {
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
-    if (/sponsor/.test(q) && pick(f, profile?.sponsorship_status)) continue;
-    if (/work authorization|authorized to work/.test(q) && pick(f, profile?.work_authorization)) continue;
+    if (/sponsor/.test(q) && pick(f, profile?.require_sponsorship === true ? 'Yes' : profile?.require_sponsorship === false ? 'No' : profile?.sponsorship_status)) continue;
+    if (/work authorization|authorized to work|eligible to work/.test(q) && pick(f, profile?.work_authorization)) continue;
     if (/previously worked|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
