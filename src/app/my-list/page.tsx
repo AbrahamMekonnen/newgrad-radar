@@ -13,6 +13,7 @@ import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWit
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { ensureNtfyProvisioned } from '@/lib/ntfy';
+import { rankCompanies } from '@/lib/companySearch';
 import { useNotificationGate } from '@/components/pwa/NotificationGate';
 
 type TabType = 'my-companies' | 'add-companies';
@@ -141,7 +142,7 @@ function MyListContent({ userId }: { userId: string }) {
 
     const { data } = await query;
     if (data) {
-      setAllCompanies(data);
+      setAllCompanies(search ? rankCompanies(data as Company[], search) : data);
     }
   }, [search, supabase]);
 
@@ -172,7 +173,7 @@ function MyListContent({ userId }: { userId: string }) {
 
       const { data } = await query;
       if (!cancelled && data) {
-        setAllCompanies(data);
+        setAllCompanies(search ? rankCompanies(data as Company[], search) : data);
       }
     };
 

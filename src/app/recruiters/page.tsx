@@ -7,6 +7,7 @@ import { RecruiterList } from '@/components/recruiters/RecruiterList';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { searchCompanies } from '@/lib/companySearch';
 
 interface CompanyRow {
   slug: string;
@@ -49,13 +50,11 @@ export default function RecruitersPage() {
       setMatches([]);
       return;
     }
-    const { data } = await supabase
-      .from('companies')
-      .select('slug, name, logo_url')
-      .ilike('name', `%${q.trim()}%`)
-      .order('name')
-      .limit(8);
-    setMatches((data as CompanyRow[]) || []);
+    const ranked = await searchCompanies<CompanyRow>(supabase, q, {
+      select: 'slug, name, logo_url',
+      limit: 8,
+    });
+    setMatches(ranked);
   }, [supabase]);
 
   const onQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
