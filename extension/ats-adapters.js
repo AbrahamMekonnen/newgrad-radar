@@ -128,7 +128,19 @@
     ashby: {
       type: 'ashby',
       hosts: ['jobs.ashbyhq.com'],
-      formSelectors: ['.ashby-application-form form', 'form[data-form-type="application"]'],
+      formSelectors: ['#form[role="tabpanel"]', '.ashby-application-form', 'form[data-form-type="application"]'],
+      findSubmit(doc) {
+        const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');
+        if (!panel) return null;
+        return [...panel.querySelectorAll('button, input[type="submit"], input[type="button"]')]
+          .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true')
+          .map((item) => ({ item, score: scoreSubmitText(item.textContent || item.value) }))
+          .filter(({ score }) => score > 0)
+          .sort((a, b) => b.score - a.score)[0]?.item || null;
+      },
+      validationRoot(submit) {
+        return submit?.closest('#form[role="tabpanel"], .ashby-application-form') || null;
+      },
     },
     workday: {
       type: 'workday',

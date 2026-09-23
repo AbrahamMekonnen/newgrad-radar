@@ -625,8 +625,9 @@
       banner('The ATS did not confirm submission. HireRadar captured the visible ATS errors and did not mark it submitted.', true);
       return false;
     }
+    const adapter = ATS?.detect(location.href, data.atsType);
     const controls = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
-    const submit = controls
+    const submit = adapter?.findSubmit?.(document) || controls
       .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true' && item.closest('form'))
       .map((item) => {
         const text = normalize(item.textContent || item.value);
@@ -658,12 +659,11 @@
     // Validate the form that actually CONTAINS the submit button, not the first
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
-    const form = submit.form || submit.closest('form') || document.querySelector('form');
+    const form = submit.form || submit.closest('form') || adapter?.validationRoot?.(submit) || document.querySelector('form');
     if (form?.checkValidity && !form.checkValidity()) {
       const bad = [...form.querySelectorAll('input, select, textarea')]
         .find((el) => el.willValidate && !el.checkValidity());
       const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
-      const adapter = ATS?.detect(location.href, data.atsType);
       if (adapter?.repairInvalid && await adapter.repairInvalid({
         invalid: bad, label, fields: data.fields || [], fillCombo, wait,
       })) {

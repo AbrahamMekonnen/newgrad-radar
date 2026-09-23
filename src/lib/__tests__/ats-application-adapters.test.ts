@@ -60,6 +60,18 @@ describe('browser ATS adapters', () => {
     expect(ledger.begin(accepted)).toBe(false);
   });
 
+  it('finds Ashby submit controls inside its non-form application panel', () => {
+    const submit = {
+      textContent: 'Submit Application', value: '',
+      getClientRects: () => [1],
+      getAttribute: () => null,
+      closest: (selector: string) => selector.includes('#form') ? panel : null,
+    };
+    const panel = { querySelectorAll: () => [submit] };
+    const doc = { querySelector: () => panel };
+    expect(ATS.adapters.ashby.findSubmit(doc)).toBe(submit);
+    expect(ATS.adapters.ashby.validationRoot(submit)).toBe(panel);
+  });
   it('requires positive ATS success evidence', () => {
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Application form').confirmed).toBe(false);
     expect(ATS.successEvidence('https://boards.greenhouse.io/acme/jobs/1', 'Thank you for applying').confirmed).toBe(true);
