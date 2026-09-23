@@ -230,6 +230,15 @@
       await wait(300);
       if (controlHasValue(element, field)) return true;
     }
+    if (!option && isLocation && ATS?.detect(location.href)?.type === 'lever' && selectedLocation) {
+      // Lever gates its autocomplete lookup behind hCaptcha. The final form accepts
+      // the candidate-supplied city in both location fields, so retain that value
+      // when the lookup cannot return suggestions instead of looping on No results.
+      setNativeValue(element, wanted);
+      setNativeValue(selectedLocation, wanted);
+      element.blur();
+      return Boolean(String(selectedLocation.value || '').trim());
+    }
     if (!option) {
       const signature = candidates.map((item) => normalize(item.textContent)).join('|') || initialSignature;
       if (signature) unresolvedChoiceSignatures.set(field.name, signature);
