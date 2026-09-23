@@ -171,7 +171,7 @@ export function Navbar() {
                   </button>
                   {showDropdown && (
                     <div
-                      className="absolute right-0 mt-2 w-48 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 py-1 animate-in fade-in zoom-in-95 duration-150"
+                      className="absolute right-0 top-full mt-2 z-[60] w-48 bg-white dark:bg-slate-800 backdrop-blur-xl rounded-xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 py-1 animate-in fade-in zoom-in-95 duration-150"
                       role="menu"
                       aria-orientation="vertical"
                       aria-label="User actions"
