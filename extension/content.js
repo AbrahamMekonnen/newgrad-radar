@@ -193,7 +193,7 @@
   const fillCombo = async (element, field) => {
     const wanted = answerLabel(field);
     const existing = normalize(element.value || element.textContent);
-    const isLocation = /location/i.test(String(element.id || element.name || ''));
+    const isLocation = /location/i.test([field.label, field.category, element.id, element.name].filter(Boolean).join(' '));
     const isCountry = /country/i.test(String(field.label || element.id || element.name || ''));
     const selectedLocation = isLocation && document.querySelector('#selected-location, input[name="selectedLocation"]');
     if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
