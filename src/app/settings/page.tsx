@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
 import { generateNtfyTopic } from '@/lib/ntfy';
+import { subscribeToPush, isPushSupported } from '@/lib/webpush';
 
 const ALL_ROLES: RoleType[] = ['swe', 'ml', 'backend', 'frontend', 'fullstack', 'infra', 'data', 'security', 'mobile'];
 
@@ -92,6 +93,20 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
         : { type: 'success', text: 'Preferences saved and active alerts updated!' });
     }
     setSaving(false);
+  };
+
+  const [pushDeviceState, setPushDeviceState] = useState<'idle' | 'working' | 'done' | 'denied' | 'unsupported'>('idle');
+
+  const enablePushOnDevice = async () => {
+    setPushDeviceState('working');
+    // Make sure push is enabled server-side too, so the sender will target us.
+    if (preferences && !preferences.push_enabled) {
+      const next = { ...preferences, push_enabled: true };
+      setPreferences(next);
+      await supabase.from('user_preferences').upsert({ ...next, updated_at: new Date().toISOString() });
+    }
+    const res = await subscribeToPush();
+    setPushDeviceState(res.ok ? 'done' : res.reason === 'denied' ? 'denied' : 'unsupported');
   };
 
   const toggleRole = (role: RoleType) => {
@@ -178,6 +193,38 @@ function SettingsContent({ userId, email }: { userId: string; email: string }) {
         <div className="p-6">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Notification Channels</h2>
           <div className="space-y-4">
+            {/* Web Push — the modern, no-app option (install the app on iOS). */}
+            <div className="rounded-lg border border-blue-200/60 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-900/10 p-4">
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Push notifications on this device</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Get job alerts as browser/phone notifications — no separate app. On iPhone, add HireRadar to your Home Screen first.
+              </p>
+              <button
+                type="button"
+                onClick={enablePushOnDevice}
+                disabled={pushDeviceState === 'working' || pushDeviceState === 'done'}
+                className="mt-3 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-lg transition-colors"
+              >
+                {pushDeviceState === 'working' ? 'Enabling…'
+                  : pushDeviceState === 'done' ? 'Enabled on this device ✓'
+                  : 'Enable on this device'}
+              </button>
+              {pushDeviceState === 'denied' && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                  Notifications are blocked. Allow them for this site in your browser settings, then try again.
+                </p>
+              )}
+              {pushDeviceState === 'unsupported' && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  This browser can&rsquo;t receive web push here. On iPhone, use Safari and &ldquo;Add to Home Screen&rdquo; first; or use the ntfy option below.
+                </p>
+              )}
+              {!isPushSupported() && pushDeviceState === 'idle' && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Tip: on iPhone, add HireRadar to your Home Screen, then open it and tap this button.
+                </p>
+              )}
+            </div>
             <div>
               <Checkbox
                 label="Email notifications"

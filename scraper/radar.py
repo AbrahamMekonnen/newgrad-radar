@@ -86,6 +86,7 @@ from sources import (
 from classifier import classify_jobs, detect_role_types
 from db import upsert_jobs, mark_inactive, get_users_to_notify, get_client, cleanup_jobs
 from notify import notify_users, send_ntfy
+from webpush import push_to_user
 from email_notify import notify_user_by_email
 from alerts import process_instant_alerts
 from error_reporter import get_reporter
@@ -287,28 +288,34 @@ def notify_tracked_company_users(new_jobs: list[dict], dry_run: bool = False) ->
 
             company_name = jobs[0]["company_name"]
 
-            # Push notification
+            # Push notification (ntfy + Web Push, independently)
             if prefs.get("push_enabled"):
-                ntfy_topic = prefs.get("ntfy_topic")
-                if ntfy_topic:
-                    if len(matching_jobs) == 1:
-                        job = matching_jobs[0]
-                        title = f"New job at {company_name}"
-                        message = f"{job['title']}\n{job['location']}"
-                        url = job.get("url")
-                    else:
-                        title = f"{len(matching_jobs)} new jobs at {company_name}"
-                        message = "\n".join(j["title"] for j in matching_jobs[:3])
-                        if len(matching_jobs) > 3:
-                            message += f"\n...and {len(matching_jobs) - 3} more"
-                        url = None
+                if len(matching_jobs) == 1:
+                    job = matching_jobs[0]
+                    title = f"New job at {company_name}"
+                    message = f"{job['title']}\n{job['location']}"
+                    url = job.get("url")
+                else:
+                    title = f"{len(matching_jobs)} new jobs at {company_name}"
+                    message = "\n".join(j["title"] for j in matching_jobs[:3])
+                    if len(matching_jobs) > 3:
+                        message += f"\n...and {len(matching_jobs) - 3} more"
+                    url = None
 
-                    if dry_run:
-                        print(f"    [DRY RUN] Push to {ntfy_topic}: {title}")
+                ntfy_topic = prefs.get("ntfy_topic")
+                if dry_run:
+                    print(f"    [DRY RUN] Push to user {user_id}: {title}")
+                    result["push_sent"] += 1
+                else:
+                    sent_any = False
+                    if ntfy_topic and send_ntfy(ntfy_topic, title, message, url=url, priority="high"):
+                        sent_any = True
+                    # Web Push to the user's installed PWA / browser devices,
+                    # independent of whether they set up ntfy.
+                    if push_to_user(client, user_id, title, message, url=url) > 0:
+                        sent_any = True
+                    if sent_any:
                         result["push_sent"] += 1
-                    else:
-                        if send_ntfy(ntfy_topic, title, message, url=url, priority="high"):
-                            result["push_sent"] += 1
 
             # Email notification - collect jobs per user for digest
             if prefs.get("email_enabled"):

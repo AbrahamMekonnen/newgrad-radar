@@ -10,6 +10,7 @@ import os
 
 from db import get_client
 from notify import send_ntfy
+from webpush import push_to_user
 from email_notify import send_email
 
 
@@ -185,6 +186,7 @@ def send_instant_alert(
     push_enabled: bool,
     email_enabled: bool,
     dry_run: bool = False,
+    user_id: Optional[str] = None,
 ) -> dict[str, bool]:
     """Send instant alert for a single job match.
 
@@ -205,18 +207,20 @@ def send_instant_alert(
     app_url = (os.getenv("APP_URL") or "https://newgradradar.com").rstrip("/")
     history_url = f"{app_url}/applications?section=alerts"
 
-    # Send push notification
-    if push_enabled and ntfy_topic:
+    # Send push notification (ntfy + Web Push, independently)
+    if push_enabled and (ntfy_topic or user_id):
         # Lead with the company + role the user actually wants — never the alert
         # label (which people name things like "kk").
         title = f"New job at {job['company_name']}"
         message = f"{job['title']}\n{job.get('location', 'Remote')}"
 
         if dry_run:
-            print(f"    [DRY RUN] Push to {ntfy_topic}: {title}")
+            print(f"    [DRY RUN] Push to {ntfy_topic or user_id}: {title}")
             result["push_sent"] = True
         else:
-            if send_ntfy(ntfy_topic, title, message, url=history_url, priority="high"):
+            if ntfy_topic and send_ntfy(ntfy_topic, title, message, url=history_url, priority="high"):
+                result["push_sent"] = True
+            if user_id and push_to_user(get_client(), user_id, title, message, url=history_url) > 0:
                 result["push_sent"] = True
 
     # Send email — never let an email failure affect push (push already sent
@@ -278,7 +282,7 @@ def send_digest_notifications(
     email_enabled = first_match.get("email_enabled", False)
 
     # Send summary push notification
-    if push_enabled and ntfy_topic:
+    if push_enabled and (ntfy_topic or user_id):
         mode_label = "Daily" if mode == "daily" else "Weekly"
         title = f"{mode_label} Job Digest: {total_jobs} new jobs"
         # Show the actual companies + roles, not the user's alert labels (which
@@ -296,10 +300,12 @@ def send_digest_notifications(
             message += f"\n…and {len(lines) - 5} more"
 
         if dry_run:
-            print(f"    [DRY RUN] Digest push to {ntfy_topic}: {title}")
+            print(f"    [DRY RUN] Digest push to {ntfy_topic or user_id}: {title}")
             result["push_count"] = 1
         else:
-            if send_ntfy(ntfy_topic, title, message, url=history_url, priority="default"):
+            if ntfy_topic and send_ntfy(ntfy_topic, title, message, url=history_url, priority="default"):
+                result["push_count"] = 1
+            if user_id and push_to_user(get_client(), user_id, title, message, url=history_url) > 0:
                 result["push_count"] = 1
 
     # Send detailed email digest
@@ -457,6 +463,7 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
                 push_enabled=match.get("push_enabled", False),
                 email_enabled=match.get("email_enabled", False),
                 dry_run=dry_run,
+                user_id=user_id,
             )
 
             if result["push_sent"]:

@@ -36,6 +36,8 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           APP_URL: ${{ vars.APP_URL }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           PYTHONUTF8: "1"
           DISPATCH_MODE: ${{ inputs.mode }}
           SCHEDULE: ${{ github.event.schedule }}

@@ -13,6 +13,7 @@ import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWit
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { ensureNtfyProvisioned } from '@/lib/ntfy';
+import { subscribeToPush } from '@/lib/webpush';
 
 type TabType = 'my-companies' | 'add-companies';
 
@@ -289,9 +290,18 @@ function MyListContent({ userId }: { userId: string }) {
   // one-time phone setup the first time.
   const ensurePushReady = async () => {
     const { newlyProvisioned } = await ensureNtfyProvisioned(supabase, userId);
-    if (newlyProvisioned) {
+    // Subscribe THIS browser/device to Web Push (prompts permission on the tap).
+    const res = await subscribeToPush();
+    if (res.ok) {
+      if (newlyProvisioned) {
+        showToast("Notifications on — you'll get job alerts on this device.", 'success');
+      }
+    } else if (res.reason === 'denied') {
+      showToast('Notifications are blocked. Enable them in your browser site settings to get alerts.', 'info');
+    } else if (newlyProvisioned) {
+      // Web Push unsupported here (e.g. iOS before install) — point to the app install / ntfy.
       showToast(
-        'Notifications on! Open Settings → Notifications and subscribe to your topic in the ntfy app to get these on your phone.',
+        'Notifications on! Install the app (Add to Home Screen) or set up ntfy in Settings to receive them on your phone.',
         'info',
       );
     }

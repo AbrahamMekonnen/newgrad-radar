@@ -15,3 +15,5 @@ python-calamine>=0.2  # fast .xlsx parsing for DOL H1B LCA disclosure files
 # is raw compressed bytes — which then poison the response cache. Required.
 brotli>=1.1
 zstandard>=0.22
+
+pywebpush>=1.14  # Web Push (browser/PWA notifications) via VAPID
