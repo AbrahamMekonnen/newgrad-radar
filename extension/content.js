@@ -833,15 +833,28 @@
             return;
           }
           for (const [fieldIndex, field] of fields.entries()) {
-            if (completed.has(field.name)) continue;
+            if (completed.has(field.name)) {
+              if (fieldAccepted(field)) continue;
+              completed.delete(field.name);
+            }
             if (data.browserWorker) void send({
               type: 'PROGRESS', stage: 'filling',
               detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', field: field.name, label: field.label, index: fieldIndex + 1 }) },
             });
             try {
               const filled = await Promise.race([fill(field), wait(10000).then(() => false)]);
-              if (filled) completed.add(field.name);
+              if (filled) {
+                await wait(200);
+                if (fieldAccepted(field)) completed.add(field.name);
+                else completed.delete(field.name);
+              }
             } catch { /* skip this field and continue */ }
+          }
+          // React ATSes may replace controls after an onChange. Re-read every
+          // completed field from the current DOM before deciding the form is ready.
+          await wait(500);
+          for (const field of fields) {
+            if (completed.has(field.name) && !fieldAccepted(field)) completed.delete(field.name);
           }
           const remaining = fields.length - completed.size;
           if (data.browserWorker) await send({
