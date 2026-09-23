@@ -17,9 +17,20 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
   const supabase = createClient();
 
   useEffect(() => {
+    // Send the user to login but remember where they were headed (e.g. a
+    // notification deep-link like /applications?section=alerts), so we can
+    // return them there after sign-in instead of dumping them on the board.
+    const loginUrl = () => {
+      if (typeof window === 'undefined') return '/auth/login';
+      const dest = window.location.pathname + window.location.search;
+      if (!dest || dest === '/' || dest.startsWith('/auth')) return '/auth/login';
+      // AuthForm reads the `redirect` param and returns the user there.
+      return `/auth/login?redirect=${encodeURIComponent(dest)}`;
+    };
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) {
-        router.push('/auth/login');
+        router.push(loginUrl());
       } else {
         setUser(user);
       }
@@ -29,7 +40,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
-        router.push('/auth/login');
+        router.push(loginUrl());
       }
     });
 
