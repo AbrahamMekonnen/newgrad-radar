@@ -29,6 +29,17 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (option) return option;
   }
 
+  if (/state|province|region/.test(q)) {
+    const states: Record<string, string> = {
+      ca: 'california', ny: 'new york', tx: 'texas', wa: 'washington', ma: 'massachusetts',
+      dc: 'district of columbia', va: 'virginia', md: 'maryland', nj: 'new jersey',
+      fl: 'florida', il: 'illinois', pa: 'pennsylvania', co: 'colorado', ga: 'georgia', nc: 'north carolina',
+    };
+    const state = states[target] || target;
+    const option = usable.find((candidate) => norm(candidate) === state);
+    if (option) return option;
+  }
+
   if (/work authori[sz]ation|eligible to work|employment authori[sz]ation/.test(q)) {
     const noSponsor = ['us citizen', 'permanent resident', 'green card', 'authorized without employer sponsorship'];
     const futureSponsor = ['visa holder', 'student visa', 'f1', 'opt', 'cpt', 'authorized now but will require employer sponsorship'];

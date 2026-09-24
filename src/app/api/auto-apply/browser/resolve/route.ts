@@ -80,7 +80,10 @@ export async function POST(request: NextRequest) {
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
     if (/location/.test(q) && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '))) continue;
     if (/city/.test(q) && pick(f, profile?.city || profile?.location)) continue;
-    if (/state|province/.test(q) && pick(f, profile?.state)) continue;
+    if (/state|province|region/.test(q)) {
+      const inferredState = profile?.state || String(profile?.location || '').split(',').map((part: string) => part.trim()).filter(Boolean).at(-1);
+      if (pick(f, inferredState)) continue;
+    }
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;

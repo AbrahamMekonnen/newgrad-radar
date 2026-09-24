@@ -45,7 +45,7 @@
 
   const buttonText = (button) => normalize(button.textContent);
   const clickManualEntry = async (field) => {
-    if (!String(field.name || '').endsWith('_text')) return;
+    if (!String(field.name || '').endsWith('_text') && field.category !== 'cover_letter') return;
     const buttons = [...document.querySelectorAll('button')]
       .filter((button) => buttonText(button).includes('enter manually'));
     const target = field.category === 'cover_letter'
@@ -287,6 +287,13 @@
     const value = field.value;
     if (element.type === 'file') {
       if (!value || typeof value !== 'string') return false;
+      if (field.category === 'cover_letter' && !/^https?:\/\//i.test(value)) {
+        await clickManualEntry(field);
+        const manual = document.querySelector('textarea[name="cover_letter_text"], textarea#cover_letter_text');
+        if (!manual) return false;
+        setNativeValue(manual, value);
+        return String(manual.value || '').trim().length > 0;
+      }
       try {
         const fileUrl = new URL(value);
         if (fileUrl.hostname !== 'jmrbyubrrpxxvotsljms.supabase.co' || !fileUrl.pathname.includes('/storage/v1/object/public/resumes/')) return false;
@@ -320,8 +327,9 @@
       || /location/i.test(String(element.id || element.name || ''))
     ) return fillCombo(element, field);
     if (element.type === 'radio') {
+      const fieldset = element.closest('fieldset');
       const radios = [...document.querySelectorAll('input[type="radio"]')]
-        .filter((item) => item.name === element.name || item.closest('fieldset') === element.closest('fieldset'));
+        .filter((item) => item.name === element.name || (fieldset && item.closest('fieldset') === fieldset));
       // Only trust a value match when the radios actually have distinct values —
       // many forms render every option with value="on" and differentiate by
       // label, so match on the associated label text in that case.

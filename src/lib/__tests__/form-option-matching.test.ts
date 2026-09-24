@@ -47,6 +47,12 @@ describe('matchAvailableOption', () => {
       'Yes', 'No',
     ])).toBe('No');
   });
+  it('maps a saved state abbreviation to an ATS state option', () => {
+    expect(matchAvailableOption('Please provide the state/region where you reside', 'CA', [
+      'California', 'Colorado', 'New York',
+    ])).toBe('California');
+  });
+
   it('normalizes common country aliases only to available choices', () => {
     expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))
       .toBe('United States');
