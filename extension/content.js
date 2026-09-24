@@ -269,6 +269,21 @@
     if (option.isConnected) option.click();
     element.dispatchEvent(new Event('change', { bubbles: true }));
     await wait(250);
+    if (controlHasValue(element, field)) return true;
+
+    // Some React controls ignore synthetic option clicks but accept the same
+    // exact choice through their keyboard contract.
+    element.focus();
+    if (element instanceof HTMLInputElement) {
+      setNativeValue(element, wanted);
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
+      await wait(350);
+    }
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+    element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+    element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+    await wait(300);
     return controlHasValue(element, field);
   };
   const fillScopedChoice = (field) => {
@@ -612,11 +627,16 @@
       const response = await send({ type: 'RESOLVE_FIELDS', planId: state.planId, fields: [{ ...field, attempt, currentValue: String(findField(field)?.value || ''), validation: { message: validationMessage, accepted: false } }] }, 30000);
       state.planId = response?.planId || state.planId;
       const answer = response?.answers?.find((item) => item.name === field.name && item.safeToApply !== false);
-      if (!answer) continue;
+      if (!answer) { state.lastFailure = 'no_safe_answer'; resolutionState.set(key, state); continue; }
       field.value = answer.value;
+      const current = findField(field);
+      if (!current) { state.lastFailure = 'field_missing'; resolutionState.set(key, state); continue; }
       const applied = await fill({ ...field, value: answer.value, source: answer.source });
       await wait(150);
-      if (applied && fieldAccepted(field)) { state.accepted = true; resolutionState.set(key, state); return { accepted: true, answer }; }
+      if (applied && fieldAccepted(field)) { state.accepted = true; state.answerSource = answer.source; resolutionState.set(key, state); return { accepted: true, answer }; }
+      state.answerSource = answer.source;
+      state.lastFailure = applied ? 'not_retained' : 'apply_failed';
+      resolutionState.set(key, state);
       validationMessage = findField(field)?.validationMessage || 'The ATS did not retain the selected value.';
     }
     state.exhausted = true; resolutionState.set(key, state); return { accepted: false };
@@ -1038,6 +1058,10 @@
                   diagnostics: unresolvedLive.map((field) => EXEC?.safeDiagnostic?.({
                     code: 'preflight_field_unresolved', ats: data.atsType,
                     fieldKey: fieldKey(field), controlType: field.type,
+                    answerSource: resolutionState.get(fieldKey(field))?.answerSource,
+                    category: resolutionState.get(fieldKey(field))?.lastFailure,
+                    attempt: resolutionState.get(fieldKey(field))?.attempt,
+                    optionCount: field.options?.length,
                   })),
                 }),
               },

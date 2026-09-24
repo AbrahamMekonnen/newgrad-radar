@@ -57,6 +57,8 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
   if (/hear about|learn about|source/.test(q) && /company careers|company website|careers page/.test(target)) {
     const option = usable.find((candidate) => /careers? (website|site|page)|company (website|site)|website/.test(norm(candidate)));
     if (option) return option;
+    const other = usable.find((candidate) => /^(other|other source|not listed)$/.test(norm(candidate)));
+    if (other) return other;
   }
 
   if (/previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q) && target === 'no') {

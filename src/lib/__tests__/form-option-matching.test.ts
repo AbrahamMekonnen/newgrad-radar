@@ -44,6 +44,12 @@ describe('matchAvailableOption', () => {
     ])).toBe('Verkada Careers Page');
   });
 
+  it('uses Other when a company-careers source has no website choice', () => {
+    expect(matchAvailableOption('How did you hear about this opportunity?', 'Company careers page', [
+      'Referral', 'Campus event', 'Other',
+    ])).toBe('Other');
+  });
+
   it('maps no previous employment to a never-worked option', () => {
     expect(matchAvailableOption('Are you a current or former Alphabet employee?', 'No', [
       'Current Alphabet Employee', 'Former Alphabet Employee', 'Never worked at Alphabet',
