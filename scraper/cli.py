@@ -197,8 +197,17 @@ def cmd_run_all(args):
     ))
 
     print_stats(stats)
-    if stats.scrapers_failed:
+    # Only fail the whole run on a genuine outage — when NOTHING succeeded. Each
+    # scraper saves independently, so one flaky source (e.g. a site that times
+    # out) shouldn't mark the daily cron red while the others still added
+    # thousands of questions; that just trains us to ignore real failures. The
+    # per-scraper failures remain visible in the logs and summary.
+    if stats.scrapers_completed == 0 and stats.scrapers_failed > 0:
+        print(f"::error::All {stats.scrapers_failed} scrapers failed — treating as outage")
         sys.exit(1)
+    if stats.scrapers_failed:
+        print(f"::warning::{stats.scrapers_failed} scraper(s) failed but "
+              f"{stats.scrapers_completed} succeeded ({stats.questions_new_total} new questions); run stays green")
 
 
 def cmd_run(args):
