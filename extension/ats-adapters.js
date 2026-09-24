@@ -131,9 +131,15 @@
       uploadReadyOverride(doc, waitedMs) {
         if (waitedMs < 5000) return false;
         const files = [...doc.querySelectorAll('input[type="file"]')];
-        // Greenhouse hides the native input behind an Attach button. A retained
-        // resume file is stronger evidence than a stale generic status region.
-        return files.some((input) => input.files?.length > 0);
+        // Greenhouse can clear the native input after ingesting the upload. In
+        // that case, require explicit retained-file UI rather than trusting a
+        // stale generic live region that still says processing.
+        if (files.some((input) => input.files?.length > 0)) return true;
+        const retained = [...doc.querySelectorAll(
+          '[class*=file-name], [class*=filename], [data-testid*=filename], [data-testid*=uploaded-file]'
+        )];
+        return retained.some((element) => element.getClientRects().length > 0
+          && /\.(pdf|docx?|rtf|txt)\b/i.test(String(element.textContent || '')));
       },      async repairInvalid(context) {
         const invalid = context.invalid;
         if (!invalid || !/country/i.test(String(context.label || ''))) return false;
