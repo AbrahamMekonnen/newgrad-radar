@@ -179,9 +179,9 @@ export function NotificationBell({ userId }: NotificationBellProps) {
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto dark:[color-scheme:dark]">
             {loading ? (
-              <div className="p-4 text-center text-gray-500">Loading...</div>
+              <div className="p-4 text-center text-gray-500 dark:text-gray-400">Loading...</div>
             ) : jobs.length === 0 ? (
               <div className="p-6 text-center">
                 <svg
@@ -206,20 +206,20 @@ export function NotificationBell({ userId }: NotificationBellProps) {
               jobs.map((job) => (
                 <div
                   key={job.id}
-                  className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                  className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/60 border-b border-gray-100 dark:border-slate-700 last:border-b-0"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-gray-500">
+                    <div className="w-8 h-8 rounded bg-gray-100 dark:bg-slate-700 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-gray-500 dark:text-gray-300">
                         {job.company_name.charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                         {job.company_name}
                       </p>
-                      <p className="text-sm text-gray-600 truncate">{job.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{job.title}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                         {job.location} &middot; {formatTimeAgo(job.created_at)}
                       </p>
                     </div>
@@ -229,7 +229,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                       href={job.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                      className="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 rounded hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
                     >
                       View Job
                     </a>
@@ -242,7 +242,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
           {jobs.length > 0 && (
             <Link
               href="/my-list"
-              className="block px-4 py-3 text-center text-sm font-medium text-blue-600 hover:bg-gray-50 border-t border-gray-100"
+              className="block px-4 py-3 text-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-slate-700/60 border-t border-gray-100 dark:border-slate-700"
               onClick={() => setIsOpen(false)}
             >
               View all tracked companies
