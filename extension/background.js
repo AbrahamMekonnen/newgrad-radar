@@ -28,14 +28,17 @@ async function poll() {
     const state = await stored();
     if (!state.deviceToken || state.paused) return;
     const capacity = adaptiveCapacity();
-    while (currentByTab.size < capacity) {
+    const batchState = await chrome.storage.session.get('batchClaimCount');
+    let batchClaimCount = Number(batchState.batchClaimCount || 0);
+    while (currentByTab.size < capacity && batchClaimCount < BATCH_SIZE) {
       const data = await api('/api/auto-apply/browser/device');
       if (!data.job) break;
       try {
         const tab = await chrome.tabs.create({ url: data.job.jobUrl, active: false });
         if (!tab.id) throw new Error('Could not create ATS tab.');
         currentByTab.set(tab.id, data.job);
-        await chrome.storage.session.set({ ['job:' + tab.id]: data.job });
+        batchClaimCount += 1;
+        await chrome.storage.session.set({ ['job:' + tab.id]: data.job, batchClaimCount });
         await report(data.job, 'tab_opened');
       } catch (error) {
         await report(data.job, 'failed', { detail: 'Could not open the ATS tab: ' + error.message }).catch(() => undefined);
@@ -58,6 +61,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   const managedTabs = managedKeys.map((key) => Number(key.slice(4))).filter(Number.isFinite);
   currentByTab.clear();
   if (managedKeys.length) await chrome.storage.session.remove(managedKeys);
+  await chrome.storage.session.set({ batchClaimCount: 0 });
   await Promise.allSettled(managedTabs.map((tabId) => chrome.tabs.remove(tabId)));
   void poll();
 });
@@ -183,8 +187,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.session.set({ ['submitted:' + tabId]: { jobId: job.id, at: Date.now() } });
         currentByTab.delete(tabId);
         await chrome.storage.session.remove('job:' + tabId);
-        void poll();
+      } else if (message.stage === 'waiting_for_user') {
+        // Keep the tab-to-job record so a later manual completion can still be
+        // recorded, but release the execution slot. The per-cycle claim count
+        // prevents this from silently draining more than seven queue rows.
+        currentByTab.delete(tabId);
+      } else if (message.stage === 'failed') {
+        currentByTab.delete(tabId);
+        await chrome.storage.session.remove('job:' + tabId);
       }
+      if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) void poll();
       return { ok: true };
     }
     return { ok: false };
