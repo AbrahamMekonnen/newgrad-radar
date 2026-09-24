@@ -44,12 +44,12 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    # 45 (not 30): the scrape + AI-enrich batch + a large one-time cleanup
-    # backlog can legitimately run long. A too-tight cap KILLS a
-    # working run mid-flight, which looks like a random "job failed after a
-    # while" — the exact thing we're avoiding. Cleanup is now batched so steady
-    # state is well under this.
-    timeout-minutes: 45
+    # 60 min headroom: scraping the expanded company universe + sources takes
+    # ~35 min, and a too-tight cap KILLS a working run mid-flight (shows as a
+    # random "job failed after a while" cancellation — the exact thing we're
+    # avoiding). Cleanup is batched and the heavy AI-enrich is delegated to the
+    # every-20-min enrich-jobs workflow, so steady state finishes well under this.
+    timeout-minutes: 60
     permissions:
       contents: read
       models: read
@@ -121,7 +121,10 @@ jobs:
           # (fills level + opportunistic salary/sponsorship, flags non-jobs).
           # Budgeted per run; the incremental grind covers the rest over days.
           if [[ "${{ inputs.dry_run }}" != "true" ]]; then
-            python enrich_jobs.py --limit 400 || echo "::warning::job enrichment had errors"
+            # Small inline enrich for freshly-scraped jobs; the dedicated
+            # enrich-jobs workflow (every 20 min) does the heavy backlog, so keep
+            # this light to avoid pushing the run toward the timeout.
+            python enrich_jobs.py --limit 150 || echo "::warning::job enrichment had errors"
             # As soon as new jobs land, match them to users' auto-apply criteria
             # and prepare the applications — no waiting for a separate schedule.
             # Non-fatal: these are post-scrape side effects; a failure here must
