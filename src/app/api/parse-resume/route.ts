@@ -156,47 +156,35 @@ export async function POST(request: NextRequest) {
 }
 
 async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
+  // Primary: unpdf — a serverless-optimized PDF extractor that bundles its own
+  // pdfjs build with the needed shims, so it works in the Node serverless
+  // runtime. (The default pdfjs-dist and pdf-parse both require browser globals
+  // like DOMMatrix and throw on the server, silently falling back to near-empty
+  // text for a normal compressed PDF — which is why a valid text PDF "couldn't
+  // be read".)
   try {
-    // Use pdfjs-dist for proper PDF parsing
-    const pdfjsLib = await import('pdfjs-dist');
-
-    // Load the PDF
-    const loadingTask = pdfjsLib.getDocument({ data: buffer });
-    const pdf = await loadingTask.promise;
-
-    let fullText = '';
-
-    // Extract text from each page
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item) => ('str' in item ? item.str : ''))
-        .join(' ');
-      fullText += pageText + '\n';
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const merged = (Array.isArray(text) ? text.join('\n') : text || '').trim();
+    if (merged.length > 30) {
+      console.log('[parse-resume] unpdf extracted text length:', merged.length);
+      return merged;
     }
-
-    if (fullText.trim().length > 50) {
-      console.log('[parse-resume] Extracted text length:', fullText.length);
-      return fullText;
-    }
-
-    throw new Error('No text extracted');
+    console.warn('[parse-resume] unpdf produced too little text; using raw fallback');
   } catch (e) {
-    console.error('[parse-resume] pdfjs extraction failed:', e);
-
-    // Fallback: basic extraction
-    const bytes = new Uint8Array(buffer);
-    const rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-
-    const textMatches = rawText.match(/\((.*?)\)/g) || [];
-    const extractedText = textMatches
-      .map(m => m.slice(1, -1))
-      .filter(t => t.length > 2 && /[a-zA-Z]/.test(t))
-      .join(' ');
-
-    return extractedText || rawText.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim();
+    console.error('[parse-resume] unpdf extraction failed:', e);
   }
+
+  // Last resort: pull any literal (...) strings out of the raw bytes.
+  const bytes = new Uint8Array(buffer);
+  const rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  const textMatches = rawText.match(/\((.*?)\)/g) || [];
+  const extractedText = textMatches
+    .map((m) => m.slice(1, -1))
+    .filter((t) => t.length > 2 && /[a-zA-Z]/.test(t))
+    .join(' ');
+  return extractedText || rawText.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 async function parseResumeWithAI(resumeText: string): Promise<ResumeData> {

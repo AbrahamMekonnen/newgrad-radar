@@ -67,8 +67,14 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/parse-resume', { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Could not read the resume. Try a text-based PDF.');
-      const resume = (await res.json()) as ResumeData;
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        // Surface the real reason (extraction vs. AI-provider failure) instead
+        // of a generic message, so problems are diagnosable.
+        const reason = (payload && (payload.error as string)) || `parser returned ${res.status}`;
+        throw new Error(reason);
+      }
+      const resume = payload as ResumeData;
       const { updates, filled, missing } = mapResumeToProfile(resume, base);
 
       // 4) Save the filled profile on the user's behalf.
