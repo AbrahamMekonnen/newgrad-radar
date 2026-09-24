@@ -1082,8 +1082,9 @@
           const failedLive = [];
           // Resolve the complete visible form, then rescan because React ATSes
           // can reveal dependent required questions after earlier selections.
-          // Three bounded rounds cover those dependencies without retry loops.
-          for (let round = 1; round <= 3; round++) {
+          // Six bounded rounds cover deeply conditional sections while the attempted-key
+          // ledger prevents repeated clicks or loops on the same control.
+          for (let round = 1; round <= 6; round++) {
             const liveBatch = scanUnfilledFields()
               .filter((field) => !attemptedLive.has(fieldKey(field)));
             if (!liveBatch.length) break;

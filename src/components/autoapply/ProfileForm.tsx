@@ -571,6 +571,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['truthfulness_certification', 'Certify submitted application information is truthful?', ['Yes', 'No']],
             ['ai_notetaker_consent', 'Allow AI notetakers to transcribe interviews?', ['Yes', 'No']],
             ['interview_assistance_policy_acknowledgement', 'Acknowledge employer interview-assistance policies?', ['Yes', 'No']],
+            ['ai_use_policy_acknowledgement', 'Acknowledge employer responsible-AI-use policies?', ['Yes', 'No']],
             ['english_level', 'English proficiency', ['A1 (Beginner)', 'A2 (Pre-Intermediate)', 'B1 (Intermediate)', 'B2 (Upper-Intermediate)', 'C1 (Advanced)', 'C2 (Native)']],
             ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
             ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],

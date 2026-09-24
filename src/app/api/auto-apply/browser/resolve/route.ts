@@ -66,6 +66,8 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('ai_notetaker_consent'), 'saved', 'Matched the explicit AI-notetaker consent preference')) continue;
     if (/unauthorized outside assistance|interview process.*outside assistance|adhere to these guidelines/.test(q)
       && pick(f, fact('interview_assistance_policy_acknowledgement'), 'saved', 'Matched the explicit interview-policy acknowledgement')) continue;
+    if (/candidate ai responsible use policy|responsible use of ai|ai use policy/.test(q)
+      && pick(f, fact('ai_use_policy_acknowledgement'), 'saved', 'Matched the explicit employer AI-use policy acknowledgement')) continue;
     if (/certif|truthful|information.*(true|accurate|complete)/.test(q)
       && pick(f, fact('truthfulness_certification'), 'saved', 'Matched the explicit application certification')) continue;
     if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
