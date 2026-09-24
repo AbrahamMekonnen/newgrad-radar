@@ -232,16 +232,35 @@ def main() -> None:
             logger.info(f"{len(have)} companies already have recruiters; "
                         f"{len(unfilled)} unfilled, processing {len(companies)} this run")
 
-    total = 0
-    for c in companies:
-        try:
-            n = enrich_company(client, c, refresh=args.refresh)
-            total += n
-            logger.info(f"{c['slug']}: +{n} recruiters")
-        except Exception as e:
-            logger.warning(f"{c.get('slug')}: {e}")
-        time.sleep(0.5)
+    total = _enrich_many(client, companies, refresh=args.refresh)
     logger.info(f"DONE: {total} recruiters across {len(companies)} companies")
+
+
+def _enrich_many(client, companies: list, refresh: bool = False) -> int:
+    """Enrich a batch of companies CONCURRENTLY.
+
+    Recruiter sourcing per company is almost entirely network wait (search API +
+    DNS/SMTP email verification), so the old sequential loop left the daily run
+    idling on I/O and it timed out at 120 min having covered only a handful. A
+    small thread pool gives ~Nx throughput so the run actually works through the
+    company universe. Each company is hard-capped so one hung SMTP host can't
+    stall a worker for the whole run. Workers tunable via RECRUITER_WORKERS.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    workers = max(1, int(os.getenv("RECRUITER_WORKERS", "6")))
+    per_company_cap = float(os.getenv("RECRUITER_COMPANY_TIMEOUT", "240"))
+    total = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(enrich_company, client, c, refresh): c for c in companies}
+        for fut in as_completed(futs):
+            c = futs[fut]
+            try:
+                n = fut.result(timeout=per_company_cap)
+                total += n
+                logger.info(f"{c['slug']}: +{n} recruiters")
+            except Exception as e:
+                logger.warning(f"{c.get('slug')}: {e}")
+    return total
 
 
 def _process_requests(client, limit: int) -> None:

@@ -15,9 +15,9 @@ on:
         type: boolean
         default: false
       limit:
-        description: "Max companies to process (kept modest to fit the 50-min job; grind covers the rest over subsequent days)"
+        description: "Max companies to process per run (parallelized, so this finishes well within the timeout; grind covers the rest over days)"
         type: string
-        default: "120"
+        default: "300"
 
 jobs:
   enrich-recruiters:
@@ -55,9 +55,13 @@ jobs:
           # GitHub commit authors (higher rate limit than anonymous).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PYTHONUTF8: "1"
+          # Companies are enriched concurrently (mostly network wait on search +
+          # SMTP), so the run finishes within the timeout instead of idling. Tune
+          # here if search-provider rate limits bite.
+          RECRUITER_WORKERS: "6"
         run: |
           cd scraper
-          LIMIT="${{ inputs.limit }}"; LIMIT="${LIMIT:-120}"
+          LIMIT="${{ inputs.limit }}"; LIMIT="${LIMIT:-300}"
           # 0) Keep the companies table in sync with companies.py (so newly
           #    imported companies are covered by recruiter enrichment).
           python sync_companies.py || echo "::warning::company sync failed"
