@@ -700,7 +700,28 @@
           retry.push(field);
           continue;
         }
-        const applied = await fill({ ...field, value: answer.value, source: answer.source });
+        // One hostile or broken control must never abort the rest of the form.
+        // Each field owns its timeout and exception boundary, then execution
+        // continues with the next field regardless of this outcome.
+        const timeoutMarker = Symbol('field_timeout');
+        let applied;
+        try {
+          applied = await Promise.race([
+            fill({ ...field, value: answer.value, source: answer.source }),
+            wait(8000).then(() => timeoutMarker),
+          ]);
+        } catch {
+          state.lastFailure = 'apply_error';
+          resolutionState.set(key, state);
+          retry.push(field);
+          continue;
+        }
+        if (applied === timeoutMarker) {
+          state.lastFailure = 'field_timeout';
+          resolutionState.set(key, state);
+          retry.push(field);
+          continue;
+        }
         await wait(180);
         if (applied && fieldAccepted(field)) {
           state.accepted = true;
@@ -1107,14 +1128,10 @@
               },
             });
             liveBatch.forEach((field) => attemptedLive.add(fieldKey(field)));
-            const results = await Promise.race([
-              resolveFieldsBatch(liveBatch),
-              wait(45000).then(() => null),
-            ]);
-            if (!results) {
-              failedLive.push(...liveBatch);
-              break;
-            }
+            // resolveFieldsBatch bounds every request and every individual
+            // control. Do not impose a whole-batch timeout that can prevent later
+            // questions from receiving their own attempt.
+            const results = await resolveFieldsBatch(liveBatch);
             liveBatch.forEach((field, index) => {
               if (!results[index]?.accepted) failedLive.push(field);
             });
