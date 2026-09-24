@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { ResumeAutofill } from '@/components/autoapply';
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
@@ -99,7 +100,10 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
         </p>
       </div>
 
-      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-slate-700/50 divide-y divide-gray-200 dark:divide-slate-700">
+      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-slate-700/50 divide-y divide-gray-200 dark:divide-slate-700 overflow-hidden">
+        {/* One-step setup from a resume */}
+        <ResumeAutofill userId={userId} email={email} />
+
         {/* Identity */}
         <div className="p-6">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Account</h2>

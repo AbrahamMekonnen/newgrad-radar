@@ -1,4 +1,5 @@
 export { ProfileForm } from './ProfileForm';
+export { ResumeAutofill } from './ResumeAutofill';
 export { ApplicationStatus } from './ApplicationStatus';
 export { AutoApplyButton } from './AutoApplyButton';
 export { StoryBankWizard } from './StoryBankWizard';
