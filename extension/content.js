@@ -512,7 +512,10 @@
     const options = element instanceof HTMLSelectElement
       ? [...element.options].map((option) => option.textContent.trim()).filter(Boolean)
       : [];
-    return { name, label: fieldLabelFor(element), type: element.type || element.getAttribute('role'), options };
+    const semanticType = element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')
+      ? 'combobox'
+      : element.type || element.getAttribute('role');
+    return { name, label: fieldLabelFor(element), type: semanticType, options };
   };
   const controlHasValue = (element, field) => {
     const adapterAccepted = ATS?.detect(location.href)?.fieldAccepted?.(element, answerLabel(field || {}));

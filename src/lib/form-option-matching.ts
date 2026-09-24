@@ -40,12 +40,14 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (option) return option;
   }
 
-  if (/work authori[sz]ation|eligible to work|employment authori[sz]ation/.test(q)) {
+  if (/work authori[sz]ation|authori[sz]ed to work|eligible to work|employment authori[sz]ation/.test(q)) {
     const noSponsor = ['us citizen', 'permanent resident', 'green card', 'authorized without employer sponsorship'];
     const futureSponsor = ['visa holder', 'student visa', 'f1', 'opt', 'cpt', 'authorized now but will require employer sponsorship'];
     if (noSponsor.some((intent) => target.includes(intent))) {
       const option = usable.find((candidate) => /authorized.*without.*sponsor|citizen|permanent resident|green card/.test(norm(candidate)));
       if (option) return option;
+      const yes = usable.find((candidate) => norm(candidate) === 'yes');
+      if (yes) return yes;
     }
     if (futureSponsor.some((intent) => target.includes(intent))) {
       const option = usable.find((candidate) => /authorized.*require.*sponsor|future.*sponsor|time limited visa/.test(norm(candidate)));

@@ -21,6 +21,11 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Work authorization', 'No', ['Yes', 'No'])).toBe('No');
   });
 
+  it('maps confirmed authorization to a binary ATS choice', () => {
+    expect(matchAvailableOption('Are you legally authorized to work in this country?', 'us_citizen', ['Yes', 'No']))
+      .toBe('Yes');
+  });
+
   it('maps internal work authorization values to an offered ATS choice', () => {
     const options = [
       'Authorized to work without employer sponsorship',

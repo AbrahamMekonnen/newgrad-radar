@@ -86,6 +86,9 @@ export async function POST(request: NextRequest) {
     }
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
+    if (/university|college|school|institution/.test(q)
+      && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)
+      && pick(f, profile?.education_school)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
@@ -101,7 +104,14 @@ export async function POST(request: NextRequest) {
       'profile',
       profile?.require_sponsorship == null ? 'Derived from the confirmed work-authorization status' : 'Matched the confirmed sponsorship preference')) continue;
     }
-    if (/work authorization|authorized to work|eligible to work/.test(q) && pick(f, profile?.work_authorization)) continue;
+    if (/work authorization|authorized to work|eligible to work/.test(q)) {
+      const authorization = norm(profile?.work_authorization);
+      const options = optionLabels(f).map(norm);
+      const binary = options.some((option) => option === 'yes') && options.some((option) => option === 'no');
+      const authorized = /us citizen|citizen|permanent resident|green card|authorized/.test(authorization) ? 'Yes'
+        : /not authorized|require sponsorship to begin/.test(authorization) ? 'No' : null;
+      if (pick(f, binary ? authorized : profile?.work_authorization)) continue;
+    }
     if (/previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);

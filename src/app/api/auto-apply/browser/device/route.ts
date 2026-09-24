@@ -100,7 +100,10 @@ export async function PATCH(request: NextRequest) {
   if (!row) return json({ error: 'Lease expired' }, 409);
 
   const now = new Date().toISOString();
-  const progress = { stage, detail: String(detail || '').slice(0, 1000), filled, total, at: now };
+  // A complete preflight can report many required controls. Preserve the whole
+  // bounded diagnostic set so one run reveals every blocker instead of only
+  // the first few fields.
+  const progress = { stage, detail: String(detail || '').slice(0, 8000), filled, total, at: now };
   if (stage === 'submitted') {
     const { data: receipt, error } = await db.rpc('record_browser_autoapply_submission', {
       p_queue_id: row.id,
