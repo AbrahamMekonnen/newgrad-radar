@@ -377,7 +377,15 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </label>
             <select
               value={formData.work_authorization || ''}
-              onChange={(e) => handleChange('work_authorization', e.target.value || null)}
+              onChange={(e) => {
+                const authorization = e.target.value || null;
+                handleChange('work_authorization', authorization);
+                if (authorization === 'us_citizen' || authorization === 'permanent_resident') {
+                  handleChange('require_sponsorship', false);
+                } else if (authorization === 'visa_holder' || authorization === 'student_visa') {
+                  handleChange('require_sponsorship', true);
+                }
+              }}
               className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Select...</option>
@@ -496,6 +504,10 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['onsite_five_days', 'Available onsite five days per week?', ['Yes', 'No']],
             ['travel', 'Willing to travel for work?', ['Yes', 'No']],
             ['marketing_communications', 'Receive optional recruiting or training marketing?', ['Yes', 'No']],
+            ['privacy_acknowledgement', 'Acknowledge applicant privacy notices?', ['Yes', 'No']],
+            ['demographic_data_consent', 'Consent to processing voluntary demographic responses?', ['Yes', 'No']],
+            ['arbitration_acknowledgement', 'Accept application arbitration agreements?', ['Yes', 'No']],
+            ['truthfulness_certification', 'Certify submitted application information is truthful?', ['Yes', 'No']],
             ['english_level', 'English proficiency', ['A1 (Beginner)', 'A2 (Pre-Intermediate)', 'B1 (Intermediate)', 'B2 (Upper-Intermediate)', 'C1 (Advanced)', 'C2 (Native)']],
             ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
             ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],

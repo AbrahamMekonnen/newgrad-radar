@@ -51,6 +51,14 @@ export async function POST(request: NextRequest) {
     if (/5 days|five days|full week.*office|office.*full week/.test(q) && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
     if (/receive information|marketing communication|training opportunities|promotional/.test(q) && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the conservative promotional-communications opt-out')) continue;
+    if (/demographic.*consent|consent.*demographic|collecting storing and processing.*demographic/.test(q)
+      && pick(f, fact('demographic_data_consent'), 'saved', 'Matched the explicit demographic-data consent preference')) continue;
+    if (/privacy (notice|policy)|acknowledge.*privacy/.test(q)
+      && pick(f, fact('privacy_acknowledgement'), 'saved', 'Matched the explicit privacy-notice acknowledgement')) continue;
+    if (/arbitration/.test(q)
+      && pick(f, fact('arbitration_acknowledgement'), 'saved', 'Matched the explicit arbitration acknowledgement')) continue;
+    if (/certif|truthful|information.*(true|accurate|complete)/.test(q)
+      && pick(f, fact('truthfulness_certification'), 'saved', 'Matched the explicit application certification')) continue;
     if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
     if (/^english(?: eng)?$/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Matched the confirmed English-language fact')) continue;
     if (/language skill/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Selected English from the confirmed language profile')) continue;
@@ -81,7 +89,15 @@ export async function POST(request: NextRequest) {
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
-    if (/sponsor/.test(q) && pick(f, profile?.require_sponsorship === true ? 'Yes' : profile?.require_sponsorship === false ? 'No' : profile?.sponsorship_status)) continue;
+    if (/sponsor/.test(q)) {
+      const authorization = norm(profile?.work_authorization);
+      const inferred = /us citizen|permanent resident|green card/.test(authorization) ? 'No'
+        : /visa holder|student visa|need sponsorship/.test(authorization) ? 'Yes' : null;
+      if (pick(f, profile?.require_sponsorship === true ? 'Yes'
+        : profile?.require_sponsorship === false ? 'No' : inferred,
+      'profile',
+      profile?.require_sponsorship == null ? 'Derived from the confirmed work-authorization status' : 'Matched the confirmed sponsorship preference')) continue;
+    }
     if (/work authorization|authorized to work|eligible to work/.test(q) && pick(f, profile?.work_authorization)) continue;
     if (/previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
