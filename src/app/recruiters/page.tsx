@@ -42,6 +42,8 @@ export default function RecruitersPage() {
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
   const [reqError, setReqError] = useState<string | null>(null);
+  const [emailMenuOpen, setEmailMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live company-name suggestions as the user types.
@@ -112,15 +114,19 @@ export default function RecruitersPage() {
   const shown = filterByFocus(recruiters, focus);
 
   // "Email all recruiters": one compose window pre-addressed to every listed
-  // recruiter's email with a ready-to-send draft, so the user just personalizes
-  // and hits send. mailto URLs have length limits, so cap recipients.
+  // recruiter with a ready-to-send draft, so the user just personalizes and
+  // sends. We offer Gmail/Outlook WEB compose (open right in the browser) plus a
+  // default-mail-app (mailto) option and copy, because a bare mailto: is
+  // unreliable on desktop — with no registered mail handler it opens an
+  // app-chooser and Gmail/Outlook web never catch it.
   const shownEmails = Array.from(
     new Set(shown.map((r) => (r.email || '').trim()).filter(Boolean))
   ).slice(0, 25);
 
-  const emailAllHref = (() => {
+  const emailAll = (() => {
     if (!selected || shownEmails.length === 0) return null;
     const company = selected.name;
+    const to = shownEmails.join(',');
     const subject = `Interest in opportunities at ${company}`;
     const body =
       `Hi there,\n\n` +
@@ -129,8 +135,27 @@ export default function RecruitersPage() {
       `and I've attached my resume for your reference.\n\n` +
       `Would you have a few minutes to connect?\n\n` +
       `Thanks so much for your time,\n[Your Name]\n[Your LinkedIn / phone]`;
-    return `mailto:${shownEmails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const eSub = encodeURIComponent(subject);
+    const eBody = encodeURIComponent(body);
+    const eTo = encodeURIComponent(to);
+    return {
+      to,
+      gmail: `https://mail.google.com/mail/?view=cm&fs=1&to=${eTo}&su=${eSub}&body=${eBody}`,
+      outlook: `https://outlook.office.com/mail/deeplink/compose?to=${eTo}&subject=${eSub}&body=${eBody}`,
+      mailto: `mailto:${to}?subject=${eSub}&body=${eBody}`,
+    };
   })();
+
+  const copyEmails = async () => {
+    if (!emailAll) return;
+    try {
+      await navigator.clipboard.writeText(emailAll.to);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked; ignore */
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -207,16 +232,62 @@ export default function RecruitersPage() {
                 {shown.length} recruiter{shown.length === 1 ? '' : 's'} at{' '}
                 <span className="font-medium text-gray-900 dark:text-white">{selected.name}</span>
               </p>
-              {emailAllHref && (
-                <a
-                  href={emailAllHref}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75l9.75 6.75 9.75-6.75M3.75 5.25h16.5a1.5 1.5 0 011.5 1.5v10.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6.75a1.5 1.5 0 011.5-1.5z" />
-                  </svg>
-                  Email all {shownEmails.length}
-                </a>
+              {emailAll && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setEmailMenuOpen((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75l9.75 6.75 9.75-6.75M3.75 5.25h16.5a1.5 1.5 0 011.5 1.5v10.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6.75a1.5 1.5 0 011.5-1.5z" />
+                    </svg>
+                    Email all {shownEmails.length}
+                    <svg className="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {emailMenuOpen && (
+                    <>
+                      {/* click-away backdrop */}
+                      <div className="fixed inset-0 z-10" onClick={() => setEmailMenuOpen(false)} />
+                      <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1">
+                        <a
+                          href={emailAll.gmail}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setEmailMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
+                        >
+                          Open in Gmail
+                        </a>
+                        <a
+                          href={emailAll.outlook}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setEmailMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
+                        >
+                          Open in Outlook
+                        </a>
+                        <a
+                          href={emailAll.mailto}
+                          onClick={() => setEmailMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
+                        >
+                          Default mail app
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => { copyEmails(); setEmailMenuOpen(false); }}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
+                        >
+                          {copied ? 'Copied!' : 'Copy all addresses'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
             <RecruiterList recruiters={shown} maxVisible={shown.length} />
