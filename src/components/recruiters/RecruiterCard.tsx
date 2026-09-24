@@ -2,6 +2,7 @@
 
 import { Recruiter } from '@/lib/types';
 import { VoteButtons } from './VoteButtons';
+import { EmailComposeMenu } from './EmailComposeMenu';
 import { cn } from '@/lib/utils';
 
 interface RecruiterCardProps {
@@ -85,6 +86,28 @@ function SourceBadge({ source }: { source: Recruiter['source'] }) {
 }
 
 export function RecruiterCard({ recruiter, onVote, compact = false }: RecruiterCardProps) {
+  // Every likely address for this recruiter — the variants are best-effort
+  // guesses, so emailing ALL of them at once means at least one reaches them.
+  const recruiterEmails = Array.from(
+    new Set(
+      [
+        ...(recruiter.email_variants?.map((v) => v.email) || []),
+        recruiter.email || '',
+      ]
+        .map((e) => (e || '').trim())
+        .filter(Boolean)
+    )
+  );
+  const firstName = (recruiter.name || '').trim().split(/\s+/)[0] || 'there';
+  const emailSubject = 'Interest in opportunities';
+  const emailBody =
+    `Hi ${firstName},\n\n` +
+    `I'm reaching out about early-career software engineering opportunities on your team. ` +
+    `I'd love to learn more about any open roles that could be a fit for my background, ` +
+    `and I've attached my resume for your reference.\n\n` +
+    `Would you have a few minutes to connect?\n\n` +
+    `Thanks so much for your time,\n[Your Name]\n[Your LinkedIn / phone]`;
+
   return (
     <div
       className={cn(
@@ -203,6 +226,17 @@ export function RecruiterCard({ recruiter, onVote, compact = false }: RecruiterC
                   </span>
                 </div>
               ))}
+              {recruiterEmails.length > 0 && (
+                <div className="pt-1">
+                  <EmailComposeMenu
+                    emails={recruiterEmails}
+                    subject={emailSubject}
+                    body={emailBody}
+                    label={recruiterEmails.length > 1 ? `Email all ${recruiterEmails.length} versions` : 'Email'}
+                    variant="subtle"
+                  />
+                </div>
+              )}
             </div>
           ) : recruiter.email && (
             <div className="mt-2">
@@ -229,6 +263,15 @@ export function RecruiterCard({ recruiter, onVote, compact = false }: RecruiterC
                   type="email"
                 />
               </a>
+              <div className="mt-1.5">
+                <EmailComposeMenu
+                  emails={recruiterEmails}
+                  subject={emailSubject}
+                  body={emailBody}
+                  label="Email"
+                  variant="subtle"
+                />
+              </div>
             </div>
           )}
         </div>
