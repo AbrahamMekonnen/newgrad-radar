@@ -63,12 +63,17 @@ const ROLE_KEYWORDS: Record<string, string> = {
   infra: 'infrastructure',
 };
 
-// We only scrape ~6 months of recent history, so longer windows (year, all
-// time) would return the identical set. Keep only windows that differentiate.
+// The archive spans well beyond 6 months (thousands of dated questions are
+// older), so offer wider windows. "All Time" uses a very large month count to
+// effectively disable the date cap. Default is All Time so users see the full
+// set; they can narrow to a recent window if they prefer.
 const DATE_RANGES = [
   { value: 1, label: 'Last Month' },
   { value: 3, label: 'Last 3 Months' },
   { value: 6, label: 'Last 6 Months' },
+  { value: 12, label: 'Last Year' },
+  { value: 24, label: 'Last 2 Years' },
+  { value: 1200, label: 'All Time' },
 ];
 
 // Seniority levels. "" = All Levels (everything, including level-less
@@ -408,7 +413,7 @@ function InterviewPrepContent() {
   const [selectedType, setSelectedType] = useState('all');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedSource, setSelectedSource] = useState('all');
-  const [dateRange, setDateRange] = useState(6);
+  const [dateRange, setDateRange] = useState(1200); // All Time by default
 
   // Keep state in sync if URL changes (client-side navigation)
   useEffect(() => {
@@ -628,7 +633,7 @@ function InterviewPrepContent() {
                   setSelectedType('all');
                   setSelectedLevel('');
                   setSelectedSource('all');
-                  setDateRange(6);
+                  setDateRange(1200);
                 }}
                 className="w-full"
               >

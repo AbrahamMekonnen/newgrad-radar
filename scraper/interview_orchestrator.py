@@ -420,9 +420,13 @@ class InterviewQuestionOrchestrator:
         ),
 
         # Tier 6: Regional / global sources (many bot-block, but attempted).
+        # Chronically slow / frequently times out — cap it low and don't retry so
+        # it fails fast (5 min, not 20) instead of dominating the run. It's
+        # non-fatal now, so a timeout just skips this one source.
         ScraperConfig(name='ambitionbox', source='ambitionbox', scraper_type='python',
                       module_path='sources.interview_questions.ambitionbox',
-                      function_name='scrape_ambitionbox', priority=6, timeout=1200),
+                      function_name='scrape_ambitionbox', priority=6, timeout=300,
+                      max_retries=0),
         ScraperConfig(name='bayt_middleeast', source='bayt', scraper_type='python',
                       module_path='sources.interview_questions.bayt',
                       function_name='scrape_bayt_middleeast', priority=6),
