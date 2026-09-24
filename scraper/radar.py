@@ -1585,11 +1585,12 @@ def main():
     for source, count in sorted(source_counts.items(), key=lambda x: -x[1]):
         print(f"  {source}: {count}")
 
+    # Only variables that exist in THIS scope. all_jobs/normalized/deduped live
+    # inside process_and_save() (post fast-scrape refactor), not here — referencing
+    # them raised NameError and crashed the whole run at the very end, AFTER jobs
+    # were already saved and notifications sent.
     print(f"\nPipeline stats:")
-    print(f"  Total jobs fetched: {len(all_jobs)}")
-    print(f"  Target company jobs: {len(normalized)}")
-    print(f"  After dedup: {len(deduped)}")
-    print(f"  New grad positions: {len(classified)}")
+    print(f"  Jobs processed & saved: {len(classified)}")
     print(f"  New jobs: {new_count}")
     print(f"  Updated jobs: {updated_count}")
 

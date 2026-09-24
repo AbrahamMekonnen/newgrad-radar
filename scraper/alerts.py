@@ -46,24 +46,33 @@ def get_instant_alerts(job_ids: list[str]) -> dict[str, list[dict]]:
 
     client = get_client()
 
-    # Query pending instant matches for the given jobs
-    # Join with job_alerts for alert details, user_preferences for ntfy_topic,
-    # user_profiles for email, and jobs for job details
-    result = client.table("alert_matches").select(
-        "id, alert_id, job_id, "
-        "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
-        "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
-    ).in_("job_id", job_ids).eq(
-        "delivery_status", "pending"
-    ).eq(
-        "delivery_mode", "instant"
-    ).execute()
+    # Query pending instant matches for the given jobs.
+    # Join with job_alerts for alert details and jobs for job details.
+    # IMPORTANT: chunk the job_ids. A single .in_() with thousands of ids builds
+    # a URL so long PostgREST rejects it ("URL component 'query' too long"),
+    # which made instant alerts silently deliver NOTHING on every scrape (a
+    # scrape always has many new jobs). Batching keeps each request small.
+    matched_rows: list[dict] = []
+    CHUNK = 100
+    for i in range(0, len(job_ids), CHUNK):
+        batch = job_ids[i:i + CHUNK]
+        res = client.table("alert_matches").select(
+            "id, alert_id, job_id, "
+            "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
+            "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
+        ).in_("job_id", batch).eq(
+            "delivery_status", "pending"
+        ).eq(
+            "delivery_mode", "instant"
+        ).execute()
+        if res.data:
+            matched_rows.extend(res.data)
 
-    if not result.data:
+    if not matched_rows:
         return {}
 
     # Get unique user IDs to fetch contact info
-    user_ids = list({row["job_alerts"]["user_id"] for row in result.data})
+    user_ids = list({row["job_alerts"]["user_id"] for row in matched_rows})
 
     # Fetch user contact info (ntfy_topic from user_preferences, email from user_profiles)
     prefs_result = client.table("user_preferences").select(
@@ -81,7 +90,7 @@ def get_instant_alerts(job_ids: list[str]) -> dict[str, list[dict]]:
     # Group by user_id
     alerts_by_user: dict[str, list[dict]] = {}
 
-    for row in result.data:
+    for row in matched_rows:
         alert = row["job_alerts"]
         user_id = alert["user_id"]
         job = row["jobs"]
