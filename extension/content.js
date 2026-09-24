@@ -1082,11 +1082,15 @@
           const failedLive = [];
           // Resolve the complete visible form, then rescan because React ATSes
           // can reveal dependent required questions after earlier selections.
-          // Six bounded rounds cover deeply conditional sections while the attempted-key
-          // ledger prevents repeated clicks or loops on the same control.
-          for (let round = 1; round <= 6; round++) {
-            const liveBatch = scanUnfilledFields()
-              .filter((field) => !attemptedLive.has(fieldKey(field)));
+          // Walk conditional sections until the form stabilizes. The hard cap
+          // protects against malformed ATS pages, while the attempted-key ledger
+          // prevents retries for unresolved controls. A previously accepted field
+          // may be retried only if a later React rerender cleared it.
+          for (let round = 1; round <= 20; round++) {
+            const liveBatch = scanUnfilledFields().filter((field) => {
+              const key = fieldKey(field);
+              return !attemptedLive.has(key) || resolutionState.get(key)?.accepted === true;
+            });
             if (!liveBatch.length) break;
             if (data.browserWorker) await send({
               type: 'PROGRESS', stage: 'filling',
