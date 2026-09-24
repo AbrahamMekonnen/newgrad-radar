@@ -953,30 +953,81 @@
           // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
           // so a field that appears after the first pass still gets resolved.
           // Best-effort: a resolver hiccup must never block prepared fills.
-          const newLive = scanUnfilledFields().filter((field) => !attemptedLive.has(fieldKey(field)));
-          if (data.browserWorker && newLive.length) await send({ type: 'PROGRESS', stage: 'filling', detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Resolving required live fields.', diagnostics: newLive.map((field) => EXEC?.safeDiagnostic?.({ code: 'live_field_resolution', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type })) }) } });
-          if (newLive.length) {
-            try {
-              newLive.forEach((field) => attemptedLive.add(fieldKey(field)));
-              const results = await Promise.race([
-                Promise.allSettled(newLive.map((field) => resolveFieldBounded(field))),
-                wait(45000).then(() => null),
-              ]);
-              if (results) {
-                data.liveNeedsUser = [...new Set([...(data.liveNeedsUser || []), ...newLive.filter((_, index) => results[index].status !== 'fulfilled' || !results[index].value.accepted).map((field) => field.name)])];
-              }
-              persist(data);
-            } catch { /* bounded live resolution is best-effort */ }
+          const failedLive = [];
+          // Resolve the complete visible form, then rescan because React ATSes
+          // can reveal dependent required questions after earlier selections.
+          // Three bounded rounds cover those dependencies without retry loops.
+          for (let round = 1; round <= 3; round++) {
+            const liveBatch = scanUnfilledFields()
+              .filter((field) => !attemptedLive.has(fieldKey(field)));
+            if (!liveBatch.length) break;
+            if (data.browserWorker) await send({
+              type: 'PROGRESS', stage: 'filling',
+              detail: {
+                filled: completed.size, total: fields.length,
+                detail: JSON.stringify({
+                  message: 'Resolving complete required-field preflight.', round,
+                  fieldCount: liveBatch.length,
+                  diagnostics: liveBatch.map((field) => EXEC?.safeDiagnostic?.({
+                    code: 'live_field_resolution', ats: data.atsType,
+                    fieldKey: fieldKey(field), controlType: field.type,
+                  })),
+                }),
+              },
+            });
+            liveBatch.forEach((field) => attemptedLive.add(fieldKey(field)));
+            const results = await Promise.race([
+              Promise.allSettled(liveBatch.map((field) => resolveFieldBounded(field))),
+              wait(45000).then(() => null),
+            ]);
+            if (!results) {
+              failedLive.push(...liveBatch);
+              break;
+            }
+            liveBatch.forEach((field, index) => {
+              if (results[index].status !== 'fulfilled' || !results[index].value.accepted) failedLive.push(field);
+            });
+            await wait(500);
+          }
+          const blockingLive = scanUnfilledFields();
+          // The DOM after the final round is authoritative. A field can fail an
+          // early resolver attempt and then become valid after a dependent
+          // control updates, so do not preserve stale failures that disappeared.
+          const blockingKeys = new Set(blockingLive.map((field) => fieldKey(field)));
+          const unresolvedByKey = new Map([
+            ...blockingLive,
+            ...failedLive.filter((field) => blockingKeys.has(fieldKey(field))),
+          ].map((field) => [fieldKey(field), field]));
+          const unresolvedLive = [...unresolvedByKey.values()];
+          data.liveNeedsUser = unresolvedLive.map((field) => field.name);
+          persist(data);
+          if (unresolvedLive.length) {
+            if (data.browserWorker) await send({
+              type: 'PROGRESS', stage: 'waiting_for_user',
+              detail: {
+                filled: completed.size, total: fields.length,
+                detail: JSON.stringify({
+                  message: unresolvedLive.length + ' required fields need confirmed user data or a supported option.',
+                  unresolvedCount: unresolvedLive.length,
+                  diagnostics: unresolvedLive.map((field) => EXEC?.safeDiagnostic?.({
+                    code: 'preflight_field_unresolved', ats: data.atsType,
+                    fieldKey: fieldKey(field), controlType: field.type,
+                  })),
+                }),
+              },
+            });
+            banner('HireRadar found ' + unresolvedLive.length + ' required field' + (unresolvedLive.length === 1 ? '' : 's') + ' that need your answer.', true);
+            return;
           }
           if (remaining === fields.length && openApplicationForm()) return;
           if (data.browserWorker && !data.lastSubmitAttemptAt) {
             await send({
               type: 'PROGRESS',
-              stage: remaining ? 'waiting_for_user' : 'filling',
+              stage: 'filling',
               detail: {
                 filled: completed.size,
                 total: fields.length,
-                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found or need user input.', diagnostics: fields.filter((field) => !completed.has(field.name)).map((field) => EXEC?.safeDiagnostic?.({ code: 'prepared_field_unresolved', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts })) }) : 'All prepared fields were filled.',
+                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found; complete-form preflight found no required blockers.', diagnostics: fields.filter((field) => !completed.has(field.name)).map((field) => EXEC?.safeDiagnostic?.({ code: 'optional_prepared_field_unresolved', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts })) }) : 'All prepared fields and required live controls passed preflight.',
               },
             });
           }
