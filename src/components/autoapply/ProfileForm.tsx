@@ -508,6 +508,8 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['demographic_data_consent', 'Consent to processing voluntary demographic responses?', ['Yes', 'No']],
             ['arbitration_acknowledgement', 'Accept application arbitration agreements?', ['Yes', 'No']],
             ['truthfulness_certification', 'Certify submitted application information is truthful?', ['Yes', 'No']],
+            ['ai_notetaker_consent', 'Allow AI notetakers to transcribe interviews?', ['Yes', 'No']],
+            ['interview_assistance_policy_acknowledgement', 'Acknowledge employer interview-assistance policies?', ['Yes', 'No']],
             ['english_level', 'English proficiency', ['A1 (Beginner)', 'A2 (Pre-Intermediate)', 'B1 (Intermediate)', 'B2 (Upper-Intermediate)', 'C1 (Advanced)', 'C2 (Native)']],
             ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
             ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],
@@ -527,6 +529,18 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
               </select>
             </div>
           ))}
+          <Input
+            label="High school graduation year"
+            value={customFact('high_school_graduation_year')}
+            onChange={(e) => handleFactChange('high_school_graduation_year', e.target.value)}
+            placeholder="2022"
+          />
+          <Input
+            label="Typical summer location"
+            value={customFact('summer_location')}
+            onChange={(e) => handleFactChange('summer_location', e.target.value)}
+            placeholder="San Francisco, CA"
+          />
           <Input
             label="Other languages and proficiency"
             value={customFact('other_languages')}

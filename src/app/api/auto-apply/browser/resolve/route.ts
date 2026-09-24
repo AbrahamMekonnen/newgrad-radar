@@ -45,6 +45,11 @@ export async function POST(request: NextRequest) {
     const q = norm(f.label);
     const saved = findSavedAnswer(custom, f.label);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
+    if (/^first name\b/.test(q) && pick(f, profile?.first_name)) continue;
+    if (/^last name\b|^surname\b|^family name\b/.test(q) && pick(f, profile?.last_name)) continue;
+    if (/^(full |legal )?name\b/.test(q) && pick(f, [profile?.first_name, profile?.last_name].filter(Boolean).join(' '))) continue;
+    if (/^email(?: address)?\b/.test(q) && pick(f, profile?.email)) continue;
+    if (/^(phone|mobile|telephone)(?: number)?\b/.test(q) && pick(f, profile?.phone)) continue;
     if (/current.*government employee|currently.*government/.test(q) && pick(f, fact('government_current'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/government.*past 10 years|former.*government|within the past 10 years/.test(q) && pick(f, fact('government_past_10_years'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
@@ -57,6 +62,10 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('privacy_acknowledgement'), 'saved', 'Matched the explicit privacy-notice acknowledgement')) continue;
     if (/arbitration/.test(q)
       && pick(f, fact('arbitration_acknowledgement'), 'saved', 'Matched the explicit arbitration acknowledgement')) continue;
+    if (/ai notetaker|notetaker.*transcrib|transcrib.*interview/.test(q)
+      && pick(f, fact('ai_notetaker_consent'), 'saved', 'Matched the explicit AI-notetaker consent preference')) continue;
+    if (/unauthorized outside assistance|interview process.*outside assistance|adhere to these guidelines/.test(q)
+      && pick(f, fact('interview_assistance_policy_acknowledgement'), 'saved', 'Matched the explicit interview-policy acknowledgement')) continue;
     if (/certif|truthful|information.*(true|accurate|complete)/.test(q)
       && pick(f, fact('truthfulness_certification'), 'saved', 'Matched the explicit application certification')) continue;
     if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
@@ -86,10 +95,21 @@ export async function POST(request: NextRequest) {
     }
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
+    if (/major|field of study|area of study/.test(q) && pick(f, profile?.education_major)) continue;
+    if (/high school.*graduat.*year|year of high school graduation/.test(q)
+      && pick(f, fact('high_school_graduation_year'), 'saved', 'Matched the confirmed high-school graduation year')) continue;
+    if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
+      const graduationYear = String(profile?.education_graduation_date || '').match(/\b(?:19|20)\d{2}\b/)?.[0];
+      if (pick(f, graduationYear)) continue;
+    }
     if (/university|college|school|institution/.test(q)
       && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)
       && pick(f, profile?.education_school)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
+    if (/where are you spending summer|summer \d{4}.*location/.test(q)
+      && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
+    if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
+      && pick(f, `Yes, I am interested in the ${job.job_title} role.`, 'authorization', 'Confirmed interest in the user-authorized application')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
