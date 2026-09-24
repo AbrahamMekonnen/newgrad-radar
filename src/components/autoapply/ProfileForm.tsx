@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { cn } from '@/lib/utils';
 import { useBatchedState } from '@/lib/hooks';
+import { mapResumeToProfile } from '@/lib/resumeToProfile';
+import type { ResumeData } from '@/lib/resume-templates';
 
 interface ProfileFormProps {
   profile: UserProfile;
@@ -85,7 +87,11 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   const [formData, batchFormUpdate, flushFormUpdates] = useBatchedState<UserProfile>(profile, 50);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Result of auto-filling from a resume: which fields we filled (to review) and
+  // which important ones a resume can't provide (to prompt the user for).
+  const [autofill, setAutofill] = useState<{ filled: { field: string; label: string }[]; missing: { field: string; label: string }[] } | null>(null);
 
   // Stable callback for field changes (memoized to prevent child re-renders)
   const handleChange = useCallback((field: keyof UserProfile, value: UserProfile[keyof UserProfile]) => {
@@ -123,6 +129,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
     if (!file || !onResumeUpload) return;
 
     setUploading(true);
+    setAutofill(null);
     try {
       const url = await onResumeUpload(file);
       // Batch update resume fields
@@ -132,7 +139,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       });
       const latestFormData = flushFormUpdates();
 
-      // Auto-save the profile with new resume
+      // Auto-save the profile with new resume (the file link should persist)
       const updatedProfile = {
         ...latestFormData,
         resume_url: url,
@@ -140,6 +147,34 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       };
       await onSave(updatedProfile);
       setMessage({ type: 'success', text: 'Resume uploaded and saved!' });
+
+      // Now extract the resume's contents and PRE-FILL the empty profile fields
+      // for the user to review (we don't auto-save these — they confirm & Save).
+      setParsing(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/parse-resume', { method: 'POST', body: fd });
+        if (res.ok) {
+          const resume = (await res.json()) as ResumeData;
+          const { updates, filled, missing } = mapResumeToProfile(resume, updatedProfile);
+          if (filled.length > 0) {
+            batchFormUpdate(updates);
+            flushFormUpdates();
+          }
+          setAutofill({ filled, missing });
+          setMessage(
+            filled.length > 0
+              ? { type: 'success', text: `Filled ${filled.length} field${filled.length === 1 ? '' : 's'} from your resume — review below and click Save.` }
+              : { type: 'success', text: 'Resume uploaded. Add the remaining details below.' },
+          );
+        }
+      } catch (parseErr) {
+        // Extraction is best-effort; the upload already succeeded.
+        console.error('Resume parse error:', parseErr);
+      } finally {
+        setParsing(false);
+      }
     } catch (err) {
       console.error('Resume upload error:', err);
       const errorMsg = err instanceof Error ? err.message : 'Failed to upload resume';
@@ -297,20 +332,46 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
                 <svg className="w-6 h-6 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span className="text-sm sm:text-sm text-gray-600 text-center">
-                  {uploading ? 'Uploading...' : 'Tap to upload resume (PDF)'}
+                <span className="text-sm sm:text-sm text-gray-600 dark:text-gray-300 text-center">
+                  {uploading ? 'Uploading…' : parsing ? 'Reading your resume…' : 'Tap to upload resume (PDF) — we’ll fill in your profile'}
                 </span>
                 <input
                   type="file"
                   accept=".pdf"
                   onChange={handleFileChange}
                   className="hidden"
-                  disabled={uploading}
+                  disabled={uploading || parsing}
                 />
               </label>
             )}
           </div>
         </div>
+
+        {/* Auto-fill review: what we pulled from the resume + what's still needed */}
+        {autofill && (autofill.filled.length > 0 || autofill.missing.length > 0) && (
+          <div className="mt-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-4">
+            {autofill.filled.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">
+                  Filled {autofill.filled.length} field{autofill.filled.length === 1 ? '' : 's'} from your resume
+                </p>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+                  {autofill.filled.map((f) => f.label).join(', ')}. Please review them below, then click Save.
+                </p>
+              </div>
+            )}
+            {autofill.missing.length > 0 && (
+              <div className={autofill.filled.length > 0 ? 'mt-3' : ''}>
+                <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">
+                  Still needed (a resume can&apos;t tell us these)
+                </p>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+                  {autofill.missing.map((f) => f.label).join(', ')} — fill these in below so auto-apply works everywhere.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Auto-Apply Settings */}

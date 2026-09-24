@@ -12,11 +12,21 @@ const GEMINI_MODELS = [
   'gemini-pro',
 ];
 
-// Groq models to try as fallback
-const GROQ_MODELS = [
-  'llama-3.1-70b-versatile',
-  'llama-3.1-8b-instant',
-  'mixtral-8x7b-32768',
+// OpenAI-compatible free providers, tried in order after Gemini. The resume
+// parser falls through these as each hits its quota, so extraction stays
+// reliable for free — the same backup chain used across the app.
+interface OAProvider { name: string; baseUrl: string; apiKey?: string; models: string[] }
+const OA_PROVIDERS: OAProvider[] = [
+  { name: 'groq', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY,
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] },
+  { name: 'cerebras', baseUrl: 'https://api.cerebras.ai/v1/chat/completions', apiKey: process.env.CEREBRAS_API_KEY,
+    models: ['llama-3.3-70b', 'llama3.1-8b'] },
+  { name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/chat/completions', apiKey: process.env.OPENROUTER_API_KEY,
+    models: ['meta-llama/llama-3.3-70b-instruct:free'] },
+  { name: 'mistral', baseUrl: 'https://api.mistral.ai/v1/chat/completions', apiKey: process.env.MISTRAL_API_KEY,
+    models: ['mistral-small-latest'] },
+  { name: 'together', baseUrl: 'https://api.together.xyz/v1/chat/completions', apiKey: process.env.TOGETHER_API_KEY,
+    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo-Free'] },
 ];
 
 // In-memory cache for parsed resumes
@@ -190,8 +200,9 @@ async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
 }
 
 async function parseResumeWithAI(resumeText: string): Promise<ResumeData> {
-  if (!GEMINI_API_KEY && !GROQ_API_KEY) {
-    throw new Error('No AI API key configured (GEMINI_API_KEY or GROQ_API_KEY required)');
+  const hasAnyProvider = GEMINI_API_KEY || OA_PROVIDERS.some((p) => p.apiKey);
+  if (!hasAnyProvider) {
+    throw new Error('No AI API key configured (set GEMINI_API_KEY, GROQ_API_KEY, or another provider key)');
   }
 
   const prompt = `Parse this resume text into a structured JSON format. Extract all information accurately - do NOT invent or add anything that isn't in the text.
@@ -275,22 +286,20 @@ Rules:
     }
   }
 
-  // Fall back to Groq if available
-  if (GROQ_API_KEY) {
-    console.log('[parse-resume] Falling back to Groq...');
-    for (const model of GROQ_MODELS) {
+  // Fall back through the OpenAI-compatible free providers in order.
+  for (const provider of OA_PROVIDERS) {
+    if (!provider.apiKey) continue;
+    for (const model of provider.models) {
       try {
-        console.log(`[parse-resume] Trying Groq model: ${model}`);
-        const result = await callGroqAPI(model, prompt);
-        console.log(`[parse-resume] Success with Groq model: ${model}`);
+        console.log(`[parse-resume] Trying ${provider.name} model: ${model}`);
+        const result = await callOpenAICompatibleAPI(provider, model, prompt);
+        console.log(`[parse-resume] Success with ${provider.name} model: ${model}`);
         return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        console.error(`[parse-resume] Groq ${model} failed:`, lastError.message);
-
+        console.error(`[parse-resume] ${provider.name} ${model} failed:`, lastError.message);
         if (lastError.message.includes('429') || lastError.message.includes('rate limit')) {
-          console.log('[parse-resume] Rate limited, waiting 2s before next model...');
-          await sleep(2000);
+          await sleep(1500);
         }
       }
     }
@@ -383,49 +392,48 @@ async function callGeminiAPI(model: string, prompt: string): Promise<ResumeData>
   };
 }
 
-async function callGroqAPI(model: string, prompt: string): Promise<ResumeData> {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+async function callOpenAICompatibleAPI(provider: OAProvider, model: string, prompt: string): Promise<ResumeData> {
+  const response = await fetch(provider.baseUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`,
+      'Authorization': `Bearer ${provider.apiKey}`,
     },
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 4000,
+      // Ask for strict JSON where the provider supports it (ignored otherwise).
+      response_format: { type: 'json_object' },
     }),
   });
 
   if (!response.ok) {
     const errorBody = await response.text();
-    console.error(`[parse-resume] Groq API error (${model}):`, response.status, errorBody);
-
+    console.error(`[parse-resume] ${provider.name} API error (${model}):`, response.status, errorBody);
     if (response.status === 429) {
       throw new Error(`Rate limited (429): ${errorBody.slice(0, 100)}`);
     }
-    throw new Error(`Groq API failed: ${response.status} - ${errorBody.slice(0, 200)}`);
+    throw new Error(`${provider.name} API failed: ${response.status} - ${errorBody.slice(0, 200)}`);
   }
 
   const data = await response.json();
   const resultText = data.choices?.[0]?.message?.content || '';
-
   if (!resultText) {
-    throw new Error('Empty response from Groq');
+    throw new Error(`Empty response from ${provider.name}`);
   }
 
-  // Extract JSON from response
   const jsonMatch = resultText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error('Could not parse Groq response as JSON');
+    throw new Error(`Could not parse ${provider.name} response as JSON`);
   }
 
   let parsed;
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch (e) {
-    throw new Error(`Invalid JSON in Groq response: ${e instanceof Error ? e.message : 'parse error'}`);
+    throw new Error(`Invalid JSON in ${provider.name} response: ${e instanceof Error ? e.message : 'parse error'}`);
   }
 
   return {
