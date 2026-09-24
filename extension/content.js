@@ -200,9 +200,17 @@
     if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
     if (existing && existing !== 'select' && !isLocation) return true;
 
+    element.focus();
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
     element.click();
-    await wait(500);
+    await wait(350);
     let candidates = visibleOptions(element);
+    if (!candidates.length) {
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      await wait(350);
+      candidates = visibleOptions(element);
+    }
     let option = candidates.find((item) => optionMatches(item.textContent, wanted))
       || semanticOption(field, wanted, candidates);
     const initialSignature = candidates.map((item) => normalize(item.textContent)).join('|');
@@ -257,9 +265,11 @@
       return false;
     }
     unresolvedChoiceSignatures.delete(field.name);
-    option.click();
+    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    if (option.isConnected) option.click();
     element.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
+    await wait(250);
+    return controlHasValue(element, field);
   };
   const fillScopedChoice = (field) => {
     const question = normalize(field.label);
@@ -318,8 +328,9 @@
         || [...element.options].find((item) => optionMatches(item.textContent, wanted));
       if (!option) return false;
       element.value = option.value;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
+      return String(element.value) === String(option.value);
     }
     if (
       element.getAttribute('role') === 'combobox'
@@ -393,7 +404,15 @@
   const loadPayload = async () => {
     try {
       const worker = await send({ type: 'PAGE_READY' });
-      if (worker?.job) return { ...worker.job, browserWorker: true };
+      if (worker?.job) {
+        const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
+        // Preserve runtime state across the periodic fill/submit passes. The
+        // worker payload is authoritative for the lease and prepared fields;
+        // the cache carries submit attempts, upload timers, and receipts.
+        return cached?.id === worker.job.id
+          ? { ...cached, ...worker.job, fields: worker.job.fields, browserWorker: true }
+          : { ...worker.job, browserWorker: true };
+      }
     } catch { /* legacy handoff remains available */ }
     const part = location.hash.split('&')
       .find((item) => item.replace(/^#/, '').startsWith(MARKER));
@@ -524,15 +543,19 @@
       return [...document.querySelectorAll('input[type=\"radio\"]')].some((item) => item.name === element.name && item.checked);
     }
     if (element.type === 'checkbox') return element.checked;
-    if (String(element.value || '').trim()) return true;
     if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
+      // React-Select keeps search text in the input while no option is selected.
+      // Require retained selection UI rather than treating that search text as
+      // a completed answer.
       let container = element.parentElement;
       for (let depth = 0; container && depth < 6; depth++, container = container.parentElement) {
         const selected = container.querySelector(':scope > [class*=singleValue], :scope > [class*=single-value], [aria-selected=true]');
         const text = String(selected?.textContent || '').trim();
         if (text && !/^select|^choose/i.test(text)) return true;
       }
+      return false;
     }
+    if (String(element.value || '').trim()) return true;
     return false;
   };
   const scanUnfilledFields = () => {
