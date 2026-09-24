@@ -1,7 +1,12 @@
 @import "tailwindcss";
 
-/* Enable class-based dark mode */
-@custom-variant dark (&.dark);
+/* Enable class-based dark mode.
+   Must match any element INSIDE the `.dark` root (or the root itself), not only
+   an element that itself carries `.dark`. The old `(&.dark)` compiled every
+   `dark:` utility to require the class on the element itself — but only <html>
+   has it, so all 1,300+ dark: utilities silently no-op'd and only the body
+   background (set via CSS var) went dark. This is the ancestor-based variant. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;
