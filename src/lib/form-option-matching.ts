@@ -54,7 +54,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
       if (option) return option;
     }
   }
-  if (/hear about|learn about|source/.test(q) && /company careers|company website|careers page/.test(target)) {
+  if (/hear about|heard about|learn about|source/.test(q) && /company careers|company website|careers page/.test(target)) {
     const option = usable.find((candidate) => /careers? (website|site|page)|company (website|site)|website/.test(norm(candidate)));
     if (option) return option;
     const other = usable.find((candidate) => /^(other|other source|not listed)$/.test(norm(candidate)));

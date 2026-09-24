@@ -575,6 +575,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['citizenship_status', 'Citizenship / residency status', ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other']],
             ['gender_preference', 'Default gender response', ['Decline to self-identify', 'Female', 'Male', 'Non-binary']],
             ['ethnicity_preference', 'Default ethnicity response', ['Decline to self-identify', 'Hispanic or Latino', 'Not Hispanic or Latino']],
+            ['sexual_orientation_preference', 'Default sexual orientation response', ['Decline to self-identify', 'Straight / Heterosexual', 'Gay / Lesbian', 'Bisexual', 'Other']],
             ['veteran_preference', 'Default veteran response', ['Decline to self-identify', 'Protected veteran', 'Not a protected veteran']],
             ['disability_preference', 'Default disability response', ['Decline to self-identify', 'Yes', 'No']],
           ].map(([key, label, options]) => (

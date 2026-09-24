@@ -44,6 +44,12 @@ describe('matchAvailableOption', () => {
     ])).toBe('Verkada Careers Page');
   });
 
+  it('matches past-tense heard-about wording to a company website', () => {
+    expect(matchAvailableOption('Please tell us how you heard about this opportunity.', 'Company careers page', [
+      'LinkedIn', 'Palantir Website', 'Other',
+    ])).toBe('Palantir Website');
+  });
+
   it('uses Other when a company-careers source has no website choice', () => {
     expect(matchAvailableOption('How did you hear about this opportunity?', 'Company careers page', [
       'Referral', 'Campus event', 'Other',

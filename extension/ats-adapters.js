@@ -194,6 +194,11 @@
           : /^(?:true|yes|1)$/i.test(String(wanted).trim()) ? 'yes' : '';
         return Boolean(target && yesNo.querySelector(`[data-option="${target}"][aria-pressed="true"]`));
       },
+      isRequired(element) {
+        const entry = element?.closest?.('[data-field-path]');
+        const heading = entry?.querySelector('.ashby-application-form-question-title, label');
+        return Boolean(heading && (String(heading.className).includes('required') || /\*\s*$/.test(heading.textContent || '')));
+      },
       findInvalid(root) {
         const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
         const nativeInvalid = controls.find((item) => item.willValidate && !item.checkValidity());

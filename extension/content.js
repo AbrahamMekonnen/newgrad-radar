@@ -257,6 +257,20 @@
       return Boolean(String(selectedLocation.value || '').trim());
     }
     if (!option) {
+      // Portalled or virtualized listboxes may expose no option nodes. Use the
+      // standard combobox keyboard contract with the exact resolved answer.
+      element.focus();
+      if (element instanceof HTMLInputElement) {
+        setNativeValue(element, wanted);
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: wanted }));
+        await wait(350);
+      }
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+      await wait(300);
+      if (controlHasValue(element, field)) return true;
       const signature = candidates.map((item) => normalize(item.textContent)).join('|') || initialSignature;
       if (signature) unresolvedChoiceSignatures.set(field.name, signature);
       if (element instanceof HTMLInputElement) setNativeValue(element, '');
@@ -533,9 +547,12 @@
       .map((id) => document.getElementById(id)?.textContent || '').filter(Boolean).join(' ');
     const container = element.closest('.application-question, fieldset, [class*=field], [class*=question], [class*=phone], [data-testid]');
     const heading = container?.querySelector('legend, label, .application-label, [class*=label], [class*=heading]');
-    return String(element.labels?.[0]?.textContent || element.getAttribute('aria-label') || labelledBy
+    const primary = String(element.labels?.[0]?.textContent || element.getAttribute('aria-label') || labelledBy
       || heading?.textContent || element.getAttribute('placeholder') || container?.textContent || '')
-      .replace(/\s+/g, ' ').trim().slice(0, 1000);
+      .replace(/\s+/g, ' ').trim();
+    const genericChoice = /^(acknowledge|agree|yes|no|accept|decline)$/i.test(primary);
+    const contextual = genericChoice ? String(container?.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    return (contextual || primary).slice(0, 1000);
   };
   const liveFieldFor = (element, index = 0) => {
     let name = element.name || element.id || element.dataset.hireradarField;
@@ -582,8 +599,10 @@
     return controls.flatMap((element, index) => {
       if (element.getClientRects().length === 0 || element.getAttribute('aria-hidden') === 'true'
         || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
+      const adapter = ATS?.detect(location.href);
       const required = element.required || element.getAttribute('aria-required') === 'true'
-        || element.closest('[aria-required=true], .required, [class*=required]');
+        || element.closest('[aria-required=true], .required, [class*=required]')
+        || adapter?.isRequired?.(element);
       if (!required) return [];
       const descriptor = liveFieldFor(element, index);
       const name = descriptor.name;

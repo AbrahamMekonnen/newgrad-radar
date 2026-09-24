@@ -75,10 +75,17 @@ export async function POST(request: NextRequest) {
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
     if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
+      const location = norm([profile?.country, profile?.location].filter(Boolean).join(' '));
+      const citizenship = norm(fact('citizenship_status') || profile?.work_authorization);
+      const listed = /cuba|iran|north korea|syria|crimea/.test(location) || /cuba|iran|north korea|syria|crimea/.test(citizenship);
+      if (pick(f, listed ? 'Yes' : 'No', 'profile', 'Compared confirmed citizenship and location with the listed countries')) continue;
+    }
     if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
     if (/gender|sex/.test(q) && pick(f, fact('gender_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/hispanic|latino|ethnicity|race/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    if (/sexual orientation/.test(q) && pick(f, fact('sexual_orientation_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/currently located in|currently live in|are you based in/.test(q)) {
       const requested = q.match(/(?:located|live|based) in ([a-z ]+)/)?.[1]?.trim();
@@ -105,7 +112,7 @@ export async function POST(request: NextRequest) {
     if (/university|college|school|institution/.test(q)
       && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)
       && pick(f, profile?.education_school)) continue;
-    if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
+    if (/hear about|heard about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
