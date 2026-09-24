@@ -139,8 +139,21 @@ export async function searchCompanies<T extends RankableCompany>(
 ): Promise<T[]> {
   const query = (q || '').trim();
   if (query.length < 2) return [];
-  const safe = query.replace(/[%_]/g, (m) => `\\${m}`); // escape ilike wildcards
 
+  // Primary: server-side Postgres trigram search (migration 056). Reliable,
+  // indexed typo tolerance ("invidia" -> "Nvidia").
+  try {
+    const { data, error } = await supabase.rpc('search_companies', { q: query, lim: limit });
+    if (!error && Array.isArray(data)) {
+      return data.slice(0, limit) as unknown as T[];
+    }
+  } catch {
+    /* RPC missing (migration not applied yet) — fall through to client fuzzy */
+  }
+
+  // Fallback (works before the migration is applied): substring query, then a
+  // client-side trigram fuzzy pass over the full company list.
+  const safe = query.replace(/[%_]/g, (m) => `\\${m}`); // escape ilike wildcards
   const [prefix, contains] = await Promise.all([
     supabase.from('companies').select(select).ilike('name', `${safe}%`).order('name').limit(limit),
     supabase.from('companies').select(select).ilike('name', `%${safe}%`).order('name').limit(limit * 3),
@@ -151,8 +164,6 @@ export async function searchCompanies<T extends RankableCompany>(
     if (!merged.has(row.slug)) merged.set(row.slug, row);
   }
   let results = rankCompanies([...merged.values()], query);
-
-  // Not enough solid substring hits — bring in fuzzy (typo) matches.
   if (results.length < limit) {
     const all = await loadAllCompanies(supabase);
     const have = new Set(results.map((r) => r.slug));

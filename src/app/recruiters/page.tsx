@@ -69,6 +69,31 @@ export default function RecruitersPage() {
     debounce.current = setTimeout(() => runSuggest(v), 200);
   };
 
+  // Pressing Enter should just search — pick the best match instead of forcing
+  // the user to click a suggestion. If suggestions are already shown, take the
+  // top one; otherwise run the search now (the debounce may not have fired yet).
+  const onSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (debounce.current) clearTimeout(debounce.current);
+    if (matches.length > 0) {
+      selectCompany(matches[0]);
+      return;
+    }
+    const q = query.trim();
+    if (q.length < 2) return;
+    const results = await searchCompanies<CompanyRow>(supabase, q, {
+      select: 'slug, name, logo_url',
+      limit: 8,
+    });
+    if (results.length > 0) {
+      selectCompany(results[0]);
+    } else {
+      setMatches([]);
+      setSearched(true); // shows the "not available / request" panel
+    }
+  };
+
   const selectCompany = useCallback(async (company: CompanyRow) => {
     setSelected(company);
     setMatches([]);
@@ -147,6 +172,7 @@ export default function RecruitersPage() {
           placeholder="Search a company (e.g. Stripe, Databricks)…"
           value={query}
           onChange={onQueryChange}
+          onKeyDown={onSearchKeyDown}
           autoComplete="off"
         />
         {matches.length > 0 && (
