@@ -641,6 +641,67 @@
     }
     state.exhausted = true; resolutionState.set(key, state); return { accepted: false };
   };
+  const resolveFieldsBatch = async (fields) => {
+    const outcomes = new Map(fields.map((field) => [fieldKey(field), { accepted: false }]));
+    let pending = [...fields];
+    let planId = null;
+    for (let attempt = 1; attempt <= 2 && pending.length; attempt++) {
+      const requestFields = pending.map((field) => ({
+        ...field,
+        attempt,
+        currentValue: String(findField(field)?.value || ''),
+        validation: {
+          message: findField(field)?.validationMessage || (attempt > 1 ? 'The ATS did not retain the selected value.' : ''),
+          accepted: false,
+        },
+      }));
+      const response = await send({ type: 'RESOLVE_FIELDS', planId, fields: requestFields }, 30000);
+      planId = response?.planId || planId;
+      const answers = new Map((response?.answers || [])
+        .filter((answer) => answer.safeToApply !== false)
+        .map((answer) => [answer.name, answer]));
+      const retry = [];
+      for (const field of pending) {
+        const key = fieldKey(field);
+        const state = resolutionState.get(key) || { attempt: 0, signatures: new Set(), planId };
+        state.attempt = attempt;
+        state.planId = planId;
+        const answer = answers.get(field.name);
+        if (!answer) {
+          state.lastFailure = response ? 'no_safe_answer' : 'resolver_timeout';
+          resolutionState.set(key, state);
+          retry.push(field);
+          continue;
+        }
+        state.answerSource = answer.source;
+        field.value = answer.value;
+        if (!findField(field)) {
+          state.lastFailure = 'field_missing';
+          resolutionState.set(key, state);
+          retry.push(field);
+          continue;
+        }
+        const applied = await fill({ ...field, value: answer.value, source: answer.source });
+        await wait(180);
+        if (applied && fieldAccepted(field)) {
+          state.accepted = true;
+          delete state.lastFailure;
+          outcomes.set(key, { accepted: true, answer });
+        } else {
+          state.lastFailure = applied ? 'not_retained' : 'apply_failed';
+          retry.push(field);
+        }
+        resolutionState.set(key, state);
+      }
+      pending = retry;
+    }
+    for (const field of pending) {
+      const state = resolutionState.get(fieldKey(field));
+      if (state) { state.exhausted = true; resolutionState.set(fieldKey(field), state); }
+    }
+    return fields.map((field) => outcomes.get(fieldKey(field)) || { accepted: false });
+  };
+
   const smartRecruitersDirectUrl = () => {
     const scripts = [...document.scripts].map((script) => script.textContent || '').join('\n');
     const company = scripts.match(/cident:\s*['"]([^'"]+)['"]/)?.[1];
@@ -1023,7 +1084,7 @@
             });
             liveBatch.forEach((field) => attemptedLive.add(fieldKey(field)));
             const results = await Promise.race([
-              Promise.allSettled(liveBatch.map((field) => resolveFieldBounded(field))),
+              resolveFieldsBatch(liveBatch),
               wait(45000).then(() => null),
             ]);
             if (!results) {
@@ -1031,7 +1092,7 @@
               break;
             }
             liveBatch.forEach((field, index) => {
-              if (results[index].status !== 'fulfilled' || !results[index].value.accepted) failedLive.push(field);
+              if (!results[index]?.accepted) failedLive.push(field);
             });
             await wait(500);
           }
