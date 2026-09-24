@@ -13,7 +13,7 @@ import { AddCompanyWithFiltersModal } from '@/components/companies/AddCompanyWit
 import { BulkFilterModal } from '@/components/companies/BulkFilterModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { ensureNtfyProvisioned } from '@/lib/ntfy';
-import { fuzzyRankCompanies, loadAllCompanies } from '@/lib/companySearch';
+import { searchCompanies } from '@/lib/companySearch';
 import { useNotificationGate } from '@/components/pwa/NotificationGate';
 
 type TabType = 'my-companies' | 'add-companies';
@@ -141,33 +141,24 @@ function MyListContent({ userId }: { userId: string }) {
       return;
     }
 
-    // Search: substring hits first…
-    const safe = search.replace(/[%_]/g, (m) => `\\${m}`);
-    const { data } = await supabase
-      .from('companies')
-      .select('*')
-      .ilike('name', `%${safe}%`)
-      .order('name')
-      .limit(50);
-    let rows = (data as Company[]) || [];
-
-    // …then, if sparse, add typo-tolerant fuzzy matches (so "invidia" finds
-    // "Nvidia"). Fuzzy-match names over the full company list, then fetch the
-    // full rows for the matched slugs.
-    if (rows.length < 8) {
-      const all = await loadAllCompanies(supabase);
-      const have = new Set(rows.map((r) => r.slug));
-      const fuzzySlugs = fuzzyRankCompanies(
-        all.filter((c) => !have.has(c.slug)),
-        search,
-        { limit: 12 },
-      ).map((c) => c.slug);
-      if (fuzzySlugs.length) {
-        const { data: extra } = await supabase.from('companies').select('*').in('slug', fuzzySlugs);
-        rows = [...rows, ...((extra as Company[]) || [])];
-      }
+    // Search: use the reliable trigram search (RPC, with client fallback) to get
+    // ranked matching slugs — typo-tolerant, so "invidia" finds "Nvidia" — then
+    // fetch the full company rows the grid needs, preserving the ranked order.
+    const ranked = await searchCompanies<{ slug: string; name: string }>(supabase, search, {
+      select: 'slug, name, logo_url, tier',
+      limit: 50,
+    });
+    const order = new Map(ranked.map((r, i) => [r.slug, i]));
+    const slugs = ranked.map((r) => r.slug);
+    if (slugs.length === 0) {
+      setAllCompanies([]);
+      return;
     }
-    setAllCompanies(fuzzyRankCompanies(rows, search, { limit: 50 }));
+    const { data } = await supabase.from('companies').select('*').in('slug', slugs);
+    const rows = ((data as Company[]) || []).sort(
+      (a, b) => (order.get(a.slug) ?? 999) - (order.get(b.slug) ?? 999),
+    );
+    setAllCompanies(rows);
   }, [search, supabase]);
 
   useEffect(() => {

@@ -294,7 +294,21 @@ export default function HomePage() {
     query = query.range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
     if (search) {
-      query = query.or(`title.ilike.%${search}%,company_name.ilike.%${search}%`);
+      // Sanitize for PostgREST .or() (commas/parens are its separators).
+      const safe = search.replace(/[,()%]/g, ' ').trim();
+      const clauses = [`title.ilike.%${safe}%`, `company_name.ilike.%${safe}%`];
+      // Typo tolerance: resolve the term to a company via trigram search and, on
+      // a STRONG match only (so keyword searches like "backend" aren't
+      // hijacked), also include that company's jobs — "invidia" -> Nvidia jobs.
+      try {
+        const { data: cm } = await supabase.rpc('search_companies', { q: search, lim: 1 });
+        if (Array.isArray(cm) && cm[0] && (cm[0].sim ?? 0) >= 0.4) {
+          clauses.push(`company_slug.eq.${cm[0].slug}`);
+        }
+      } catch {
+        /* RPC unavailable — plain substring search */
+      }
+      query = query.or(clauses.join(','));
     }
 
     if (selectedTiers.length > 0) {

@@ -178,9 +178,27 @@ export async function GET(request: NextRequest) {
     // aren't hidden, but dated rows now filter correctly by period.
     query = query.or(`interview_date.gte.${cutoffDateStr},interview_date.is.null`);
 
-    // Search by company name (case-insensitive partial match)
+    // Search by company name — typo-tolerant. Resolve the typed text to the
+    // closest real company via the trigram RPC (so "invidia" finds Nvidia's
+    // questions), and match that company's slug/name in addition to the raw
+    // substring. Falls back to plain substring if the RPC isn't available.
     if (search) {
-      query = query.ilike('company_name', `%${search}%`);
+      const safe = search.replace(/[%,()]/g, ' ').trim();
+      let resolvedSlug: string | null = null;
+      let resolvedName: string | null = null;
+      try {
+        const { data: matches } = await supabase.rpc('search_companies', { q: search, lim: 1 });
+        if (Array.isArray(matches) && matches[0]) {
+          resolvedSlug = matches[0].slug || null;
+          resolvedName = matches[0].name || null;
+        }
+      } catch {
+        /* RPC missing — plain substring below */
+      }
+      const clauses = [`company_name.ilike.%${safe}%`];
+      if (resolvedSlug) clauses.push(`company_slug.eq.${resolvedSlug}`);
+      if (resolvedName) clauses.push(`company_name.ilike.%${resolvedName.replace(/[%,()]/g, ' ').trim()}%`);
+      query = query.or(clauses.join(','));
     }
 
     // Pull a wider window so language and duplicate cleanup can still return a
