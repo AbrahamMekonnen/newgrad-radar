@@ -826,6 +826,12 @@
       // job page opens an embedded one-click application whose child frame owns
       // filling and submission.
       if (!isTopFrame && !isSmartRecruiters && !isEmbeddedGreenhouse) return;
+      if (isTopFrame && normalize(data.atsType) === 'greenhouse'
+        && document.querySelector('iframe[src*="/embed/job_app"]')) {
+        // The embedded Greenhouse child owns validation and submission. The
+        // wrapper must not overwrite its progress with a no-form diagnosis.
+        return;
+      }
       if (isTopFrame && isSmartRecruiters && !location.pathname.includes('/oneclick-ui/')) {
         if (data.browserWorker) await send({
           type: 'PROGRESS', stage: 'filling',

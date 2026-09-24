@@ -217,6 +217,7 @@ void (async () => {
     const keys = managed.map(([key]) => key);
     const tabs = keys.map((key) => Number(key.slice(4))).filter(Number.isFinite);
     if (keys.length) await chrome.storage.session.remove(keys);
+    await chrome.storage.session.set({ batchClaimCount: 0 });
     await Promise.allSettled(tabs.map((tabId) => chrome.tabs.remove(tabId)));
     await chrome.storage.local.set({ runtimeVersion: version });
   } else {

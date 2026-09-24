@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
     if (/hear about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
+    if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
+      && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;

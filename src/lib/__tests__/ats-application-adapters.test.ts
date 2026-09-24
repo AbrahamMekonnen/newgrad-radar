@@ -27,7 +27,7 @@ describe('browser ATS adapters', () => {
     };
     const fieldItself = { querySelector: () => null, textContent: '' };
     const element = {
-      closest: (selector: string) => selector.startsWith('li.application-question') ? question : fieldItself,
+      closest: (selector: string) => selector.includes('application-question') ? question : fieldItself,
     };
     expect(ATS.adapters.lever.labelFor(element))
       .toBe('What other languages do you speak and what is the level?');
