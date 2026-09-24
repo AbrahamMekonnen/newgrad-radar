@@ -111,6 +111,27 @@ export default function RecruitersPage() {
 
   const shown = filterByFocus(recruiters, focus);
 
+  // "Email all recruiters": one compose window pre-addressed to every listed
+  // recruiter's email with a ready-to-send draft, so the user just personalizes
+  // and hits send. mailto URLs have length limits, so cap recipients.
+  const shownEmails = Array.from(
+    new Set(shown.map((r) => (r.email || '').trim()).filter(Boolean))
+  ).slice(0, 25);
+
+  const emailAllHref = (() => {
+    if (!selected || shownEmails.length === 0) return null;
+    const company = selected.name;
+    const subject = `Interest in opportunities at ${company}`;
+    const body =
+      `Hi there,\n\n` +
+      `I'm reaching out about early-career software engineering opportunities at ${company}. ` +
+      `I'd love to learn more about any open roles that could be a fit for my background, ` +
+      `and I've attached my resume for your reference.\n\n` +
+      `Would you have a few minutes to connect?\n\n` +
+      `Thanks so much for your time,\n[Your Name]\n[Your LinkedIn / phone]`;
+    return `mailto:${shownEmails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  })();
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <header className="mb-6">
@@ -181,10 +202,23 @@ export default function RecruitersPage() {
 
         {!loading && selected && shown.length > 0 && (
           <>
-            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-              {shown.length} recruiter{shown.length === 1 ? '' : 's'} at{' '}
-              <span className="font-medium text-gray-900 dark:text-white">{selected.name}</span>
-            </p>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {shown.length} recruiter{shown.length === 1 ? '' : 's'} at{' '}
+                <span className="font-medium text-gray-900 dark:text-white">{selected.name}</span>
+              </p>
+              {emailAllHref && (
+                <a
+                  href={emailAllHref}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75l9.75 6.75 9.75-6.75M3.75 5.25h16.5a1.5 1.5 0 011.5 1.5v10.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6.75a1.5 1.5 0 011.5-1.5z" />
+                  </svg>
+                  Email all {shownEmails.length}
+                </a>
+              )}
+            </div>
             <RecruiterList recruiters={shown} maxVisible={shown.length} />
           </>
         )}
