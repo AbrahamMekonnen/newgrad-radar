@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Job, Recruiter, ApplicationLog, TIER_COLORS, TIER_LABELS, ROLE_COLORS, ROLE_LABELS, Tier, RoleType, FundingStage, FundingFilter, FUNDING_FILTER_COLORS, FUNDING_FILTER_LABELS, fundingStageToFilter, SPONSORSHIP_COLORS, SPONSORSHIP_LABELS, SponsorshipStatus, JobSource, getHiddenGemBadge, HIDDEN_GEM_BADGE_LABELS, HIDDEN_GEM_BADGE_COLORS, isHiddenGem, WorkMode, WORK_MODE_LABELS } from '@/lib/types';
+import { Job, Recruiter, ApplicationLog, TIER_COLORS, TIER_LABELS, ROLE_COLORS, ROLE_LABELS, Tier, RoleType, FundingStage, FundingFilter, FUNDING_FILTER_COLORS, FUNDING_FILTER_LABELS, fundingStageToFilter, SPONSORSHIP_COLORS, SPONSORSHIP_LABELS, SponsorshipStatus, JobSource, getHiddenGemBadge, HIDDEN_GEM_BADGE_LABELS, HIDDEN_GEM_BADGE_COLORS, isHiddenGem, WorkMode, WORK_MODE_LABELS, ExperienceLevel, EXPERIENCE_YEARS, EXPERIENCE_COLORS, inferExperienceLevel } from '@/lib/types';
 import { formatTimeAgo, cn } from '@/lib/utils';
 import { formatDeadline, isDeadlinePassed } from '@/lib/deadline-detector';
 import { getJobEventBadges, getBadgeIconPath, MAX_EVENT_BADGES, EventBadge } from '@/lib/job-badges';
@@ -584,6 +584,21 @@ export function JobCard({
               );
             })}
             <Badge className={tierColor}>{tierLabel}</Badge>
+            {/* Experience / years-of-experience badge. Early-career levels
+                (new grad / entry / junior) all read as "0-2 yrs" so they group
+                together, while mid/senior+ are clearly differentiated. Falls back
+                to a title-inferred level when the job isn't AI-enriched yet. */}
+            {(() => {
+              const expLevel = (job.experience_level as ExperienceLevel) || inferExperienceLevel(job.title);
+              if (!expLevel || !EXPERIENCE_YEARS[expLevel]) return null;
+              // Plain span (not <Badge>) so its own text/radius classes aren't
+              // fought by Badge's base text-white/rounded-full (cn doesn't merge).
+              return (
+                <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold', EXPERIENCE_COLORS[expLevel])}>
+                  {EXPERIENCE_YEARS[expLevel]}
+                </span>
+              );
+            })()}
             {/* Role types inline */}
             {job.role_types && job.role_types.length > 0 && job.role_types.slice(0, 2).map((role) => {
               const roleKey = role as RoleType;

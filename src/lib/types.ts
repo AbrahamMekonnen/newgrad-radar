@@ -719,6 +719,51 @@ export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   principal: 'Principal',
 };
 
+// Years-of-experience range shown on each job card. Early-career levels
+// (new grad / entry level / junior) intentionally collapse to the same "0-2 yrs"
+// so they read as one early-career group, while still differentiating mid/senior+.
+export const EXPERIENCE_YEARS: Record<ExperienceLevel, string> = {
+  intern: 'Internship',
+  new_grad: '0-2 yrs',
+  entry_level: '0-2 yrs',
+  junior: '0-2 yrs',
+  mid: '2-5 yrs',
+  senior: '5-8 yrs',
+  staff: '8-12 yrs',
+  principal: '12+ yrs',
+};
+
+// Best-effort experience level from a job title, used as a fallback ONLY when
+// the enriched `experience_level` is missing (the AI enricher fills that over
+// time, but ~40% of active jobs haven't been processed yet). Conservative:
+// returns a level only on a clear title signal, else null (no badge, no guess).
+// Order matters — check the most senior signals first.
+export function inferExperienceLevel(title: string | null | undefined): ExperienceLevel | null {
+  const t = ` ${(title || '').toLowerCase()} `;
+  if (/\b(intern|internship|co-?op)\b/.test(t)) return 'intern';
+  if (/\b(principal|distinguished|fellow)\b/.test(t)) return 'principal';
+  if (/\bstaff\b/.test(t)) return 'staff';
+  if (/\b(senior|sr\.?|lead|principal)\b/.test(t)) return 'senior';
+  if (/\b(new ?grad(uate)?|university grad|campus|early ?career)\b/.test(t)) return 'new_grad';
+  if (/\b(entry[- ]?level|associate)\b/.test(t)) return 'entry_level';
+  if (/\b(junior|jr\.?)\b/.test(t)) return 'junior';
+  if (/\b(mid[- ]?level|\biii\b|\bii\b)\b/.test(t)) return 'mid';
+  return null;
+}
+
+// Badge colors keyed by level, grouped by career stage: early-career = emerald,
+// intern = teal, mid = blue, senior = purple, staff = amber, principal = rose.
+export const EXPERIENCE_COLORS: Record<ExperienceLevel, string> = {
+  intern: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+  new_grad: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  entry_level: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  junior: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  mid: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  senior: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  staff: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  principal: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+};
+
 // Which recruiter focus owns a given job level. Early-career levels are handled
 // by university/campus recruiters (focus 'new_grad'); mid+ levels by
 // technical/senior recruiters (focus 'experienced'). 'generic' recruiters fit
