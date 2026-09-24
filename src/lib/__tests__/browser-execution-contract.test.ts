@@ -54,8 +54,10 @@ describe('browser execution contract', () => {
     expect(EXEC.uploadPending(doc)).toBe(true);
     const staleCopy = { querySelectorAll: () => [], body: { innerText: 'Parsing your resume. Autofilling key fields...' } };
     expect(EXEC.uploadPending(staleCopy)).toBe(false);
-    const invalid = { willValidate: true, checkValidity: () => false };
-    const root = { querySelectorAll: () => [invalid] };
+    const hiddenProxy = element('', { willValidate: true, checkValidity: () => false,
+      getAttribute: (name: string) => name === 'aria-hidden' ? 'true' : null });
+    const invalid = element('', { willValidate: true, checkValidity: () => false });
+    const root = { querySelectorAll: () => [hiddenProxy, invalid] };
     expect(EXEC.requiredInvalid(root)).toBe(invalid);
   });
 });

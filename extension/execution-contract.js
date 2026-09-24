@@ -50,7 +50,7 @@
     .sort((a, b) => (/review/.test(b.text) ? 1 : 0) - (/review/.test(a.text) ? 1 : 0))[0]?.element || null;
 
   const requiredInvalid = (root) => [...(root?.querySelectorAll?.('input, textarea, select, [role=combobox]') || [])]
-    .find((element) => element.willValidate && !element.checkValidity()) || null;
+    .find((element) => visible(element) && element.willValidate && !element.checkValidity()) || null;
 
   const shouldRetrySubmit = ({ attempts, errors }) => {
     const classification = classifyErrors(errors);

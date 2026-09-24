@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
     if (/receive information|marketing communication|training opportunities|promotional/.test(q) && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the conservative promotional-communications opt-out')) continue;
     if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
+    if (/^english(?: eng)?$/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Matched the confirmed English-language fact')) continue;
     if (/other languages|languages do you speak|additional languages/.test(q) && pick(f, fact('other_languages'), 'saved', 'Matched explicit language proficiency facts')) continue;
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
     if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;

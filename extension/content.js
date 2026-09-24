@@ -222,6 +222,15 @@
         option = matched ? candidates.find((item) => normalize(item.textContent) === normalize(matched)) : null;
       }
     }
+    if (!option && isLocation && element instanceof HTMLInputElement) {
+      // Async city selectors sometimes render after their first debounce. Commit
+      // the first ATS suggestion only after searching with the verified city.
+      await wait(1500);
+      candidates = visibleOptions(element);
+      const matched = ATS?.matchLocationOption?.(wanted, candidates.map((item) => item.textContent));
+      option = matched ? candidates.find((item) => normalize(item.textContent) === normalize(matched)) : null;
+      if (!option && candidates.length === 1) option = candidates[0];
+    }
     if (!option && isCountry && element instanceof HTMLInputElement) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
@@ -522,7 +531,8 @@
     const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
     const seen = new Set();
     return controls.flatMap((element, index) => {
-      if (element.getClientRects().length === 0 || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
+      if (element.getClientRects().length === 0 || element.getAttribute('aria-hidden') === 'true'
+        || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
       const required = element.required || element.getAttribute('aria-required') === 'true'
         || element.closest('[aria-required=true], .required, [class*=required]');
       if (!required) return [];
