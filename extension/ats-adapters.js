@@ -140,6 +140,24 @@
     return '';
   };
 
+  const controlSelector = 'input, textarea, select, [role="combobox"]';
+  const ashbyQuestionContainer = (element) => element?.closest?.(
+    '[data-field-path], .ashby-application-form-field-entry, .ashby-application-form-question, fieldset, [role="group"]'
+  ) || null;
+  const ashbyQuestionLabel = (entry, control) => {
+    const labelledBy = String(control?.getAttribute?.('aria-labelledby') || '').split(/\s+/)
+      .map((id) => control?.ownerDocument?.getElementById?.(id)?.textContent || '').filter(Boolean).join(' ');
+    const heading = entry?.querySelector?.(
+      '.ashby-application-form-question-title, legend, label, [class*="question-title"], [class*="field-label"]'
+    );
+    return String(control?.labels?.[0]?.textContent || control?.getAttribute?.('aria-label') || labelledBy || heading?.textContent || '')
+      .replace(/\s+/g, ' ').trim();
+  };
+  const ashbyEntries = (doc) => [...new Set([
+    ...doc.querySelectorAll('[data-field-path]'),
+    ...doc.querySelectorAll('.ashby-application-form-field-entry, .ashby-application-form-question, fieldset, [role="group"]'),
+  ])].filter((entry) => entry.querySelector?.(controlSelector));
+
   const adapters = {
     greenhouse: {
       type: 'greenhouse',
@@ -189,13 +207,32 @@
       formSelectors: ['#form[role="tabpanel"]', '.ashby-application-form', 'form[data-form-type="application"]'],
       findField(doc, field) {
         const name = String(field?.name || '');
-        if (!name) return null;
-        const entry = [...doc.querySelectorAll('[data-field-path]')]
-          .find((item) => item.getAttribute('data-field-path') === name);
-        return entry?.querySelector('input, textarea, select, [role="combobox"]') || null;
+        const wanted = normalize(field?.label || name);
+        const exactEntries = [...doc.querySelectorAll('[data-field-path]')];
+        const entries = ashbyEntries(doc);
+        const exact = name && exactEntries.find((item) => item.getAttribute?.('data-field-path') === name);
+        if (exact) return exact.querySelector(controlSelector);
+        if (!wanted) return null;
+        const ranked = entries.map((entry) => {
+          const control = entry.querySelector(controlSelector);
+          const label = normalize(ashbyQuestionLabel(entry, control));
+          const path = normalize(entry.getAttribute?.('data-field-path'));
+          const exactLabel = label === wanted || path === wanted;
+          const contains = wanted.length > 4 && (label.includes(wanted) || wanted.includes(label));
+          return { control, score: exactLabel ? 3 : contains ? 2 : 0, size: label.length || 9999 };
+        }).filter((item) => item.control && item.score > 0)
+          .sort((a, b) => b.score - a.score || a.size - b.size);
+        if (ranked[0]) return ranked[0].control;
+        return [...doc.querySelectorAll(controlSelector)].find((control) => {
+          const label = normalize(ashbyQuestionLabel(ashbyQuestionContainer(control), control));
+          return label === wanted || (wanted.length > 4 && (label.includes(wanted) || wanted.includes(label)));
+        }) || null;
+      },
+      labelFor(element) {
+        return ashbyQuestionLabel(ashbyQuestionContainer(element), element);
       },
       fillCheckbox(element, wanted) {
-        const entry = element.closest('[data-field-path]');
+        const entry = ashbyQuestionContainer(element);
         const target = /^(?:false|no|0)$/i.test(String(wanted).trim()) ? 'no'
           : /^(?:true|yes|1)$/i.test(String(wanted).trim()) ? 'yes' : '';
         const option = target && entry?.querySelector(`.ashby-application-form-input-yesno-option[data-option="${target}"]`);
@@ -205,7 +242,7 @@
       },
       fieldAccepted(element, wanted) {
         if (element?.type !== 'checkbox') return null;
-        const entry = element.closest('[data-field-path]');
+        const entry = ashbyQuestionContainer(element);
         const yesNo = entry?.querySelector('.ashby-application-form-input-yesno');
         if (!yesNo) return null;
         const target = /^(?:false|no|0)$/i.test(String(wanted).trim()) ? 'no'
@@ -213,17 +250,17 @@
         return Boolean(target && yesNo.querySelector(`[data-option="${target}"][aria-pressed="true"]`));
       },
       isRequired(element) {
-        const entry = element?.closest?.('[data-field-path]');
-        const heading = entry?.querySelector('.ashby-application-form-question-title, label');
+        const entry = ashbyQuestionContainer(element);
+        const heading = entry?.querySelector('.ashby-application-form-question-title, legend, label, [class*=question-title], [class*=field-label]');
         return Boolean(heading && (String(heading.className).includes('required') || /\*\s*$/.test(heading.textContent || '')));
       },
       findInvalid(root) {
         const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
         const nativeInvalid = controls.find((item) => item.willValidate && !item.checkValidity());
         if (nativeInvalid) return nativeInvalid;
-        const entries = [...root.querySelectorAll('[data-field-path]')];
+        const entries = ashbyEntries(root);
         for (const entry of entries) {
-          const heading = entry.querySelector('.ashby-application-form-question-title, label');
+          const heading = entry.querySelector('.ashby-application-form-question-title, legend, label, [class*=question-title], [class*=field-label]');
           if (!heading || (!heading.className.includes('required') && !/\*\s*$/.test(heading.textContent || ''))) continue;
           const items = [...entry.querySelectorAll('input, textarea, select, [role="combobox"]')];
           if (!items.length) continue;
@@ -242,18 +279,21 @@
       },
       uploadReadyOverride(doc, waitedMs) {
         if (waitedMs < 5000) return false;
-        const entries = [...doc.querySelectorAll('[data-field-path]')];
-        const entry = entries.find((item) => /resume|cv/i.test(item.getAttribute('data-field-path') || ''))
+        const entries = ashbyEntries(doc);
+        const entry = entries.find((item) => /resume|cv/i.test([
+          item.getAttribute?.('data-field-path'), ashbyQuestionLabel(item, item.querySelector(controlSelector)),
+        ].filter(Boolean).join(' ')))
           || entries.find((item) => item.querySelector('input[type="file"]'));
-        const input = entry?.querySelector('input[type="file"]');
+        const input = entry?.querySelector('input[type="file"]') || doc.querySelector?.('input[type="file"]');
         if (input?.files?.length) return true;
         // Ashby may ingest the file and clear the native input. A retained
         // filename or Replace control inside the resume field is durable proof
         // that processing finished; unrelated stale live regions are ignored.
-        const text = normalize(entry?.textContent || '');
+        const shell = entry || ashbyQuestionContainer(input) || input?.parentElement;
+        const text = normalize(shell?.textContent || '');
         const retainedName = /\b(pdf|doc|docx|rtf|txt)\b/.test(text);
         const replaceAction = /\breplace\b|\bremove file\b|\bdownload\b/.test(text);
-        return Boolean(entry && (retainedName || replaceAction));
+        return Boolean(shell && (retainedName || replaceAction));
       },
       submissionComplete(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');

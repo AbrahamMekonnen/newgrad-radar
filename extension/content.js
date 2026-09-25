@@ -186,9 +186,20 @@
   const visibleOptions = (owner) => {
     const controlledId = owner?.getAttribute?.('aria-controls') || owner?.getAttribute?.('aria-owns');
     const controlled = controlledId && document.getElementById(controlledId);
-    const root = controlled || document;
-    return [...root.querySelectorAll('[role="option"], [data-option-index], .dropdown-results > *')]
-      .filter((item) => item.getClientRects().length > 0 && normalize(item.textContent));
+    const nearbyPopup = owner?.closest?.('[class*=select], [class*=combobox], [role=group]')
+      ?.querySelector?.('[role=listbox], [role=menu], [class*=menu], [class*=options]');
+    const root = controlled || nearbyPopup || document;
+    const selector = [
+      '[role="option"]', '[role="menuitemradio"]', '[role="radio"]',
+      '[data-option-index]', '[data-value]', '[aria-selected]',
+      '.dropdown-results > *', '[class*="option"]', '[class*="menu"] li',
+    ].join(',');
+    const items = [...root.querySelectorAll(selector)]
+      .filter((item) => item !== owner && item.getClientRects().length > 0
+        && item.getAttribute('aria-hidden') !== 'true' && normalize(item.textContent));
+    return [...new Set(items)].filter((item) =>
+      !items.some((other) => other !== item && item.contains(other)
+        && normalize(other.textContent) === normalize(item.textContent)));
   };
 
   const fillCombo = async (element, field) => {
@@ -568,7 +579,11 @@
     ).replace(/\s+/g, ' ').trim().slice(0, 300);
     const fieldId = [normalize(section), normalize(label), normalize(semanticType), String(index)]
       .filter(Boolean).join('|');
-    return { name, fieldId, label, section, type: semanticType, options, optionSignature: ATS?.optionSignature?.(options) || '' };
+    const adapter = ATS?.detect(location.href);
+    const required = Boolean(element.required || element.getAttribute('aria-required') === 'true'
+      || element.closest('[aria-required=true], .required, [class*=required]')
+      || adapter?.isRequired?.(element));
+    return { name, fieldId, label, section, type: semanticType, required, options, optionSignature: ATS?.optionSignature?.(options) || '' };
   };
   const controlHasValue = (element, field) => {
     const adapterAccepted = ATS?.detect(location.href)?.fieldAccepted?.(element, answerLabel(field || {}));
@@ -592,21 +607,23 @@
     if (String(element.value || '').trim()) return true;
     return false;
   };
-  const scanUnfilledFields = () => {
-    const submit = [...document.querySelectorAll('button, input[type="submit"]')].find((item) => /submit|apply/i.test(String(item.textContent || item.value || '')));
-    const root = submit?.form || submit?.closest('form') || document.querySelector('form');
+  const isKnownOptionalField = (label) => /(?:gender(?: identity)?|race|ethnic|hispanic|latino|veteran|disabilit|sexual orientation|demographic|self.identif|work authori[sz]ation|sponsor|privacy|data consent|terms|how did you hear|referral source|previously worked|former employee)/i.test(String(label || ''));
+
+  const scanUnfilledFields = ({ includeOptionalKnown = false } = {}) => {
+    const adapter = ATS?.detect(location.href);
+    const submit = adapter?.findSubmit?.(document)
+      || [...document.querySelectorAll('button, input[type="submit"]')].find((item) => /submit|apply/i.test(String(item.textContent || item.value || '')));
+    const root = adapter?.validationRoot?.(submit) || submit?.form || submit?.closest('form')
+      || adapter?.formSelectors?.map((selector) => document.querySelector(selector)).find(Boolean)
+      || document.querySelector('form');
     if (!root) return [];
     const controls = [...root.querySelectorAll('input, textarea, select, [role="combobox"]')];
     const seen = new Set();
     return controls.flatMap((element, index) => {
       if (element.getClientRects().length === 0 || element.getAttribute('aria-hidden') === 'true'
         || ['hidden', 'file', 'submit', 'button'].includes(element.type)) return [];
-      const adapter = ATS?.detect(location.href);
-      const required = element.required || element.getAttribute('aria-required') === 'true'
-        || element.closest('[aria-required=true], .required, [class*=required]')
-        || adapter?.isRequired?.(element);
-      if (!required) return [];
       const descriptor = liveFieldFor(element, index);
+      if (!descriptor.required && !(includeOptionalKnown && isKnownOptionalField(descriptor.label))) return [];
       const name = descriptor.name;
       if (seen.has(name)) return [];
       seen.add(name);
@@ -1158,7 +1175,7 @@
           // prevents retries for unresolved controls. A previously accepted field
           // may be retried only if a later React rerender cleared it.
           for (let round = 1; round <= 20; round++) {
-            const liveBatch = scanUnfilledFields().filter((field) => {
+            const liveBatch = scanUnfilledFields({ includeOptionalKnown: true }).filter((field) => {
               const key = fieldKey(field);
               return !attemptedLive.has(key) || resolutionState.get(key)?.accepted === true;
             });

@@ -95,6 +95,21 @@ describe('browser ATS adapters', () => {
     control.value = '2026-10-01';
     expect(ATS.adapters.ashby.findInvalid(root)).toBeNull();
   });
+  it('finds Ashby controls by their visible question when generated field paths change', () => {
+    const control = {
+      labels: [{ textContent: 'Will you require visa sponsorship now or in the future?' }],
+      getAttribute: () => null,
+      closest: () => null,
+    };
+    const root = {
+      querySelectorAll: (selector: string) => selector.includes('input') ? [control] : [],
+    };
+    expect(ATS.adapters.ashby.findField(root, {
+      name: 'generated-uuid',
+      label: 'Will you require visa sponsorship now or in the future?',
+    })).toBe(control);
+  });
+
   it('explicitly selects and verifies Ashby false-valued Yes/No answers', () => {
     let pressed = false;
     const option = {

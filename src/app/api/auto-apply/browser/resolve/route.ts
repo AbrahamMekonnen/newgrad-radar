@@ -86,8 +86,10 @@ export async function POST(request: NextRequest) {
       if (pick(f, listed ? 'Yes' : 'No', 'profile', 'Compared confirmed citizenship and location with the listed countries')) continue;
     }
     if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
-    if (/gender|sex/.test(q) && pick(f, fact('gender_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
-    if (/hispanic|latino|ethnicity|race/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    if (/gender identity/.test(q) && pick(f, fact('gender_identity_preference'), 'saved', 'Matched an explicit gender-identity preference')) continue;
+    if (/gender|^sex$/.test(q) && pick(f, fact('gender_preference'), 'saved', 'Matched an explicit gender preference')) continue;
+    if (/hispanic|latino|ethnicity/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit ethnicity preference')) continue;
+    if (/race/.test(q) && pick(f, fact('race_preference'), 'saved', 'Matched an explicit race preference')) continue;
     if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/sexual orientation/.test(q) && pick(f, fact('sexual_orientation_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
