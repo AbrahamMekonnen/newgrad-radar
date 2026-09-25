@@ -15,10 +15,28 @@
     return '';
   };
 
-  const stableFieldKey = (field) => normalize(field?.label)
+  const stableFieldKey = (field) => field?.fieldId || (normalize(field?.label)
     ? [normalize(field.label), normalize(field.type)].filter(Boolean).join('|')
-    : [String(field?.name || ''), normalize(field?.type)].filter(Boolean).join('|');
+    : [String(field?.name || ''), normalize(field?.type)].filter(Boolean).join('|'));
 
+  const optionSignature = (options) => (options || [])
+    .map((option) => normalize(typeof option === 'string' ? option : option?.label))
+    .filter(Boolean)
+    .join('|');
+
+  const answerMatchesField = (field, answer) => {
+    if (!answer || answer.safeToApply === false) return false;
+    if (field?.fieldId && answer.fieldId !== field.fieldId) return false;
+    if (!field?.fieldId && answer.name !== field?.name) return false;
+    const signature = optionSignature(field?.options);
+    if (signature && answer.optionSignature !== signature) return false;
+    if (signature) {
+      const wanted = normalize(answer.matchedOption || answer.value);
+      if (!(field.options || []).some((option) =>
+        normalize(typeof option === 'string' ? option : option?.label) === wanted)) return false;
+    }
+    return Boolean(normalize(answer.value));
+  };
   const matchOption = (question, wanted, options) => {
     const target = normalize(wanted);
     const usable = (options || []).filter((option) => {
@@ -349,7 +367,7 @@
   };
 
   return {
-    adapters, detect, normalize, degreeLevel, stableFieldKey, matchOption,
+    adapters, detect, normalize, degreeLevel, stableFieldKey, optionSignature, answerMatchesField, matchOption,
     scoreSubmitText, successEvidence, inferCountry, matchLocationOption, createFieldLedger,
   };
 });

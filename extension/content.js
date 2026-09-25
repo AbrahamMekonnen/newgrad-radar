@@ -561,7 +561,14 @@
     const semanticType = element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')
       ? 'combobox'
       : element.type || element.getAttribute('role');
-    return { name, label: fieldLabelFor(element), type: semanticType, options };
+    const label = fieldLabelFor(element);
+    const sectionElement = element.closest('fieldset, [role="group"], [data-field-path], [data-automation-id*="section"], section');
+    const section = String(
+      sectionElement?.querySelector?.('legend, h2, h3, h4, [class*=heading], [class*=title]')?.textContent || ''
+    ).replace(/\s+/g, ' ').trim().slice(0, 300);
+    const fieldId = [normalize(section), normalize(label), normalize(semanticType), String(index)]
+      .filter(Boolean).join('|');
+    return { name, fieldId, label, section, type: semanticType, options, optionSignature: ATS?.optionSignature?.(options) || '' };
   };
   const controlHasValue = (element, field) => {
     const adapterAccepted = ATS?.detect(location.href)?.fieldAccepted?.(element, answerLabel(field || {}));
@@ -611,7 +618,7 @@
         const heading = container?.querySelector('legend, .application-label .text, .application-label, [class*="question-label"]');
         const label = heading?.textContent || container?.textContent || element.getAttribute('aria-label') || '';
         const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
-        return [{ name, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options }];
+        return [{ ...descriptor, label: String(label).replace(/\s+/g, ' ').trim().slice(0, 1000), type: 'radio', options, optionSignature: ATS?.optionSignature?.(options) || '' }];
       }
 
       if (controlHasValue(element, descriptor)) return [];
@@ -640,7 +647,7 @@
       state.signatures.add(signature); state.attempt = attempt; resolutionState.set(key, state);
       const response = await send({ type: 'RESOLVE_FIELDS', planId: state.planId, fields: [{ ...field, attempt, currentValue: String(findField(field)?.value || ''), validation: { message: validationMessage, accepted: false } }] }, 30000);
       state.planId = response?.planId || state.planId;
-      const answer = response?.answers?.find((item) => item.name === field.name && item.safeToApply !== false);
+      const answer = response?.answers?.find((item) => ATS?.answerMatchesField?.(field, item) ?? (item.name === field.name && item.safeToApply !== false));
       if (!answer) { state.lastFailure = 'no_safe_answer'; resolutionState.set(key, state); continue; }
       field.value = answer.value;
       const current = findField(field);
@@ -662,7 +669,12 @@
       ...field,
       attempt,
       currentValue: String(findField(field)?.value || ''),
-      validation: { message: findField(field)?.validationMessage || '', accepted: false },
+      optionSignature: ATS?.optionSignature?.(field.options) || '',
+      validation: {
+        message: findField(field)?.validationMessage || '',
+        accepted: false,
+        optionSignature: ATS?.optionSignature?.(field.options) || '',
+      },
     }));
 
     // Apply each control once. A hostile widget may consume its own bounded
@@ -671,7 +683,7 @@
       planId = response?.planId || planId;
       const answers = new Map((response?.answers || [])
         .filter((answer) => answer.safeToApply !== false)
-        .map((answer) => [answer.name, answer]));
+        .map((answer) => [answer.fieldId || answer.name, answer]));
       const deferred = new Set(response?.deferredAi || []);
       const aiTargets = [];
       for (const field of targets) {
@@ -679,7 +691,12 @@
         const state = resolutionState.get(key) || { attempt: 0, signatures: new Set(), planId };
         state.attempt = attempt;
         state.planId = planId;
-        const answer = answers.get(field.name);
+        const answer = answers.get(field.fieldId || field.name);
+        if (answer && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
+          state.lastFailure = 'stale_plan';
+          resolutionState.set(key, state);
+          continue;
+        }
         if (!answer) {
           state.lastFailure = response
             ? (deferred.has(field.name) ? 'deferred_to_ai' : 'no_safe_answer')

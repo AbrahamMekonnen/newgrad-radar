@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption } from '@/lib/form-option-matching';
 import { classifyApplicationQuestion } from '@/lib/autoapply-question-policy';
-import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const custom = (profile?.custom_answers || {}) as Record<string, string>;
   const fact = (key: string) => custom['__fact:' + key];
   const planId = requestedPlanId || crypto.randomUUID();
-  const answers: { name: string; value: string; source: string; confidence: number; reason: string; matchedOption?: string; safeToApply: boolean; attempt: number; optionSetHash: string }[] = [];
+  const answers: { name: string; fieldId?: string; value: string; source: string; confidence: number; reason: string; matchedOption?: string; safeToApply: boolean; attempt: number; optionSetHash: string; optionSignature: string }[] = [];
   const prose: LiveField[] = [];
   const unresolved: LiveField[] = [];
   const pick = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched verified candidate data') => {
@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
       chosen = matchAvailableOption(f.label, chosen, options) || '';
       if (!chosen) return false;
     }
-    answers.push({ name: f.name, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f) }); return true;
+    answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) }); return true;
   };
   for (const f of fields as LiveField[]) {
     const q = norm(f.label);
     const policy = classifyApplicationQuestion(f.label);
-    const saved = findSavedAnswer(custom, f.label);
+    const saved = findSavedAnswer(custom, f.label, f);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
     if (/^first name\b/.test(q) && pick(f, profile?.first_name)) continue;
     if (/^last name\b|^surname\b|^family name\b/.test(q) && pick(f, profile?.last_name)) continue;
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       writing_sample: profile?.writing_sample,
       preferred_tone: profile?.preferred_tone || 'natural',
     };
-    const prompt = `Return only JSON {"answers":[{"name":"field name","value":"answer"}]}.
+    const prompt = `Return only JSON {"answers":[{"name":"field name","fieldId":"exact supplied fieldId","value":"answer"}]}.
 Draft concise, truthful, human application answers for ${job.job_title} at ${job.company_name}. Use only the supplied non-sensitive context. Never invent facts. If context is insufficient, omit that field. Match the candidate's tone.
 CONTEXT: ${JSON.stringify(context)}
 QUESTIONS: ${JSON.stringify(prose)}`;
@@ -177,7 +177,7 @@ QUESTIONS: ${JSON.stringify(prose)}`;
       try {
         const parsed = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
         for (const item of parsed.answers || []) {
-          const field = prose.find((candidate) => candidate.name === item.name);
+          const field = prose.find((candidate) => candidate.fieldId ? candidate.fieldId === item.fieldId : candidate.name === item.name);
           if (!field || !item.value || isSensitiveFact(field.label)) continue;
           const value = field.options?.length ? exactSuppliedOption(field, item.value) : String(item.value).trim();
           if (value) pick(field, value, 'ai', 'Generated from supplied candidate context on the final bounded attempt');
@@ -185,8 +185,8 @@ QUESTIONS: ${JSON.stringify(prose)}`;
       } catch { /* unresolved fields remain for the user */ }
     }
   }
-  const answered = new Set(answers.map((a) => a.name));
-  const needsContext = [...unresolved, ...prose].filter((f) => !answered.has(f.name)).map((f) => ({ name: f.name, reason: isSensitiveFact(f.label) ? 'A confirmed user answer is required for this sensitive fact.' : 'No truthful answer matched the current ATS options.', attempt: f.attempt || 1 }));
+  const answered = new Set(answers.map((a) => a.fieldId || a.name));
+  const needsContext = [...unresolved, ...prose].filter((f) => !answered.has(f.fieldId || f.name)).map((f) => ({ name: f.name, fieldId: f.fieldId, reason: isSensitiveFact(f.label) ? 'A confirmed user answer is required for this sensitive fact.' : 'No truthful answer matched the current ATS options.', attempt: f.attempt || 1 }));
   return NextResponse.json({
     planId,
     answers,

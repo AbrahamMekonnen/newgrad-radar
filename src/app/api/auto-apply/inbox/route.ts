@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
+import { scopedAnswerKey } from '@/lib/field-resolution';
 
 // The auto-apply "Ready to Submit" inbox: the user's prepared applications.
 // Reads/writes with the service role (the queue is machine-owned) but always
@@ -40,7 +41,7 @@ export async function PATCH(request: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id, status, prepared_data, ready_pct, needs_user, learned_answers, confirmedSubmitted } = await request.json();
+  const { id, status, prepared_data, ready_pct, needs_user, learned_answers, learned_answer_fields, confirmedSubmitted } = await request.json();
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   if (status === 'applied' && confirmedSubmitted !== true) {
@@ -127,6 +128,17 @@ export async function PATCH(request: NextRequest) {
       clean[q] = value;
       const normalized = q.toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
       if (normalized) clean[normalized] = value;
+    }
+    if (Array.isArray(learned_answer_fields)) {
+      for (const item of learned_answer_fields.slice(0, 100)) {
+        if (!item || typeof item.label !== 'string' || typeof item.answer !== 'string') continue;
+        const label = item.label.trim().slice(0, 1000);
+        const answer = item.answer.trim().slice(0, 5000);
+        const options = Array.isArray(item.options)
+          ? item.options.filter((option: unknown): option is string => typeof option === 'string').slice(0, 200)
+          : [];
+        if (label && answer) clean[scopedAnswerKey(label, { name: '', label, options })] = answer;
+      }
     }
     if (Object.keys(clean).length) {
       const { data: profile } = await admin()

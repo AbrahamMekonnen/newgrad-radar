@@ -38,6 +38,20 @@ describe('browser ATS adapters', () => {
     ])).toBe("Bachelor's degree");
   });
 
+  it('rejects a stale fill-plan answer after a dynamic option set changes', () => {
+    const original = {
+      name: 'degree', fieldId: 'education|degree|0', label: 'Degree',
+      type: 'combobox', options: ['Bachelor', 'Master'],
+    };
+    const answer = {
+      name: 'degree', fieldId: original.fieldId, value: 'Bachelor',
+      matchedOption: 'Bachelor', optionSignature: ATS.optionSignature(original.options),
+    };
+    expect(ATS.answerMatchesField(original, answer)).toBe(true);
+    expect(ATS.answerMatchesField({ ...original, options: ['Associate', 'Doctorate'] }, answer)).toBe(false);
+    expect(ATS.answerMatchesField({ ...original, fieldId: 'education|degree|1' }, answer)).toBe(false);
+  });
+
   it('uses stable question identity across React-generated names', () => {
     const a = ATS.stableFieldKey({ name: 'react-1', label: 'Are you Hispanic/Latino?', type: 'combobox' });
     const b = ATS.stableFieldKey({ name: 'react-99', label: 'Are you Hispanic/Latino?', type: 'combobox' });

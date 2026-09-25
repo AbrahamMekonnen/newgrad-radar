@@ -217,6 +217,11 @@ export function AutoApplyInbox({ embedded = false }: { embedded?: boolean }) {
       body: JSON.stringify({
         id: app.id, prepared_data: fields, ready_pct: 100,
         needs_user: [], learned_answers: learnedAnswers,
+        learned_answer_fields: missing.map((f) => ({
+          label: f.label,
+          answer: ((f.values || []).find((o) => String(o.value) === String(given[f.name]))?.label || given[f.name]),
+          options: (f.values || []).map((o) => o.label),
+        })),
       }),
     });
     if (!saved.ok) {

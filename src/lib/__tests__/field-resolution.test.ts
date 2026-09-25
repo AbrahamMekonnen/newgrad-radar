@@ -1,4 +1,4 @@
-import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionSetHash } from '../field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionSetHash, scopedAnswerKey, validateResolutionAnswer } from '../field-resolution';
 describe('field resolution policy', () => {
   it('allows AI for prose only on the final bounded attempt', () => {
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(false);
@@ -21,6 +21,26 @@ describe('field resolution policy', () => {
   it('matches a saved answer when an ATS appends explanatory text', () => {
     const saved = { 'are you a current government employee': 'No' };
     expect(findSavedAnswer(saved, 'Are you a current government employee? Exceptions: teachers and assistants')).toBe('No');
+  });
+  it('prefers a confirmed answer scoped to the exact option set', () => {
+    const field = { name: 'degree', fieldId: 'degree|education|0', label: 'Highest degree', options: ['Bachelor', 'Master'] };
+    const saved = { 'highest degree': 'Associate', [scopedAnswerKey(field.label, field)]: 'Bachelor' };
+    expect(findSavedAnswer(saved, field.label, field)).toBe('Bachelor');
+  });
+  it('rejects stale plans and answers for another repeated control', () => {
+    const field = { name: 'degree', fieldId: 'degree|education|1', label: 'Degree', options: ['Bachelor', 'Master'] };
+    expect(validateResolutionAnswer(field, {
+      name: 'degree', fieldId: field.fieldId, value: 'Bachelor', matchedOption: 'Bachelor',
+      optionSignature: normalizedOptionSignature(field),
+    })).toBe(true);
+    expect(validateResolutionAnswer(field, {
+      name: 'degree', fieldId: 'degree|education|0', value: 'Bachelor', matchedOption: 'Bachelor',
+      optionSignature: normalizedOptionSignature(field),
+    })).toBe(false);
+    expect(validateResolutionAnswer({ ...field, options: ['Associate', 'Doctorate'] }, {
+      name: 'degree', fieldId: field.fieldId, value: 'Bachelor', matchedOption: 'Bachelor',
+      optionSignature: normalizedOptionSignature(field),
+    })).toBe(false);
   });
 });
 
