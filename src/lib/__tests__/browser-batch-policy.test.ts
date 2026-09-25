@@ -2,10 +2,9 @@
 const policy = require('../../../extension/batch-policy.js');
 
 describe('browser batch canary policy', () => {
-  it('promotes a new version through 1, 3, and 7 application stages', () => {
-    expect(policy.capacity({ canaryCompleted: 0 }, 7)).toBe(1);
-    expect(policy.capacity({ canaryCompleted: 1 }, 7)).toBe(3);
-    expect(policy.capacity({ canaryCompleted: 4 }, 7)).toBe(7);
+  it('starts a bounded eight-application conformance batch immediately', () => {
+    expect(policy.capacity({ canaryCompleted: 0 }, 8)).toBe(8);
+    expect(policy.capacity({ canaryCompleted: 4 }, 8)).toBe(8);
   });
   it('blocks additional claims after an engine failure', () => {
     const failed = policy.outcome({ canaryCompleted: 2 }, 'failed');

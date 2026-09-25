@@ -17,9 +17,9 @@ const api = async (path, options = {}) => {
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
   method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, ...extra }),
 });
-// Controlled learning batches keep failures reviewable and prevent a broken
-// selector from draining the full queue before its shared cause is fixed.
-const BATCH_SIZE = 7;
+// Each version runs one bounded eight-tab conformance batch. Per-tab isolation
+// lets every ATS complete independently; a confirmed engine failure blocks later claims.
+const BATCH_SIZE = 8;
 const adaptiveCapacity = (state = {}) => HireRadarBatchPolicy.capacity(state, BATCH_SIZE);
 let pollRunning = false;
 async function poll() {
