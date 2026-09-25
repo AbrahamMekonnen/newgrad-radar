@@ -292,8 +292,13 @@
     if (adapters[named]) return adapters[named];
     let host = '';
     try { host = new URL(url).hostname; } catch {}
-    return Object.values(adapters).find((adapter) =>
-      adapter.hosts?.includes(host) || adapter.hostPattern?.test(host)) || adapters.generic;
+    const direct = Object.values(adapters).find((adapter) =>
+      adapter.hosts?.includes(host) || adapter.hostPattern?.test(host));
+    if (direct) return direct;
+    const recipe = globalThis.HireRadarATSRecipes?.detect?.(url);
+    return recipe ? { ...adapters.generic, type: recipe.type, recipe,
+      formSelectors: recipe.formSelectors?.length ? recipe.formSelectors : adapters.generic.formSelectors }
+      : adapters.generic;
   };
 
   const createFieldLedger = (maxAttempts = 2) => {

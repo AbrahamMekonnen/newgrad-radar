@@ -77,7 +77,7 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: details.tabId, frameIds: [details.frameId] },
-      files: ['ats-adapters.js', 'execution-contract.js', 'content.js'],
+      files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'content.js'],
     });
   } catch (error) {
     await report(job, 'failed', { detail: 'Could not attach to the embedded Greenhouse form: ' + error.message }).catch(() => undefined);
@@ -107,7 +107,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     return;
   }
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['ats-adapters.js', 'execution-contract.js', 'content.js'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'content.js'] });
   } catch (error) {
     await report(job, 'failed', { detail: 'Could not start the ATS page helper: ' + error.message }).catch(() => undefined);
   }

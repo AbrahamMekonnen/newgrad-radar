@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.11.31",
+  "version": "0.12.0",
   "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
   "permissions": [
     "storage",
@@ -21,6 +21,13 @@
     "https://*.myworkdayjobs.com/*",
     "https://*.smartrecruiters.com/*",
     "https://*.smartr.me/*",
+    "https://*.icims.com/*",
+    "https://*.taleo.net/*",
+    "https://*.bamboohr.com/*",
+    "https://*.breezy.hr/*",
+    "https://*.applytojob.com/*",
+    "https://*.recruitee.com/*",
+    "https://*.jobvite.com/*",
     "https://careers.roblox.com/*",
     "https://careers.withwaymo.com/*",
     "https://www.samsara.com/*",
@@ -44,12 +51,20 @@
         "https://*.myworkdayjobs.com/*",
         "https://*.smartrecruiters.com/*",
         "https://*.smartr.me/*",
+        "https://*.icims.com/*",
+        "https://*.taleo.net/*",
+        "https://*.bamboohr.com/*",
+        "https://*.breezy.hr/*",
+        "https://*.applytojob.com/*",
+        "https://*.recruitee.com/*",
+        "https://*.jobvite.com/*",
         "https://careers.roblox.com/*",
         "https://careers.withwaymo.com/*",
         "https://www.samsara.com/*",
         "https://www.mongodb.com/careers/*"
       ],
       "js": [
+        "ats-recipes.js",
         "ats-adapters.js",
         "execution-contract.js",
         "content.js"

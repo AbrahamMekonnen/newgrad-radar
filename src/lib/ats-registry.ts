@@ -1333,7 +1333,7 @@ export const BREEZYHR_CONFIG: ATSConfig = {
   type: 'breezyhr',
   name: 'BreezyHR',
   urlPatterns: [
-    '[\w-]+\\.breezy\\.hr',
+    '[\\w-]+\\.breezy\\.hr',
     'app\\.breezy\\.hr',
     '/breezy/',
   ],
@@ -1424,9 +1424,9 @@ export const JAZZHR_CONFIG: ATSConfig = {
   type: 'jazzhr',
   name: 'JazzHR',
   urlPatterns: [
-    '[\w-]+\\.applytojob\\.com',
+    '[\\w-]+\\.applytojob\\.com',
     'app\\.jazz\\.co',
-    '[\w-]+\\.jazz\\.co',
+    '[\\w-]+\\.jazz\\.co',
     '/jazzhr/',
   ],
   domSignatures: {
@@ -1518,7 +1518,7 @@ export const RECRUITEE_CONFIG: ATSConfig = {
   type: 'recruitee',
   name: 'Recruitee',
   urlPatterns: [
-    '[\w-]+\\.recruitee\\.com',
+    '[\\w-]+\\.recruitee\\.com',
     'careers\\.recruitee\\.com',
     '/recruitee/',
   ],
