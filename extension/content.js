@@ -393,26 +393,21 @@
     return true;
   };
 
-  const planChoiceAnswers = async (fields) => {
-    const unresolved = [];
+  const planChoiceAnswers = (fields) => {
+    const planned = new Map();
     for (const field of fields) {
       const element = findField(field);
-      if (!element) continue;
+      if (!(element instanceof HTMLSelectElement)) continue;
       const wanted = answerLabel(field);
-      if (element instanceof HTMLSelectElement) {
-        const choices = [...element.options].map((item) => item.textContent.trim()).filter(Boolean);
-        const local = [...element.options].some((item) => String(item.value) === String(field.value) || optionMatches(item.textContent, wanted));
-        if (!local && choices.length) unresolved.push({ name: field.name, label: field.label, type: 'select', options: choices });
-        continue;
-      }
-      // Combobox planning is intentionally non-interactive. Opening every React-Select
-      // control caused visible focus thrashing and could make controls compete.
-      // fillCombo inspects only this control's listbox when it is actually filled.
-      if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) continue;
+      const choices = [...element.options].map((item) => item.textContent.trim()).filter(Boolean);
+      const exact = [...element.options].find((item) =>
+        String(item.value) === String(field.value) || optionMatches(item.textContent, wanted));
+      const matched = exact?.textContent?.trim() || ATS?.matchOption?.(field.label, wanted, choices);
+      if (matched) planned.set(field.name, { value: matched, source: field.source || 'profile' });
+      // Unknown selections intentionally remain unresolved. The complete-form
+      // preflight handles them after every known field has already been filled.
     }
-    if (!unresolved.length) return new Map();
-    const resolved = await send({ type: 'RESOLVE_FIELDS', fields: unresolved }, 30000);
-    return new Map((resolved?.answers || []).map((answer) => [answer.name, answer]));
+    return planned;
   };
   const banner = (message, error = false) => {
     let box = document.getElementById('newgrad-radar-helper');
@@ -1036,16 +1031,12 @@
         type: 'PROGRESS', stage: 'filling',
         detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length }) },
       });
-      let plannerTimedOut = false;
-      const plannedAnswers = await Promise.race([
-        planChoiceAnswers(fields),
-        wait(45000).then(() => { plannerTimedOut = true; return new Map(); }),
-      ]);
-      if (data.browserWorker) await send({
+      const plannedAnswers = planChoiceAnswers(fields);
+      if (data.browserWorker) void send({
         type: 'PROGRESS', stage: 'filling',
         detail: {
           total: fields.length,
-          detail: JSON.stringify({ message: plannerTimedOut ? 'Form planning timed out; continuing without guesses.' : 'Form planning complete.', resolvedChoices: plannedAnswers.size }),
+          detail: JSON.stringify({ message: 'Local form planning complete.', resolvedChoices: plannedAnswers.size }),
         },
       });
       for (const field of fields) {
