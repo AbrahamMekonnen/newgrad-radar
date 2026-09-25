@@ -116,7 +116,7 @@ export async function POST(
           company_mission: answers.company_mission,
           company_products: answers.company_products,
           recent_news: answers.recent_news,
-          generation_model: 'gemini-1.5-flash',
+          generation_model: 'gemini-2.5-flash',
           generated_at: new Date().toISOString(),
         })
         .select('id')

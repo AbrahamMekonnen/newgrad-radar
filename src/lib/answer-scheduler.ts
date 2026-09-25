@@ -332,7 +332,7 @@ async function callGeminiForAnswers(
   const prompt = buildGenerationPrompt(company, user);
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -586,7 +586,7 @@ async function processQueueItem(
         company_mission: answers.company_mission,
         company_products: answers.company_products,
         recent_news: answers.recent_news,
-        generation_model: 'gemini-1.5-flash',
+        generation_model: 'gemini-2.5-flash',
         generated_at: new Date().toISOString(),
       })
       .select('id')
@@ -610,7 +610,7 @@ async function processQueueItem(
         company_slug: item.company_slug,
         company_name: item.company_name,
       },
-      model_used: 'gemini-1.5-flash',
+      model_used: 'gemini-2.5-flash',
       success: true,
       output_data: { answer_id: savedAnswer.id },
     });
