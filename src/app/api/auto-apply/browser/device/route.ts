@@ -104,6 +104,29 @@ export async function PATCH(request: NextRequest) {
   // bounded diagnostic set so one run reveals every blocker instead of only
   // the first few fields.
   const progress = { stage, detail: String(detail || '').slice(0, 8000), filled, total, at: now };
+  // Persist sanitized field outcomes separately from the latest progress blob.
+  // Labels, answers, option values, and resume content are deliberately absent.
+  let parsedDetail: { diagnostic?: Record<string, unknown>; diagnostics?: Record<string, unknown>[] } = {};
+  try { parsedDetail = JSON.parse(String(detail || '{}')); } catch { /* plain status text */ }
+  const diagnostics = [parsedDetail.diagnostic, ...(Array.isArray(parsedDetail.diagnostics) ? parsedDetail.diagnostics : [])]
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  if (diagnostics.length) {
+    try {
+      await db.from('autoapply_field_events').insert(diagnostics.slice(0, 100).map((item) => ({
+        queue_id: row.id,
+        user_id: row.user_id,
+        ats_type: String(item.ats || 'generic').slice(0, 40),
+        event_code: String(item.code || 'unknown').slice(0, 80),
+        field_key: String(item.fieldKey || '').slice(0, 160) || null,
+        control_type: String(item.controlType || '').slice(0, 40) || null,
+        answer_source: String(item.answerSource || '').slice(0, 40) || null,
+        failure_category: String(item.category || '').slice(0, 40) || null,
+        retained: typeof item.retained === 'boolean' ? item.retained : null,
+        attempt: Number.isFinite(item.attempt) ? Number(item.attempt) : null,
+        option_count: Number.isFinite(item.optionCount) ? Number(item.optionCount) : null,
+      })));
+    } catch { /* migration may not be applied yet; progress must still continue */ }
+  }
   if (stage === 'submitted') {
     const { data: receipt, error } = await db.rpc('record_browser_autoapply_submission', {
       p_queue_id: row.id,

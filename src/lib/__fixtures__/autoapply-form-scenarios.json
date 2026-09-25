@@ -1,0 +1,7 @@
+[
+  {"ats":"greenhouse","url":"https://job-boards.greenhouse.io/acme/jobs/1","steps":[[{"label":"How did you hear about Acme?","expected":"source"}],[{"label":"Have you ever worked at Acme before?","expected":"previous_employment"}]]},
+  {"ats":"lever","url":"https://jobs.lever.co/acme/1","steps":[[{"label":"Will you require visa sponsorship?","expected":"sponsorship"}],[{"label":"Describe a project you are proud of.","expected":"prose"}]]},
+  {"ats":"ashby","url":"https://jobs.ashbyhq.com/acme/1","steps":[[{"label":"Are you currently located in Estonia?","expected":"location_confirmation"}],[{"label":"Applicant Arbitration Agreement Acknowledgement","expected":"acknowledgement"}]]},
+  {"ats":"workday","url":"https://acme.wd1.myworkdayjobs.com/jobs/1","steps":[[{"label":"What is your highest degree?","expected":"degree"}],[{"label":"Are you authorized to work in the United States?","expected":"work_authorization"}]]},
+  {"ats":"smartrecruiters","url":"https://jobs.smartrecruiters.com/acme/1","steps":[[{"label":"Where did you learn about this role?","expected":"source"}],[{"label":"Cover Letter","expected":"prose"}]]}
+]

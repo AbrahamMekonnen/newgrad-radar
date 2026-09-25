@@ -438,6 +438,10 @@ try:
 except ImportError:
     _USE_KNOWLEDGE_BASE = False
 
+try:
+    from shared_question_policy import classify_application_question as _shared_question_policy
+except ImportError:
+    _shared_question_policy = lambda _label: None
 # Fallback patterns if knowledge base not available
 # Based on analysis of 100 Greenhouse jobs - patterns ordered by frequency
 _CAT = [
@@ -592,6 +596,15 @@ def _category(label: str, field_name: str = "") -> str:
     if "citizenship" in lo or "citizen status" in lo:
         return "citizenship"
 
+    shared = _shared_question_policy(label)
+    shared_categories = {
+        "source": "source", "previous_employment": "previous_employment",
+        "location_confirmation": "location", "degree": "degree",
+        "work_authorization": "work_auth", "sponsorship": "sponsorship",
+        "acknowledgement": "data_consent", "truthfulness": "data_consent",
+    }
+    if shared and shared.get("id") in shared_categories:
+        return shared_categories[shared["id"]]
     if _USE_KNOWLEDGE_BASE:
         return _kb_lookup(label, field_name)
 

@@ -1,7 +1,8 @@
+importScripts('batch-policy.js');
 const DEFAULT_ORIGIN = 'https://newgrad-radar.vercel.app';
 const POLL_ALARM = 'hireradar-poll';
 const currentByTab = new Map();
-const stored = () => chrome.storage.local.get(['origin', 'deviceToken', 'paused']);
+const stored = () => chrome.storage.local.get(['origin', 'deviceToken', 'paused', 'canaryCompleted', 'canaryFailed']);
 const api = async (path, options = {}) => {
   const state = await stored();
   if (!state.deviceToken) throw new Error('Browser helper is not connected.');
@@ -19,7 +20,7 @@ const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/de
 // Controlled learning batches keep failures reviewable and prevent a broken
 // selector from draining the full queue before its shared cause is fixed.
 const BATCH_SIZE = 7;
-const adaptiveCapacity = () => BATCH_SIZE;
+const adaptiveCapacity = (state = {}) => HireRadarBatchPolicy.capacity(state, BATCH_SIZE);
 let pollRunning = false;
 async function poll() {
   if (pollRunning) return;
@@ -27,7 +28,7 @@ async function poll() {
   try {
     const state = await stored();
     if (!state.deviceToken || state.paused) return;
-    const capacity = adaptiveCapacity();
+    const capacity = adaptiveCapacity(state);
     const batchState = await chrome.storage.session.get('batchClaimCount');
     let batchClaimCount = Number(batchState.batchClaimCount || 0);
     while (currentByTab.size < capacity && batchClaimCount < BATCH_SIZE) {
@@ -138,7 +139,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message.paused) void poll();
       return { ok: true };
     }
-    if (message.type === 'STATUS') return { ...(await stored()), activeCount: currentByTab.size, capacity: adaptiveCapacity() };
+    if (message.type === 'STATUS') {
+      const state = await stored();
+      return { ...state, activeCount: currentByTab.size, capacity: adaptiveCapacity(state) };
+    }
     if (message.type === 'PAGE_READY') {
       const tabId = sender.tab?.id;
       if (!tabId) return { job: null };
@@ -201,7 +205,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         currentByTab.delete(tabId);
         await chrome.storage.session.remove('job:' + tabId);
       }
-      if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) void poll();
+      if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) {
+        const canary = await chrome.storage.local.get(['canaryCompleted', 'canaryFailed']);
+        await chrome.storage.local.set(HireRadarBatchPolicy.outcome(canary, message.stage));
+        void poll();
+      }
       return { ok: true };
     }
     return { ok: false };
@@ -224,7 +232,7 @@ void (async () => {
     if (keys.length) await chrome.storage.session.remove(keys);
     await chrome.storage.session.set({ batchClaimCount: 0 });
     await Promise.allSettled(tabs.map((tabId) => chrome.tabs.remove(tabId)));
-    await chrome.storage.local.set({ runtimeVersion: version });
+    await chrome.storage.local.set({ runtimeVersion: version, canaryCompleted: 0, canaryFailed: false });
   } else {
     for (const [key, job] of managed) {
       const tabId = Number(key.slice(4));

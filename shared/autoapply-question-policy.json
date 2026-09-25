@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "rules": [
+    {"id":"source","patterns":["how did you hear","heard about","learn about","source of application","where did you find"],"resolution":"profile","profileKey":"default_source","sensitive":false},
+    {"id":"previous_employment","patterns":["previously worked","ever worked at","worked at .* before","former employee","current or former.*employee"],"resolution":"employment_history","sensitive":false},
+    {"id":"location_confirmation","patterns":["currently located in","currently live in","are you based in"],"resolution":"location_compare","sensitive":false},
+    {"id":"degree","patterns":["degree","education level","qualification"],"resolution":"profile_option","profileKey":"education_degree","sensitive":false},
+    {"id":"work_authorization","patterns":["work authorization","authorized to work","eligible to work","right to work"],"resolution":"profile_option","profileKey":"work_authorization","sensitive":true},
+    {"id":"sponsorship","patterns":["sponsor","visa sponsorship","immigration support"],"resolution":"profile_option","profileKey":"require_sponsorship","sensitive":true},
+    {"id":"acknowledgement","patterns":["privacy notice","arbitration agreement","background check disclosure","acknowledge and agree","please review and acknowledge"],"resolution":"confirmed_fact","sensitive":true},
+    {"id":"truthfulness","patterns":["certify.*true","answers given.*true and correct","information.*accurate and complete"],"resolution":"confirmed_fact","profileKey":"truthfulness_certification","sensitive":true},
+    {"id":"prose","patterns":["why do you","describe a","tell us about","proudest accomplishment","additional information","cover letter"],"resolution":"ai_grounded","sensitive":false}
+  ]
+}

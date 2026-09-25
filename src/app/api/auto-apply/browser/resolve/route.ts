@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption } from '@/lib/form-option-matching';
+import { classifyApplicationQuestion } from '@/lib/autoapply-question-policy';
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
   };
   for (const f of fields as LiveField[]) {
     const q = norm(f.label);
+    const policy = classifyApplicationQuestion(f.label);
     const saved = findSavedAnswer(custom, f.label);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
     if (/^first name\b/.test(q) && pick(f, profile?.first_name)) continue;
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
     if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/sexual orientation/.test(q) && pick(f, fact('sexual_orientation_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
     if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
-    if (/currently located in|currently live in|are you based in/.test(q)) {
+    if (policy?.id === 'location_confirmation' || /currently located in|currently live in|are you based in/.test(q)) {
       const requested = q.match(/(?:located|live|based) in ([a-z ]+)/)?.[1]?.trim();
       const suppliedLocation = norm([profile?.location, profile?.city, profile?.state, profile?.country].filter(Boolean).join(' '));
       if (requested && pick(f, suppliedLocation.includes(requested) ? 'Yes' : 'No', 'profile', 'Compared the requested location with the saved candidate location')) continue;
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, inferredState)) continue;
     }
     if (/country/.test(q) && pick(f, profile?.country)) continue;
-    if (/degree|education level|qualification/.test(q) && pick(f, profile?.education_degree)) continue;
+    if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/major|field of study|area of study/.test(q) && pick(f, profile?.education_major)) continue;
     if (/high school.*graduat.*year|year of high school graduation/.test(q)
       && pick(f, fact('high_school_graduation_year'), 'saved', 'Matched the confirmed high-school graduation year')) continue;
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
     if (/university|college|school|institution/.test(q)
       && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)
       && pick(f, profile?.education_school)) continue;
-    if (/hear about|heard about|learn about|source/.test(q) && pick(f, profile?.default_source)) continue;
+    if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q)) && pick(f, profile?.default_source)) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
     if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
-    if (/sponsor/.test(q)) {
+    if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const inferred = /us citizen|permanent resident|green card/.test(authorization) ? 'No'
         : /visa holder|student visa|need sponsorship/.test(authorization) ? 'Yes' : null;
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
       'profile',
       profile?.require_sponsorship == null ? 'Derived from the confirmed work-authorization status' : 'Matched the confirmed sponsorship preference')) continue;
     }
-    if (/work authorization|authorized to work|eligible to work/.test(q)) {
+    if (policy?.id === 'work_authorization' || /work authorization|authorized to work|eligible to work/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const options = optionLabels(f).map(norm);
       const binary = options.some((option) => option === 'yes') && options.some((option) => option === 'no');
@@ -141,12 +143,12 @@ export async function POST(request: NextRequest) {
         : /not authorized|require sponsorship to begin/.test(authorization) ? 'No' : null;
       if (pick(f, binary ? authorized : profile?.work_authorization)) continue;
     }
-    if (/previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
     }
-    if (mayUseAi(f)) prose.push(f);
+    if (policy?.resolution === 'ai_grounded' || mayUseAi(f)) prose.push(f);
     else unresolved.push(f);
   }
 
