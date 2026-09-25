@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   const { data: device } = await store.from('autoapply_browser_devices').select('user_id,revoked_at')
     .eq('device_token_hash', hash(token)).maybeSingle();
   if (!device || device.revoked_at) return NextResponse.json({ error: 'Unpaired browser' }, { status: 401, headers: cors });
-  const { jobId, fields, planId: requestedPlanId } = await request.json().catch(() => ({}));
+  const { jobId, fields, planId: requestedPlanId, fastOnly } = await request.json().catch(() => ({}));
   if (!jobId || !Array.isArray(fields) || fields.length > 50) return NextResponse.json({ error: 'Invalid fields' }, { status: 400, headers: cors });
   const { data: job } = await store.from('autoapply_job_queue').select('job_title,company_name')
     .eq('id', jobId).eq('user_id', device.user_id).maybeSingle();
@@ -150,7 +150,10 @@ export async function POST(request: NextRequest) {
     else unresolved.push(f);
   }
 
-  if (prose.length && process.env.GEMINI_API_KEY) {
+  // The browser asks for a deterministic pass first so profile/saved answers
+  // can be applied without waiting behind an AI request. Only the later,
+  // explicitly deferred pass is allowed to call Gemini.
+  if (!fastOnly && prose.length && process.env.GEMINI_API_KEY) {
     const context = {
       current_title: profile?.current_title,
       proud_project: profile?.proud_project,
@@ -182,5 +185,11 @@ QUESTIONS: ${JSON.stringify(prose)}`;
   }
   const answered = new Set(answers.map((a) => a.name));
   const needsContext = [...unresolved, ...prose].filter((f) => !answered.has(f.name)).map((f) => ({ name: f.name, reason: isSensitiveFact(f.label) ? 'A confirmed user answer is required for this sensitive fact.' : 'No truthful answer matched the current ATS options.', attempt: f.attempt || 1 }));
-  return NextResponse.json({ planId, answers, needsContext, needsUser: needsContext.map((f) => f.name) }, { headers: cors });
+  return NextResponse.json({
+    planId,
+    answers,
+    needsContext,
+    needsUser: needsContext.map((f) => f.name),
+    deferredAi: fastOnly ? prose.map((f) => f.name) : [],
+  }, { headers: cors });
 }

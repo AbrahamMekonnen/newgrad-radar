@@ -662,34 +662,35 @@
   };
   const resolveFieldsBatch = async (fields) => {
     const outcomes = new Map(fields.map((field) => [fieldKey(field), { accepted: false }]));
-    let pending = [...fields];
     let planId = null;
-    for (let attempt = 1; attempt <= 2 && pending.length; attempt++) {
-      const requestFields = pending.map((field) => ({
-        ...field,
-        attempt,
-        currentValue: String(findField(field)?.value || ''),
-        validation: {
-          message: findField(field)?.validationMessage || (attempt > 1 ? 'The ATS did not retain the selected value.' : ''),
-          accepted: false,
-        },
-      }));
-      const response = await send({ type: 'RESOLVE_FIELDS', planId, fields: requestFields }, 30000);
+    const requestFields = (targets, attempt) => targets.map((field) => ({
+      ...field,
+      attempt,
+      currentValue: String(findField(field)?.value || ''),
+      validation: { message: findField(field)?.validationMessage || '', accepted: false },
+    }));
+
+    // Apply each control once. A hostile widget may consume its own bounded
+    // allowance, but it cannot block or repeatedly recapture the form loop.
+    const applyAnswers = async (targets, response, attempt) => {
       planId = response?.planId || planId;
       const answers = new Map((response?.answers || [])
         .filter((answer) => answer.safeToApply !== false)
         .map((answer) => [answer.name, answer]));
-      const retry = [];
-      for (const field of pending) {
+      const deferred = new Set(response?.deferredAi || []);
+      const aiTargets = [];
+      for (const field of targets) {
         const key = fieldKey(field);
         const state = resolutionState.get(key) || { attempt: 0, signatures: new Set(), planId };
         state.attempt = attempt;
         state.planId = planId;
         const answer = answers.get(field.name);
         if (!answer) {
-          state.lastFailure = response ? 'no_safe_answer' : 'resolver_timeout';
+          state.lastFailure = response
+            ? (deferred.has(field.name) ? 'deferred_to_ai' : 'no_safe_answer')
+            : 'resolver_timeout';
           resolutionState.set(key, state);
-          retry.push(field);
+          if (deferred.has(field.name)) aiTargets.push(field);
           continue;
         }
         state.answerSource = answer.source;
@@ -697,29 +698,23 @@
         if (!findField(field)) {
           state.lastFailure = 'field_missing';
           resolutionState.set(key, state);
-          retry.push(field);
           continue;
         }
-        // One hostile or broken control must never abort the rest of the form.
-        // Each field owns its timeout and exception boundary, then execution
-        // continues with the next field regardless of this outcome.
         const timeoutMarker = Symbol('field_timeout');
         let applied;
         try {
           applied = await Promise.race([
             fill({ ...field, value: answer.value, source: answer.source }),
-            wait(8000).then(() => timeoutMarker),
+            wait(6000).then(() => timeoutMarker),
           ]);
         } catch {
           state.lastFailure = 'apply_error';
           resolutionState.set(key, state);
-          retry.push(field);
           continue;
         }
         if (applied === timeoutMarker) {
           state.lastFailure = 'field_timeout';
           resolutionState.set(key, state);
-          retry.push(field);
           continue;
         }
         await wait(180);
@@ -729,19 +724,36 @@
           outcomes.set(key, { accepted: true, answer });
         } else {
           state.lastFailure = applied ? 'not_retained' : 'apply_failed';
-          retry.push(field);
         }
         resolutionState.set(key, state);
       }
-      pending = retry;
+      return aiTargets;
+    };
+
+    // Phase 1 never invokes AI. It returns saved/profile answers quickly and
+    // identifies only prose questions that are eligible for the slower pass.
+    const fastResponse = await send({
+      type: 'RESOLVE_FIELDS', planId, fields: requestFields(fields, 1), fastOnly: true,
+    }, 15000);
+    const aiTargets = await applyAnswers(fields, fastResponse, 1);
+
+    // Phase 2 starts only after every deterministic field has been attempted.
+    if (aiTargets.length) {
+      const aiResponse = await send({
+        type: 'RESOLVE_FIELDS', planId, fields: requestFields(aiTargets, 2), fastOnly: false,
+      }, 30000);
+      await applyAnswers(aiTargets, aiResponse, 2);
     }
-    for (const field of pending) {
+
+    for (const field of fields) {
       const state = resolutionState.get(fieldKey(field));
-      if (state) { state.exhausted = true; resolutionState.set(fieldKey(field), state); }
+      if (state && !state.accepted) {
+        state.exhausted = true;
+        resolutionState.set(fieldKey(field), state);
+      }
     }
     return fields.map((field) => outcomes.get(fieldKey(field)) || { accepted: false });
   };
-
   const smartRecruitersDirectUrl = () => {
     const scripts = [...document.scripts].map((script) => script.textContent || '').join('\n');
     const company = scripts.match(/cident:\s*['"]([^'"]+)['"]/)?.[1];

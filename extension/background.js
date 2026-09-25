@@ -169,7 +169,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const job = currentByTab.get(tabId) || result['job:' + tabId];
       if (!job) return { answers: [], needsUser: [] };
       return api('/api/auto-apply/browser/resolve', {
-        method: 'POST', body: JSON.stringify({ jobId: job.id, planId: message.planId, fields: message.fields }),
+        method: 'POST', body: JSON.stringify({
+          jobId: job.id,
+          planId: message.planId,
+          fields: message.fields,
+          fastOnly: message.fastOnly === true,
+        }),
       });
     }    if (message.type === 'PROGRESS') {
       const tabId = sender.tab?.id;
