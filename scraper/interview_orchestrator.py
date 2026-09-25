@@ -35,7 +35,7 @@ from db_optimizer import (
     get_interview_db,
     close_interview_db,
 )
-from sources.interview_questions.quality import classify_question
+from sources.interview_questions.quality import classify_question, classify_question_smart
 
 # Configure logging
 logging.basicConfig(
@@ -973,7 +973,10 @@ class InterviewQuestionOrchestrator:
                 accepted_questions = []
                 rejected_reasons: dict[str, int] = {}
                 for question in unique_questions:
-                    decision = classify_question(
+                    # Jev arbitrates only borderline "weak keep" rows; obvious
+                    # cases stay on the free heuristic. Falls back to heuristic
+                    # when Jev is unavailable.
+                    decision = classify_question_smart(
                         question.get('question_text', ''),
                         question.get('question_type'),
                     )

@@ -84,6 +84,40 @@ def classify_question(text: str, question_type: str | None = None) -> QualityDec
         return QualityDecision(True, "code_fragment")
     if value[0].isascii() and value[0].islower() and len(value) < 55:
         return QualityDecision(True, "short_sentence_fragment")
+    # Kept, but with no strong prompt signal — a borderline "weak keep". Marked
+    # so classify_question_smart() can send just these to Jev for arbitration.
+    return QualityDecision(False, "weak_signal")
+
+
+def classify_question_smart(text: str, question_type: str | None = None) -> QualityDecision:
+    """Heuristic gate, with Jev arbitrating only the borderline "weak keep" cases.
+
+    The heuristic already decides the clear cases for free (obvious junk, or a
+    strong prompt signal). Jev is consulted ONLY when the heuristic kept a row
+    with no strong signal — the exact rows where junk slips through — so we spend
+    at most one fast decision call per borderline item, not per question. Any Jev
+    problem falls back to the heuristic's keep.
+    """
+    decision = classify_question(text, question_type)
+    if decision.is_junk or decision.reason != "weak_signal":
+        return decision  # obvious junk, or a confident keep — no Jev needed
+
+    try:
+        import jev
+        if not jev.jev_available():
+            return QualityDecision(False)
+        answers = jev.evaluate(
+            _normalized(text),
+            {"is_real": {
+                "type": "boolean",
+                "instructions": "Is this text a genuine technical or behavioral interview question that a candidate was actually asked (not a heading, navigation, ad, or random sentence fragment)?",
+            }},
+        )
+        p = jev.boolean(answers, "is_real")
+        if p is not None and p < 0.35:
+            return QualityDecision(True, "jev_not_a_question")
+    except Exception:
+        pass
     return QualityDecision(False)
 
 

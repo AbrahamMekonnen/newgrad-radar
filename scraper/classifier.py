@@ -447,12 +447,50 @@ def _classify_with_gemini(jobs: list[dict]) -> list[dict]:
     return result
 
 
+# Bounded per-run budget for Jev level calls so the scrape hot path can't be
+# dominated by them (Jev is one fast call per job). Tunable via env.
+_JEV_LEVEL_CRITERIA = {
+    "intern": "an internship / co-op",
+    "new_grad": "new grad / entry level / university graduate, 0-2 years",
+    "junior": "junior, roughly 1-2 years",
+    "mid": "mid-level, roughly 2-5 years",
+    "senior": "senior, roughly 5-8 years",
+    "staff": "staff level",
+    "principal": "principal / distinguished",
+}
+
+
+def _jev_level(title: str, description: str) -> str | None:
+    """Best-effort experience level from Jev when the title heuristic is unsure.
+    Returns a valid level string on a confident choice, else None (fall back)."""
+    try:
+        import jev
+        if not jev.jev_available():
+            return None
+        state = f"Job title: {title}\n\n{(description or '')[:1500]}"
+        answers = jev.evaluate(state, {"level": {
+            "type": "choice",
+            "instructions": "What experience level is this software/tech job aimed at?",
+            "criteria": _JEV_LEVEL_CRITERIA,
+        }})
+        sel, conf = jev.choice(answers, "level")
+        if sel and conf >= 0.5:
+            return sel
+    except Exception:
+        pass
+    return None
+
+
 def _classify_with_heuristics(jobs: list[dict]) -> list[dict]:
     """Tag jobs by role + experience level using title-based heuristics.
 
     Keeps ALL technical roles across every experience level (new grad through
-    principal); the UI lets users filter by experience level themselves."""
+    principal); the UI lets users filter by experience level themselves. When the
+    title heuristic can't determine the level, Jev arbitrates (bounded per run,
+    off entirely until the AI Gateway key/account is enabled)."""
+    import os
     result = []
+    jev_budget = int(os.getenv("JEV_JOB_BUDGET", "300"))
 
     for job in jobs:
         if not is_technical_role(job["title"]):
@@ -467,7 +505,14 @@ def _classify_with_heuristics(jobs: list[dict]) -> list[dict]:
             job["title"],
             job.get("description", ""),
         )
-        job["experience_level"] = exp_result["experience_level"]
+        level = exp_result["experience_level"]
+        # Heuristic unsure -> let Jev decide (cheap, bounded, confidence-gated).
+        if level is None and jev_budget > 0:
+            jev_budget -= 1
+            jev_level = _jev_level(job["title"], job.get("description", ""))
+            if jev_level:
+                level = jev_level
+        job["experience_level"] = level
         job["experience_confidence"] = exp_result["confidence"]
         job["experience_matched_patterns"] = exp_result["matched_patterns"]
 
