@@ -1026,7 +1026,7 @@
         });
       }
       const completed = new Set();
-      const preparedLedger = ATS?.createFieldLedger?.(2);
+      const preparedLedger = ATS?.createFieldLedger?.(1);
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'filling',
         detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length }) },
@@ -1072,7 +1072,7 @@
               detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'field_filling', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts }), index: fieldIndex + 1 }) },
             });
             try {
-              const filled = await Promise.race([fill(field), wait(10000).then(() => false)]);
+              const filled = await Promise.race([fill(field), wait(6000).then(() => false)]);
               if (filled) {
                 await wait(200);
                 if (fieldAccepted(field)) {
@@ -1083,7 +1083,10 @@
                   preparedLedger?.reject(field);
                 }
               }
-            } catch { /* skip this field and continue */ }
+            } catch {
+              preparedLedger?.reject(field);
+              /* skip this field and continue */
+            }
           }
           // React ATSes may replace controls after an onChange. Re-read every
           // completed field from the current DOM before deciding the form is ready.
