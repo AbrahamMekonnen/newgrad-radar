@@ -8,6 +8,7 @@ import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { NotificationGateProvider } from "@/components/pwa/NotificationGate";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -106,6 +107,9 @@ export default function RootLayout({
           {/* PWA: register the service worker + offer install */}
           <ServiceWorkerRegistrar />
           <InstallPrompt />
+
+          {/* First-run guided onboarding (self-gates to signed-in first-timers) */}
+          <OnboardingFlow />
           </NotificationGateProvider>
         </ThemeProvider>
       </body>

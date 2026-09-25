@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ResumeAutofill } from '@/components/autoapply';
+import { GettingStartedCard } from '@/components/onboarding/GettingStarted';
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
@@ -101,6 +102,9 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
       </div>
 
       <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-slate-700/50 divide-y divide-gray-200 dark:divide-slate-700 overflow-hidden">
+        {/* Smart getting-started checklist (hides itself once complete) */}
+        <GettingStartedCard userId={userId} />
+
         {/* One-step setup from a resume */}
         <ResumeAutofill userId={userId} email={email} />
 
