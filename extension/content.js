@@ -827,6 +827,8 @@
             diagnostic: EXEC?.safeDiagnostic?.({ code: 'submit_unconfirmed', ats: data.atsType, category: decision.category, attempt: data.submitAttempts }),
           }) },
         });
+        data.stopAutomation = true;
+        persist(data);
         banner('The ATS did not confirm submission. HireRadar did not mark it submitted.', true);
         return false;
       }
@@ -845,6 +847,8 @@
           type: 'PROGRESS', stage: 'waiting_for_user',
           detail: { detail: JSON.stringify({ message: 'ATS file processing did not finish.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'upload_timeout', ats: data.atsType, category: 'processing' }) }) },
         });
+        data.stopAutomation = true;
+        persist(data);
         banner('The ATS did not finish processing the uploaded file.', true);
         return false;
       }
@@ -1064,13 +1068,24 @@
       // resolving it so mutations cannot enqueue the same control again.
       const attemptedLive = new Set();
       let running = false;
+      let terminal = false;
+      let debounce;
+      let observer;
+      let retry;
+      const stopExecution = () => {
+        terminal = true;
+        clearTimeout(debounce);
+        if (retry) clearInterval(retry);
+        observer?.disconnect();
+      };
       const run = async () => {
-        if (running) return;
+        if (running || terminal) return;
         running = true;
         try {
           if (isSuccessPage(data)) {
             try {
               await reportSuccess(data);
+              stopExecution();
               banner('Application submitted successfully. HireRadar marked it as Submitted.');
             } catch (error) {
               banner(error.message || 'Could not update the submitted status.', true);
@@ -1173,6 +1188,7 @@
           data.liveNeedsUser = unresolvedLive.map((field) => field.name);
           persist(data);
           if (unresolvedLive.length) {
+            stopExecution();
             if (data.browserWorker) await send({
               type: 'PROGRESS', stage: 'waiting_for_user',
               detail: {
@@ -1214,6 +1230,10 @@
             // submitPreparedForm either submits (we're done) or banners the exact
             // blocking field — don't overwrite that specific message below.
             if (await submitPreparedForm(data)) return;
+            if (data.stopAutomation) {
+              stopExecution();
+              return;
+            }
           } else if (remaining) {
             banner('HireRadar filled ' + completed.size + ' of ' + fields.length + ' prepared fields. Waiting for ' + remaining + ' dynamic field' + (remaining === 1 ? '' : 's') + '…');
           } else {
@@ -1224,11 +1244,10 @@
         }
       };
 
-      let debounce;
       // Re-run fill whenever the ATS mutates the DOM — this is how late-rendered
       // dynamic fields get filled. (Previously guarded by a flag that was always
       // true, so this never fired and dynamic fields were left unfilled.)
-      const observer = new MutationObserver(() => {
+      observer = new MutationObserver(() => {
         clearTimeout(debounce);
         debounce = setTimeout(run, 120);
       });
@@ -1236,7 +1255,7 @@
       await run();
       setTimeout(run, 750);
       setTimeout(run, 2000);
-      const retry = setInterval(() => {
+      retry = setInterval(() => {
         // Continue through the submit phase. Field completeness alone is not a
         // terminal state; only the ATS success page confirms submission.
         run();

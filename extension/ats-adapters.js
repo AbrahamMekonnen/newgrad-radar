@@ -242,14 +242,18 @@
       },
       uploadReadyOverride(doc, waitedMs) {
         if (waitedMs < 5000) return false;
-        const entry = [...doc.querySelectorAll('[data-field-path]')]
-          .find((item) => item.getAttribute('data-field-path') === '_systemfield_resume');
+        const entries = [...doc.querySelectorAll('[data-field-path]')];
+        const entry = entries.find((item) => /resume|cv/i.test(item.getAttribute('data-field-path') || ''))
+          || entries.find((item) => item.querySelector('input[type="file"]'));
         const input = entry?.querySelector('input[type="file"]');
         if (input?.files?.length) return true;
-        // Ashby may ingest the file and clear the native input. Its retained
-        // filename plus Replace action is the durable completion signal.
+        // Ashby may ingest the file and clear the native input. A retained
+        // filename or Replace control inside the resume field is durable proof
+        // that processing finished; unrelated stale live regions are ignored.
         const text = normalize(entry?.textContent || '');
-        return /\b(pdf|doc|docx)\b/.test(text) && /\breplace\b/.test(text);
+        const retainedName = /\b(pdf|doc|docx|rtf|txt)\b/.test(text);
+        const replaceAction = /\breplace\b|\bremove file\b|\bdownload\b/.test(text);
+        return Boolean(entry && (retainedName || replaceAction));
       },
       submissionComplete(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');

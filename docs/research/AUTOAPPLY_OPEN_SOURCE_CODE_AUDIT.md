@@ -58,3 +58,8 @@ Confirmed user corrections were also reusable by normalized question text withou
 - Generated ATS recipes are current.
 - Migration 057_autoapply_field_events.sql is applied so sanitized failures can feed fixture development.
 - Extension version changes only after all offline gates pass.
+
+## v0.14.1 live-canary correction
+
+The first v0.14.0 canary exposed repeated terminal diagnostics and stale Ashby upload status. v0.14.1 disconnects mutation observers and retry timers as soon as a form reaches submitted, waiting-for-user, upload-timeout, or unconfirmed-submission state. Ashby resume completion now searches the live resume/file container and accepts its retained filename or replacement control instead of trusting a stale page-wide live region.
+
