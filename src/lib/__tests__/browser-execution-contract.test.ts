@@ -41,6 +41,12 @@ describe('browser execution contract', () => {
     expect(JSON.stringify(result)).not.toContain('private');
   });
 
+  it('allows a bounded empty-DOM grace period during ATS navigation', () => {
+    expect(EXEC.withinTransitionGrace(0, 10000, 8000)).toBe(true);
+    expect(EXEC.withinTransitionGrace(5000, 12999, 8000)).toBe(true);
+    expect(EXEC.withinTransitionGrace(5000, 13000, 8000)).toBe(false);
+  });
+
   it('discovers a visible multistep continuation action without choosing arbitrary buttons', () => {
     const cancel = element('Cancel');
     const next = element('Save and Continue');

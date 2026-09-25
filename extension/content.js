@@ -880,12 +880,24 @@
       if (openApplicationForm()) return true;
       const formControls = document.querySelectorAll('form input, form textarea, form select, form button').length;
       if (formControls === 0) {
+        data.noFormSince ||= Date.now();
+        persist(data);
+        if (EXEC?.withinTransitionGrace?.(data.noFormSince, Date.now(), 8000)) {
+          banner('The ATS is changing pages. HireRadar is waiting for the next step or submission receipt...');
+          return true;
+        }
         if (data.browserWorker) await send({
           type: 'PROGRESS', stage: 'failed',
-          detail: { detail: 'The posting does not expose an application form or Apply action.' },
+          detail: { detail: 'The posting did not expose an application form or Apply action after the transition grace period.' },
         });
+        data.stopAutomation = true;
+        persist(data);
         banner('This posting does not currently expose an application form.', true);
         return false;
+      }
+      if (data.noFormSince) {
+        delete data.noFormSince;
+        persist(data);
       }
       const closedText = normalize(document.body?.innerText || '');
       if (/no longer accepting applications|job is no longer available|position has been filled|job not found/.test(closedText)) {

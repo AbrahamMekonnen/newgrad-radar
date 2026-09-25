@@ -43,6 +43,11 @@
     });
   };
 
+  const withinTransitionGrace = (startedAt, now = Date.now(), windowMs = 8000) => {
+    const start = Number(startedAt || 0);
+    return !start || now - start < windowMs;
+  };
+
   const findNextAction = (doc) => [...doc.querySelectorAll('button, input[type=button], input[type=submit]')]
     .filter((element) => visible(element) && !element.disabled)
     .map((element) => ({ element, text: normalize(element.textContent || element.value) }))
@@ -57,5 +62,5 @@
     return { ...classification, retry: attempts < 2 && classification.transient };
   };
 
-  return { normalize, visible, classifyErrors, safeDiagnostic, uploadPending, findNextAction, requiredInvalid, shouldRetrySubmit };
+  return { normalize, visible, classifyErrors, safeDiagnostic, uploadPending, withinTransitionGrace, findNextAction, requiredInvalid, shouldRetrySubmit };
 });
