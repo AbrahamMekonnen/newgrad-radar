@@ -303,27 +303,48 @@
 
   const createFieldLedger = (maxAttempts = 2) => {
     const states = new Map();
-    const get = (field) => states.get(stableFieldKey(field)) || { attempts: 0, status: 'discovered' };
+    const get = (field) => states.get(stableFieldKey(field)) || {
+      attempts: 0, status: 'discovered', failures: [],
+    };
+    const merge = (field, patch = {}) => {
+      const key = stableFieldKey(field);
+      const state = { ...get(field), ...patch };
+      states.set(key, state);
+      return state;
+    };
     return {
-      begin(field) {
-        const key = stableFieldKey(field);
+      discover(field, metadata = {}) {
+        return merge(field, { ...metadata, status: get(field).status || 'discovered' });
+      },
+      begin(field, metadata = {}) {
         const state = get(field);
-        if (state.status === 'verified' || state.status === 'needs_user' || state.attempts >= maxAttempts) return false;
-        states.set(key, { ...state, attempts: state.attempts + 1, status: 'filling' });
+        if (['verified', 'needs_user', 'failed'].includes(state.status) || state.attempts >= maxAttempts) return false;
+        merge(field, { ...metadata, attempts: state.attempts + 1, status: 'filling' });
         return true;
       },
-      verify(field) {
-        const state = get(field);
-        states.set(stableFieldKey(field), { ...state, status: 'verified' });
+      verify(field, metadata = {}) {
+        merge(field, { ...metadata, status: 'verified', retained: true });
       },
-      reject(field) {
+      reject(field, reason = 'not_retained', metadata = {}) {
         const state = get(field);
-        states.set(stableFieldKey(field), {
-          ...state,
+        const failures = [...(state.failures || []), reason];
+        merge(field, {
+          ...metadata, failures, retained: false, lastFailure: reason,
           status: state.attempts >= maxAttempts ? 'needs_user' : 'retry',
         });
       },
+      defer(field, reason = 'no_safe_answer', metadata = {}) {
+        merge(field, { ...metadata, status: 'needs_user', lastFailure: reason });
+      },
+      fail(field, reason = 'apply_error', metadata = {}) {
+        const state = get(field);
+        merge(field, { ...metadata, status: 'failed', lastFailure: reason,
+          failures: [...(state.failures || []), reason] });
+      },
       get,
+      snapshot() {
+        return [...states.entries()].map(([key, state]) => ({ key, ...state }));
+      },
     };
   };
 

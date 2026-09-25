@@ -53,11 +53,16 @@ describe('browser ATS adapters', () => {
     ledger.reject(field);
     expect(ledger.begin(field)).toBe(false);
     expect(ledger.get(field).status).toBe('needs_user');
+    expect(ledger.get(field).failures).toEqual(['not_retained', 'not_retained']);
 
     const accepted = { name: 'ethnicity', label: 'Ethnicity', type: 'combobox' };
     expect(ledger.begin(accepted)).toBe(true);
-    ledger.verify(accepted);
+    ledger.verify(accepted, { answerSource: 'saved' });
     expect(ledger.begin(accepted)).toBe(false);
+    expect(ledger.snapshot()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: 'needs_user', lastFailure: 'not_retained' }),
+      expect.objectContaining({ status: 'verified', retained: true, answerSource: 'saved' }),
+    ]));
   });
 
   it('maps Ashby data-field-path containers to controls and validates required entries', () => {
