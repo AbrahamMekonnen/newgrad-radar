@@ -110,7 +110,11 @@ def classify_question_smart(text: str, question_type: str | None = None) -> Qual
             _normalized(text),
             {"is_real": {
                 "type": "boolean",
-                "instructions": "Is this text a genuine technical or behavioral interview question that a candidate was actually asked (not a heading, navigation, ad, or random sentence fragment)?",
+                "instructions": "Would an interviewer ask this OF a candidate during a job interview?",
+                "criteria": {
+                    "true": "a genuine interview question: coding/algorithm/data-structure, SQL, system design, ML, a CS/technical concept, or a behavioral question",
+                    "false": "anything else even if phrased as a question — study/prep advice, 'how do you study', discussion, opinions, job-search chatter, meta commentary, headings, navigation, ads, or fragments",
+                },
             }},
         )
         p = jev.boolean(answers, "is_real")

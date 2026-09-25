@@ -34,15 +34,21 @@ def _load_env() -> None:
                     os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-IS_REAL_Q = {
-    "is_real": {
-        "type": "boolean",
-        "instructions": (
-            "Is this text a genuine technical or behavioral interview question that a "
-            "candidate was actually asked — not a heading, navigation link, ad, code "
-            "dump, or random sentence fragment?"
-        ),
-    }
+# Intent-aware: it must be a question an INTERVIEWER asks a CANDIDATE during a job
+# interview — not merely question-shaped text. This is what separates a real
+# interview question ("Reverse a linked list") from prep/study chatter ("What do
+# you do to study?"), advice, opinions, meta commentary, or fragments.
+REAL_Q_INSTRUCTION = (
+    "Would an interviewer ask this OF a candidate during a job interview?"
+)
+REAL_Q_CRITERIA = {
+    "true": ("a genuine interview question a candidate was asked: a coding/algorithm/"
+             "data-structure problem, SQL, system design, ML, a CS or technical concept "
+             "question, or a behavioral question (\"tell me about a time...\")"),
+    "false": ("anything else, EVEN IF phrased as a question: study or prep advice, "
+              "\"how do you study/prepare\", general discussion, opinions, job-search or "
+              "salary chatter, meta commentary, headings, navigation, ads, personal "
+              "updates, code dumps, or fragments"),
 }
 
 
@@ -72,6 +78,9 @@ def main() -> None:
              .select("id, question_text, source_name")
              .eq("is_junk", False)
              .not_.ilike("source_name", "leetcode%")
+             # Only rows Jev hasn't already checked, so repeated runs converge to
+             # zero work (safe to run continuously / 24-7 until everything's clean).
+             .or_("quality_filter_version.is.null,quality_filter_version.neq.jev-v1")
              .range(off, off + 999).execute().data) or []
         rows.extend(b)
         if len(b) < 1000:
@@ -102,7 +111,8 @@ def main() -> None:
             f"[{i}] {t}" for i, (_, t) in enumerate(askable)
         )
         qs = {f"q{i}": {"type": "boolean",
-                        "instructions": f"Is candidate item [{i}] a genuine technical or behavioral interview question a candidate was actually asked (not a heading, navigation, ad, code dump, or fragment)?"}
+                        "instructions": f"For candidate item [{i}]: {REAL_Q_INSTRUCTION}",
+                        "criteria": REAL_Q_CRITERIA}
               for i in range(len(askable))}
         ans = jev.evaluate(state, qs, retries=4)
         if ans is None:
@@ -113,6 +123,7 @@ def main() -> None:
 
     chunks = [rows[i:i + args.batch] for i in range(0, len(rows), args.batch)]
     to_drop: list = []
+    to_keep: list = []   # checked and judged real -> mark so we never re-check
     checked = 0
     failed_chunks = 0
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
@@ -130,9 +141,13 @@ def main() -> None:
                     break
                 continue
             for qid, p in res.items():
+                if p is None:
+                    continue  # couldn't judge -> leave unchecked, retry next run
                 checked += 1
-                if p is not None and p < args.threshold:
+                if p < args.threshold:
                     to_drop.append(qid)
+                else:
+                    to_keep.append(qid)
             print(f"  …checked {checked}/{len(rows)}, flagged {len(to_drop)} junk, failed chunks {failed_chunks}")
 
     print(f"Jev flagged {len(to_drop)} of {checked} checked as not-real (failed/rate-limited chunks: {failed_chunks})")
@@ -140,15 +155,21 @@ def main() -> None:
         print("[DRY RUN] no writes")
         return
 
-    # Demote the flagged rows in chunks.
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat()
     CHUNK = 200
+    # Demote junk (and mark it checked so it isn't re-evaluated).
     for i in range(0, len(to_drop), CHUNK):
-        batch = to_drop[i:i + CHUNK]
         client.table("interview_questions").update(
             {"is_junk": True, "junk_reason": "jev_not_a_question",
-             "quality_filter_version": "jev-v1"}
-        ).in_("id", batch).execute()
-    print(f"DONE: demoted {len(to_drop)} junk questions")
+             "quality_filter_version": "jev-v1", "quality_checked_at": now}
+        ).in_("id", to_drop[i:i + CHUNK]).execute()
+    # Mark the real ones as checked too, so continuous runs converge to no work.
+    for i in range(0, len(to_keep), CHUNK):
+        client.table("interview_questions").update(
+            {"quality_filter_version": "jev-v1", "quality_checked_at": now}
+        ).in_("id", to_keep[i:i + CHUNK]).execute()
+    print(f"DONE: demoted {len(to_drop)} junk, marked {len(to_keep)} real as checked")
 
 
 if __name__ == "__main__":
