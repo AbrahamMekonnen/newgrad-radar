@@ -5,11 +5,11 @@ import crypto from 'crypto';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// Gemini models to try in order of preference
+// Gemini models to try in order of preference (current, non-deprecated).
 const GEMINI_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-2.0-flash-exp',
-  'gemini-pro',
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
 ];
 
 // OpenAI-compatible free providers, tried in order after Gemini. The resume
@@ -18,9 +18,9 @@ const GEMINI_MODELS = [
 interface OAProvider { name: string; baseUrl: string; apiKey?: string; models: string[] }
 const OA_PROVIDERS: OAProvider[] = [
   { name: 'groq', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY,
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] },
+    models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'] },
   { name: 'cerebras', baseUrl: 'https://api.cerebras.ai/v1/chat/completions', apiKey: process.env.CEREBRAS_API_KEY,
-    models: ['llama-3.3-70b', 'llama3.1-8b'] },
+    models: ['llama-3.3-70b', 'gpt-oss-120b'] },
   { name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/chat/completions', apiKey: process.env.OPENROUTER_API_KEY,
     models: ['meta-llama/llama-3.3-70b-instruct:free'] },
   { name: 'mistral', baseUrl: 'https://api.mistral.ai/v1/chat/completions', apiKey: process.env.MISTRAL_API_KEY,
