@@ -35,41 +35,56 @@ def jev_available() -> bool:
     return bool(os.getenv("AI_GATEWAY_API_KEY")) and not _disabled
 
 
-def evaluate(state: Any, questions: dict, timeout: float = 12.0) -> Optional[dict]:
+def evaluate(state: Any, questions: dict, timeout: float = 12.0, retries: int = 0) -> Optional[dict]:
     """Evaluate `state` against typed `questions`; return the answers map or None.
 
     `questions` uses the Vercel AI Gateway shape, e.g.:
         {"is_real": {"type": "boolean", "instructions": "..."},
          "role": {"type": "choice", "instructions": "...", "criteria": {...}}}
     Returns the `answers` dict (same keys) or None on any failure.
+
+    retries: how many times to retry on a 429 (upstream overload — Jev is new and
+    frequently rate-limited) with exponential backoff. Default 0 = fast-fail, so
+    the latency-sensitive live scrape falls back immediately; backfills pass a few.
     """
     global _disabled
+    import time
     key = os.getenv("AI_GATEWAY_API_KEY")
     if not key or _disabled or not questions:
         return None
-    try:
-        r = requests.post(
-            GATEWAY_URL,
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={"model": MODEL, "state": state, "questions": questions},
-            timeout=timeout,
-        )
-        if r.status_code != 200:
-            # A verification/billing problem won't fix itself mid-run — stop
-            # trying so we don't add latency to every item's fallback path.
+    attempt = 0
+    while True:
+        try:
+            r = requests.post(
+                GATEWAY_URL,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": MODEL, "state": state, "questions": questions},
+                timeout=timeout,
+            )
+            if r.status_code == 200:
+                answers = r.json().get("answers")
+                return answers if isinstance(answers, dict) else None
             body = (r.text or "")[:200]
+            # Billing/verification won't fix itself mid-run — disable to avoid
+            # adding latency to every item's fallback path.
             if r.status_code in (402, 403) or "customer_verification" in body or "credit card" in body:
                 _disabled = True
                 logger.warning("Jev disabled for this run (account not enabled): %s", body)
-            else:
-                logger.debug("Jev HTTP %s: %s", r.status_code, body)
+                return None
+            # 429 = upstream overload; retry with backoff if we have budget.
+            if r.status_code == 429 and attempt < retries:
+                time.sleep(min(8.0, 1.5 * (2 ** attempt)))
+                attempt += 1
+                continue
+            logger.debug("Jev HTTP %s: %s", r.status_code, body)
             return None
-        data = r.json()
-        answers = data.get("answers")
-        return answers if isinstance(answers, dict) else None
-    except Exception as e:
-        logger.debug("Jev call failed: %s", e)
-        return None
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(min(8.0, 1.5 * (2 ** attempt)))
+                attempt += 1
+                continue
+            logger.debug("Jev call failed: %s", e)
+            return None
 
 
 # --- Answer helpers -------------------------------------------------------
