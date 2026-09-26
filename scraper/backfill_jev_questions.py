@@ -121,9 +121,26 @@ def main() -> None:
             results[qid] = jev.boolean(ans, f"q{i}")
         return results
 
+    import datetime as _dt
+
+    def _apply(drop_ids: list, keep_ids: list):
+        """Persist one chunk's verdicts immediately (incremental + resumable)."""
+        if args.dry_run:
+            return
+        now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        if drop_ids:
+            client.table("interview_questions").update(
+                {"is_junk": True, "junk_reason": "jev_not_a_question",
+                 "quality_filter_version": "jev-v1", "quality_checked_at": now}
+            ).in_("id", drop_ids).execute()
+        if keep_ids:
+            client.table("interview_questions").update(
+                {"quality_filter_version": "jev-v1", "quality_checked_at": now}
+            ).in_("id", keep_ids).execute()
+
     chunks = [rows[i:i + args.batch] for i in range(0, len(rows), args.batch)]
-    to_drop: list = []
-    to_keep: list = []   # checked and judged real -> mark so we never re-check
+    total_drop = 0
+    total_keep = 0
     checked = 0
     failed_chunks = 0
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
@@ -140,36 +157,19 @@ def main() -> None:
                     print("Jev disabled mid-run (quota/billing). Stopping; run again later.")
                     break
                 continue
+            drop_ids, keep_ids = [], []
             for qid, p in res.items():
                 if p is None:
                     continue  # couldn't judge -> leave unchecked, retry next run
                 checked += 1
-                if p < args.threshold:
-                    to_drop.append(qid)
-                else:
-                    to_keep.append(qid)
-            print(f"  …checked {checked}/{len(rows)}, flagged {len(to_drop)} junk, failed chunks {failed_chunks}")
+                (drop_ids if p < args.threshold else keep_ids).append(qid)
+            _apply(drop_ids, keep_ids)  # write this chunk NOW
+            total_drop += len(drop_ids)
+            total_keep += len(keep_ids)
+            print(f"  …checked {checked}/{len(rows)}, demoted {total_drop}, kept {total_keep}, failed chunks {failed_chunks}", flush=True)
 
-    print(f"Jev flagged {len(to_drop)} of {checked} checked as not-real (failed/rate-limited chunks: {failed_chunks})")
-    if args.dry_run:
-        print("[DRY RUN] no writes")
-        return
-
-    import datetime as _dt
-    now = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    CHUNK = 200
-    # Demote junk (and mark it checked so it isn't re-evaluated).
-    for i in range(0, len(to_drop), CHUNK):
-        client.table("interview_questions").update(
-            {"is_junk": True, "junk_reason": "jev_not_a_question",
-             "quality_filter_version": "jev-v1", "quality_checked_at": now}
-        ).in_("id", to_drop[i:i + CHUNK]).execute()
-    # Mark the real ones as checked too, so continuous runs converge to no work.
-    for i in range(0, len(to_keep), CHUNK):
-        client.table("interview_questions").update(
-            {"quality_filter_version": "jev-v1", "quality_checked_at": now}
-        ).in_("id", to_keep[i:i + CHUNK]).execute()
-    print(f"DONE: demoted {len(to_drop)} junk, marked {len(to_keep)} real as checked")
+    print(f"DONE: demoted {total_drop} junk, marked {total_keep} real as checked "
+          f"({checked} checked, {failed_chunks} rate-limited chunks — rerun to finish)")
 
 
 if __name__ == "__main__":
