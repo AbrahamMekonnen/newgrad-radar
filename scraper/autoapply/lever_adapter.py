@@ -123,6 +123,11 @@ def _lever_category(label: str, field_name: str = "") -> str:
     lo = (label or "").lower().strip()
     fn_lo = (field_name or "").lower()
 
+    # A school name is an education fact, never the applicant's full name.
+    # This guard must precede the shared generic "name" category.
+    if re.search(r"\bhigh\s*school\s*name\b", lo):
+        return "high_school_name"
+
     # Handle Lever's urls[key] format directly
     if fn_lo.startswith("urls["):
         key = fn_lo.replace("urls[", "").replace("]", "").lower()
@@ -246,6 +251,11 @@ def _lever_resolve_one(cat: str, ftype: str, values: list[dict], p: Profile, lab
         (value, source) tuple
     """
     # Lever-specific categories not in greenhouse_adapter
+
+    if cat == "high_school_name":
+        custom = getattr(p, "custom_answers", {}) or {}
+        value = custom.get("__fact:high_school_name") or custom.get("high_school_name")
+        return (value, "profile") if value else (None, "user_needed")
 
     # Previous employment (10%): default to No
     if cat == "previous_employment":

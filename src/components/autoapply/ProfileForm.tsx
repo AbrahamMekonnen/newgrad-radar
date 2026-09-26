@@ -595,6 +595,12 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </div>
           ))}
           <Input
+            label="High school name"
+            value={customFact('high_school_name')}
+            onChange={(e) => handleFactChange('high_school_name', e.target.value)}
+            placeholder="Your high school"
+          />
+          <Input
             label="High school graduation year"
             value={customFact('high_school_graduation_year')}
             onChange={(e) => handleFactChange('high_school_graduation_year', e.target.value)}

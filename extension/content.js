@@ -120,6 +120,14 @@
     return el.parentElement?.textContent || '';
   };
 
+  const checkboxGroupFor = (element) => {
+    const container = element?.closest?.('.application-question, fieldset, [role="group"], [class*="question"]');
+    if (!container) return element ? [element] : [];
+    const boxes = [...container.querySelectorAll('input[type="checkbox"]')]
+      .filter((item) => item.getClientRects().length > 0 && item.getAttribute('aria-hidden') !== 'true');
+    return boxes.length ? boxes : (element ? [element] : []);
+  };
+
   const optionMatches = (text, wanted) => {
     const got = normalize(text);
     const target = normalize(wanted);
@@ -395,9 +403,17 @@
     if (element.type === 'checkbox') {
       const adapter = ATS?.detect(location.href);
       if (adapter?.fillCheckbox?.(element, answerLabel(field))) return true;
+      if (field.type === 'checkbox-group') {
+        const boxes = checkboxGroupFor(element);
+        const option = bestMatch(boxes, answerLabel(field), labelTextFor);
+        if (!option) return false;
+        if (!option.checked) option.click();
+        option.dispatchEvent(new Event('change', { bubbles: true }));
+        return Boolean(option.checked);
+      }
       const checked = !['false', 'no', '0', ''].includes(normalize(value));
       if (element.checked !== checked) element.click();
-      return true;
+      return element.checked === checked;
     }
     if (String(element.value || '').trim()) return true; // never overwrite user edits
     setNativeValue(element, value);
@@ -591,7 +607,15 @@
     if (element.type === 'radio') {
       return [...document.querySelectorAll('input[type=\"radio\"]')].some((item) => item.name === element.name && item.checked);
     }
-    if (element.type === 'checkbox') return element.checked;
+    if (element.type === 'checkbox') {
+      if (field?.type === 'checkbox-group') {
+        const boxes = checkboxGroupFor(element);
+        const wanted = answerLabel(field);
+        const option = bestMatch(boxes, wanted, labelTextFor);
+        return option ? Boolean(option.checked) : boxes.some((item) => item.checked);
+      }
+      return element.checked;
+    }
     if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
       // React-Select keeps search text in the input while no option is selected.
       // Require retained selection UI rather than treating that search text as
@@ -627,6 +651,15 @@
       const name = descriptor.name;
       if (seen.has(name)) return [];
       seen.add(name);
+
+      if (element.type === 'checkbox') {
+        const group = checkboxGroupFor(element);
+        if (group.length > 1) {
+          if (group.some((item) => item.checked)) return [];
+          const options = group.map((item) => String(labelTextFor(item) || item.value || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+          return [{ ...descriptor, type: 'checkbox-group', options, optionSignature: ATS?.optionSignature?.(options) || '' }];
+        }
+      }
 
       if (element.type === 'radio') {
         const group = controls.filter((item) => item.type === 'radio' && item.name === element.name);

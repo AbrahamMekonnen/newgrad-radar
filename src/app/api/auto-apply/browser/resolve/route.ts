@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('truthfulness_certification'), 'saved', 'Matched the explicit application certification')) continue;
     if (/english.*(level|proficiency)|level of english/.test(q) && pick(f, fact('english_level'), 'saved', 'Matched an explicit English proficiency level')) continue;
     if (/^english(?: eng)?$/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Matched the confirmed English-language fact')) continue;
-    if (/language skill/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Selected English from the confirmed language profile')) continue;
+    if (/language skill/.test(q) && fact('english_level') && pick(f, 'English', 'saved', 'Selected English from the confirmed language profile')) continue;
     if (/other languages|languages do you speak|additional languages/.test(q) && pick(f, fact('other_languages'), 'saved', 'Matched explicit language proficiency facts')) continue;
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
     if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;
@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/major|field of study|area of study/.test(q) && pick(f, profile?.education_major)) continue;
+    if (/high school.*name|name.*high school/.test(q)
+      && pick(f, fact('high_school_name'), 'saved', 'Matched the confirmed high-school name')) continue;
     if (/high school.*graduat.*year|year of high school graduation/.test(q)
       && pick(f, fact('high_school_graduation_year'), 'saved', 'Matched the confirmed high-school graduation year')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {

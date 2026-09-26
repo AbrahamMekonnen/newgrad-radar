@@ -11,6 +11,7 @@ for directory in (str(AUTOAPPLY_DIR), str(SCRAPER_DIR)):
 
 import field_knowledge_base as kb
 import greenhouse_adapter as gh
+import lever_adapter as lever
 import prepare_worker
 import submit
 from salary_market import market_salary, salary_answer
@@ -135,6 +136,26 @@ class AutoApplyRegressionTests(unittest.TestCase):
                 "sponsorship", "select",
                 [{"label": "Yes", "value": 1}, {"label": "No", "value": 0}],
                 sponsorship_profile, "Will you require sponsorship?",
+            ),
+        )
+
+    def test_lever_high_school_name_never_uses_applicant_name(self):
+        self.assertEqual(
+            "high_school_name",
+            lever._lever_category("High School Name", "cards[school][text]"),
+        )
+        missing = gh.Profile(first_name="Abraham", last_name="Mekonnen", custom_answers={})
+        value, source = lever._lever_resolve_one(
+            "high_school_name", "input", [], missing, "High School Name"
+        )
+        self.assertIsNone(value)
+        self.assertEqual("user_needed", source)
+
+        confirmed = gh.Profile(custom_answers={"__fact:high_school_name": "Central High School"})
+        self.assertEqual(
+            ("Central High School", "profile"),
+            lever._lever_resolve_one(
+                "high_school_name", "input", [], confirmed, "High School Name"
             ),
         )
 
