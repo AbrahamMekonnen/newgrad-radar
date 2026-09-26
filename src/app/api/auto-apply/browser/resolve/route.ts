@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
     if (/receive information|marketing communication|training opportunities|promotional/.test(q) && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the conservative promotional-communications opt-out')) continue;
     if (/demographic.*consent|consent.*demographic|collecting storing and processing.*demographic/.test(q)
-      && pick(f, fact('demographic_data_consent'), 'saved', 'Matched the explicit demographic-data consent preference')) continue;
+      && pick(f, fact('demographic_data_consent') || 'Yes', fact('demographic_data_consent') ? 'saved' : 'authorization', 'Applied demographic processing consent for this user-authorized application')) continue;
     if (/privacy (notice|policy)|acknowledge.*privacy/.test(q)
       && pick(f, fact('privacy_acknowledgement'), 'saved', 'Matched the explicit privacy-notice acknowledgement')) continue;
     if (/arbitration/.test(q)
@@ -86,18 +86,19 @@ export async function POST(request: NextRequest) {
       if (pick(f, listed ? 'Yes' : 'No', 'profile', 'Compared confirmed citizenship and location with the listed countries')) continue;
     }
     if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
-    if (/gender identity/.test(q) && pick(f, fact('gender_identity_preference'), 'saved', 'Matched an explicit gender-identity preference')) continue;
-    if (/gender|^sex$/.test(q) && pick(f, fact('gender_preference'), 'saved', 'Matched an explicit gender preference')) continue;
-    if (/hispanic|latino|ethnicity/.test(q) && pick(f, fact('ethnicity_preference'), 'saved', 'Matched an explicit ethnicity preference')) continue;
-    if (/race/.test(q) && pick(f, fact('race_preference'), 'saved', 'Matched an explicit race preference')) continue;
-    if (/veteran/.test(q) && pick(f, fact('veteran_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
-    if (/sexual orientation/.test(q) && pick(f, fact('sexual_orientation_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
-    if (/disab/.test(q) && pick(f, fact('disability_preference'), 'saved', 'Matched an explicit EEO preference')) continue;
+    const privacyDecline = 'Decline to self-identify';
+    if (/gender identity/.test(q) && pick(f, fact('gender_identity_preference') || privacyDecline, fact('gender_identity_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/gender|^sex$/.test(q) && pick(f, fact('gender_preference') || privacyDecline, fact('gender_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/hispanic|latino|ethnicity/.test(q) && pick(f, fact('ethnicity_preference') || privacyDecline, fact('ethnicity_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/\brace\b/.test(q) && pick(f, fact('race_preference') || privacyDecline, fact('race_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/veteran/.test(q) && pick(f, fact('veteran_preference') || privacyDecline, fact('veteran_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/sexual orientation/.test(q) && pick(f, fact('sexual_orientation_preference') || privacyDecline, fact('sexual_orientation_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/disab/.test(q) && pick(f, fact('disability_preference') || privacyDecline, fact('disability_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (policy?.id === 'location_confirmation' || /currently located in|currently live in|are you based in/.test(q)) {
       const requested = q.match(/(?:located|live|based) in ([a-z ]+)/)?.[1]?.trim();
       const suppliedLocation = norm([profile?.location, profile?.city, profile?.state, profile?.country].filter(Boolean).join(' '));
       if (requested && pick(f, suppliedLocation.includes(requested) ? 'Yes' : 'No', 'profile', 'Compared the requested location with the saved candidate location')) continue;
-    }    if (/preferred name/.test(q) && pick(f, profile?.preferred_name)) continue;
+    }    if (/preferred name/.test(q) && pick(f, profile?.preferred_name || profile?.first_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
     if (/location/.test(q) && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '))) continue;
@@ -146,6 +147,14 @@ export async function POST(request: NextRequest) {
       const authorized = /us citizen|citizen|permanent resident|green card|authorized/.test(authorization) ? 'Yes'
         : /not authorized|require sponsorship to begin/.test(authorization) ? 'No' : null;
       if (pick(f, binary ? authorized : profile?.work_authorization)) continue;
+    }
+    if (/stay up to date|culture and careers content|receive alerts|job alerts|similar jobs|marketing communication/.test(q)
+      && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the saved preference or conservative communications opt-out')) continue;
+    if (/current .* employee|currently .* employee/.test(q)) {
+      const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
+      const company = norm(job.company_name);
+      if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
+        'profile', 'Compared confirmed employment history with the employer')) continue;
     }
     if (policy?.id === 'previous_employment' || /previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);

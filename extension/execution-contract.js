@@ -54,13 +54,14 @@
     .filter(({ text }) => /^(next|continue|save and continue|review application|review)$/.test(text))
     .sort((a, b) => (/review/.test(b.text) ? 1 : 0) - (/review/.test(a.text) ? 1 : 0))[0]?.element || null;
 
-  const requiredInvalid = (root) => [...(root?.querySelectorAll?.('input, textarea, select, [role=combobox]') || [])]
-    .find((element) => visible(element) && element.willValidate && !element.checkValidity()) || null;
+  const requiredInvalids = (root) => [...(root?.querySelectorAll?.('input, textarea, select, [role=combobox]') || [])]
+    .filter((element) => visible(element) && element.willValidate && !element.checkValidity());
+  const requiredInvalid = (root) => requiredInvalids(root)[0] || null;
 
   const shouldRetrySubmit = ({ attempts, errors }) => {
     const classification = classifyErrors(errors);
     return { ...classification, retry: attempts < 2 && classification.transient };
   };
 
-  return { normalize, visible, classifyErrors, safeDiagnostic, uploadPending, withinTransitionGrace, findNextAction, requiredInvalid, shouldRetrySubmit };
+  return { normalize, visible, classifyErrors, safeDiagnostic, uploadPending, withinTransitionGrace, findNextAction, requiredInvalid, requiredInvalids, shouldRetrySubmit };
 });

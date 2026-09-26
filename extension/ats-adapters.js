@@ -41,11 +41,18 @@
     const target = normalize(wanted);
     const usable = (options || []).filter((option) => {
       const value = normalize(option);
-      return value && !/^(select|choose|please select)\b/.test(value);
+      return value && !/^(select|choose|please select)( an?| one| option)?$/.test(value);
     });
     if (!target) return null;
     const exact = usable.find((option) => normalize(option) === target);
     if (exact) return exact;
+
+    const privacyDecline = /decline|self identify|prefer not|do not wish|don t wish|not wish to answer/.test(target);
+    if (privacyDecline) {
+      const option = usable.find((candidate) =>
+        /decline|prefer not|do not wish|don t wish|not wish to answer|choose not to disclose/.test(normalize(candidate)));
+      if (option) return option;
+    }
 
     const q = normalize(question);
     if (/degree|education level|qualification/.test(q)) {

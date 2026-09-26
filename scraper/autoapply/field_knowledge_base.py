@@ -885,6 +885,18 @@ def lookup_field(label: str, field_name: str = "") -> tuple[str, str, str]:
     # an essay, forbid the identity categories and let it fall through to AI draft.
     essay = _is_essay_like(label_lower)
 
+    # Specific identity/education labels must win before broad tokens such as
+    # "name". Otherwise Preferred Name and High School Name become Full Name.
+    explicit = {
+        "preferred name": "preferred_name",
+        "preferred first name": "preferred_name",
+        "nickname": "preferred_name",
+    }
+    for phrase, category in explicit.items():
+        if phrase in label_lower:
+            info = FIELD_PATTERNS[category]
+            return (category, info["profile_field"], info["resolution"])
+
     # Precedence: a question that mentions sponsorship is ABOUT sponsorship, even
     # when it also says "work authorization" (e.g. "Will you now or in the future
     # require sponsorship for work authorization?"). It must resolve from

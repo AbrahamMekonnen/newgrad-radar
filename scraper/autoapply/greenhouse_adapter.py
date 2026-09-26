@@ -239,19 +239,43 @@ def fetch_form(token: str, job_id) -> list[dict]:
              "fields": [{"name": "discipline--0", "type": "combobox", "values": []}]},
         ])
 
-    for section in data.get("compliance") or []:
-        # Greenhouse's hosted form splits the API Race field into its own
-        # Hispanic/Latino control and conditional race controls.
-        questions.extend(
-            q for q in (section.get("questions") or [])
-            if not any((f.get("name") or "") == "race" for f in (q.get("fields") or []))
-        )
+    compliance = data.get("compliance") or []
+    if isinstance(compliance, dict):
+        compliance = [compliance]
+    for section in compliance:
+        questions.extend(section.get("questions") or [])
+
+    demographic = data.get("demographic_questions") or {}
+    for question in demographic.get("questions") or []:
+        options = [
+            {"label": option.get("label", ""), "value": option.get("id"),
+             "decline_to_answer": bool(option.get("decline_to_answer"))}
+            for option in (question.get("answer_options") or [])
+        ]
+        questions.append({
+            "label": question.get("label", ""),
+            "required": bool(question.get("required")),
+            "fields": [{
+                "name": f"demographic_question_{question.get('id')}",
+                "type": question.get("type") or "multi_value_single_select",
+                "values": options,
+            }],
+        })
+
+    data_compliance = data.get("data_compliance") or []
+    if any(item.get("demographic_data_consent_applies") for item in data_compliance):
+        questions.append({
+            "label": "Consent to demographic data processing",
+            "required": True,
+            "default_category": "data_consent",
+            "fields": [{"name": "demographic_data_consent", "type": "checkbox", "values": []}],
+        })
 
     # This hosted EEO control is derived by Greenhouse but absent from the API.
     existing_names = {
         f.get("name") for q in questions for f in (q.get("fields") or [])
     }
-    if "hispanic_ethnicity" not in existing_names and any(
+    if not demographic and "hispanic_ethnicity" not in existing_names and any(
         q.get("label") in ("Race", "Gender") for q in questions
     ):
         questions.append({
@@ -591,6 +615,10 @@ def _category(label: str, field_name: str = "") -> str:
         return "government_employment"
     if "if yes" in lo and "relationship" in lo and "full name" in lo:
         return "conditional_detail"
+    if ("high school" in lo or "secondary school" in lo) and ("graduat" in lo or "year" in lo):
+        return "high_school_graduation_year"
+    if ("high school" in lo or "secondary school" in lo) and "name" in lo:
+        return "high_school_name"
     if field_name == "hispanic_ethnicity":
         return "race"
     if "citizenship" in lo or "citizen status" in lo:

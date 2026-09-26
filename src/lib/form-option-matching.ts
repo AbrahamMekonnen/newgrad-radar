@@ -13,11 +13,18 @@ function degreeLevel(value: unknown): string {
 export function matchAvailableOption(question: unknown, wanted: unknown, options: string[]): string | null {
   const target = norm(wanted);
   if (!target) return null;
-  const usable = options.filter((option) => norm(option) && !/^select\b|^choose\b/.test(norm(option)));
+  const usable = options.filter((option) => norm(option) && !/^(select|choose)( an?| one| option)?$/.test(norm(option)));
   const exact = usable.find((option) => norm(option) === target);
   if (exact) return exact;
 
   const q = norm(question);
+
+  const privacyDecline = /decline|self identify|prefer not|do not wish|don't wish|not wish to answer/.test(target);
+  if (privacyDecline) {
+    const option = usable.find((candidate) =>
+      /decline|prefer not|do not wish|don t wish|not wish to answer|choose not to disclose/.test(norm(candidate)));
+    if (option) return option;
+  }
 
   if (/country/.test(q)) {
     const aliases: Record<string, string> = {

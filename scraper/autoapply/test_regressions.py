@@ -77,6 +77,8 @@ class AutoApplyRegressionTests(unittest.TestCase):
                 "work_authorization": "us_citizen",
                 "require_sponsorship": None,
                 "custom_answers": {},
+                "linkedin_url": "https:linkdein/johndowe",
+                "preferred_name": None,
             },
             "generated_answers": [],
             "user_story_bank": [],
@@ -86,6 +88,8 @@ class AutoApplyRegressionTests(unittest.TestCase):
         self.assertTrue(profile.is_us_citizen)
         self.assertEqual("Seattle", profile.city)
         self.assertEqual("WA", profile.state)
+        self.assertEqual("", profile.linkedin_url)
+        self.assertEqual("A", profile.preferred_name)
 
     def test_resume_education_enrichment_is_conservative(self):
         profile = gh.Profile(
@@ -101,6 +105,26 @@ class AutoApplyRegressionTests(unittest.TestCase):
         self.assertEqual("Computer Science", profile.major)
         self.assertEqual("2026", profile.graduation_year)
         self.assertEqual(profile.school, updates["education_school"])
+
+    def test_specific_name_labels_beat_generic_full_name(self):
+        self.assertEqual("preferred_name", kb.lookup_category("Preferred Name"))
+        self.assertNotEqual("full_name", kb.lookup_category("Preferred Name"))
+
+    def test_high_school_fields_never_map_to_person_name(self):
+        self.assertEqual(gh._category("High School Name"), "high_school_name")
+        self.assertEqual(
+            gh._category("Year of High School Graduation"),
+            "high_school_graduation_year",
+        )
+        profile = gh.Profile(
+            first_name="Abraham",
+            last_name="Mekonnen",
+            custom_answers={"high_school_name": "Central High School"},
+        )
+        value, source = gh._resolve_one(
+            "high_school_name", "input_text", [], profile, "High School Name"
+        )
+        self.assertEqual((value, source), ("Central High School", "profile"))
 
     def test_common_questions_are_categorized_and_resolved(self):
         self.assertEqual(
@@ -286,6 +310,26 @@ class AutoApplyRegressionTests(unittest.TestCase):
                     {"name": "race", "type": "select", "values": []}
                 ]},
             ]}],
+            "demographic_questions": {
+                "questions": [
+                    {"id": 1653, "label": "Gender", "required": True,
+                     "type": "multi_value_single_select", "answer_options": [
+                        {"id": 11748, "label": "I don't wish to answer",
+                         "decline_to_answer": True}
+                     ]},
+                    {"id": 1655, "label": "Race", "required": True,
+                     "type": "multi_value_single_select", "answer_options": [
+                        {"id": 11761, "label": "I don't wish to answer",
+                         "decline_to_answer": True}
+                     ]},
+                    {"id": 1656, "label": "Are you Hispanic/Latino?", "required": True,
+                     "type": "multi_value_single_select", "answer_options": [
+                        {"id": 11764, "label": "I don't wish to answer",
+                         "decline_to_answer": True}
+                     ]},
+                ],
+            },
+            "data_compliance": [{"demographic_data_consent_applies": True}],
         }
 
         class Response:
@@ -304,8 +348,12 @@ class AutoApplyRegressionTests(unittest.TestCase):
         self.assertIn("degree--0", names)
         self.assertIn("discipline--0", names)
         self.assertIn("gender", names)
-        self.assertIn("hispanic_ethnicity", names)
-        self.assertNotIn("race", names)
+        self.assertIn("race", names)
+        self.assertIn("demographic_question_1653", names)
+        self.assertIn("demographic_question_1655", names)
+        self.assertIn("demographic_question_1656", names)
+        self.assertIn("demographic_data_consent", names)
+        self.assertNotIn("hispanic_ethnicity", names)
 
     def test_greenhouse_submission_uses_browser_without_claiming_visible_captcha(self):
         with patch.object(submit, "detect_captcha", side_effect=AssertionError("not needed")):

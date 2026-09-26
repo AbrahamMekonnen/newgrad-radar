@@ -124,14 +124,28 @@ def build_profile(client, user_id: str) -> gh.Profile:
     city = row.get("city") or custom.get("city") or (location_parts[0] if location_parts else "")
     state = row.get("state") or custom.get("state") or (location_parts[1] if len(location_parts) > 1 else "")
 
+    def safe_profile_url(value, allowed_host=None):
+        raw = str(value or "").strip()
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(raw)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme not in ("http", "https") or not host:
+                return ""
+            if allowed_host and not (host == allowed_host or host.endswith("." + allowed_host)):
+                return ""
+            return raw
+        except Exception:
+            return ""
+
     prof = gh.Profile(
         first_name=row.get("first_name") or "", last_name=row.get("last_name") or "",
         email=row.get("email") or "", phone=row.get("phone") or "",
         location=location, city=city, state=state,
         zip_code=str(row.get("zip_code") or custom.get("zip_code") or ""),
         country=str(row.get("country") or custom.get("country") or "United States"),
-        linkedin_url=row.get("linkedin_url") or "",
-        github_url=row.get("github_url") or "", portfolio_url=row.get("portfolio_url") or "",
+        linkedin_url=safe_profile_url(row.get("linkedin_url"), "linkedin.com"),
+        github_url=safe_profile_url(row.get("github_url"), "github.com"), portfolio_url=safe_profile_url(row.get("portfolio_url")),
         resume_url=row.get("resume_url") or "",
         work_authorization=authorization,
         work_authorized=(None if not authorization else authorization != "need_sponsorship"),
@@ -153,7 +167,7 @@ def build_profile(client, user_id: str) -> gh.Profile:
         current_title=str(row.get("current_title") or custom.get("current_title") or ""),
         prior_employers=list(row.get("prior_employers") or []),
         bay_area_resident=row.get("bay_area_resident"),
-        preferred_name=str(row.get("preferred_name") or ""),
+        preferred_name=str(row.get("preferred_name") or row.get("first_name") or ""),
         pronouns=str(row.get("pronouns") or ""),
         address_line1=str(row.get("address_line1") or ""),
         address_line2=str(row.get("address_line2") or ""),

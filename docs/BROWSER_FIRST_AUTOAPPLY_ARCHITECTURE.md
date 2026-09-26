@@ -910,3 +910,27 @@ Test adapters in this order: Greenhouse, Lever, Ashby, SmartRecruiters, then Wor
 - missing sensitive facts
 
 A live test is successful only when the ATS confirms receipt and both autoapply_job_queue and saved_jobs agree. Filled or clicked forms do not count as submitted.
+
+## 15. Live-schema authority (v0.16)
+
+The rendered application form is the authoritative schema. Server preparation is a cache of likely answers, never proof that an application is complete. Greenhouse preparation must also ingest questions, location_questions, compliance, demographic_questions, and data_compliance when those sections are present.
+
+Every application runs as one bounded transaction:
+
+1. Collect every visible and required control, including controls rendered in portals, custom dropdowns, compliance sections, and conditional sections.
+2. Normalize controls into stable field records containing identity, label, type, options, required state, and current value.
+3. Classify and rationalize the whole form before filling. Context such as section headings and neighboring labels must override generic label guesses.
+4. Resolve each field from validated profile facts, deterministic policy, prepared answers, or AI. Sensitive facts require a saved user answer or a privacy-preserving decline option. AI is reserved for open-ended writing.
+5. Apply each planned answer once, verify the resulting DOM value, and permit at most one materially different retry.
+6. Rescan after conditional sections settle. Repeat only while the schema changes; identical unresolved states terminate instead of generating an event loop.
+7. Submit only when the live schema has zero unresolved required fields. Mark submitted only after positive ATS receipt evidence.
+
+Profile data is validated at the boundary. Invalid placeholder URLs are discarded, preferred name falls back to first name, and absence of a company in employment history may resolve an explicit current/former-employee question to No. Marketing and alert questions default to No. Required EEO questions use the user's saved preference when available and otherwise select the form's own decline-to-answer choice. Demographic processing consent may be accepted only because the user explicitly authorized the auto-apply transaction.
+
+Acceptance fixtures must include a full MongoDB-style Greenhouse form with six required demographic questions and demographic-data consent. The transaction passes only when all seven controls are resolved, a placeholder LinkedIn URL is rejected, Preferred Name is not populated with the full legal name, repeated unresolved events stop, and the submission state remains unsubmitted until the ATS confirms receipt.
+
+Reference designs:
+
+- Greenhouse Job Board API: https://docs.greenhouse.io/job-board.html
+- Chromium Autofill form model: https://chromium.googlesource.com/chromium/src.git/+/HEAD/components/autofill/
+- Bitwarden browser autofill collector: https://github.com/bitwarden/clients/blob/main/apps/browser/src/autofill/services/collect-autofill-content.service.ts

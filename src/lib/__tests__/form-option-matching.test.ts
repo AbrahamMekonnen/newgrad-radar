@@ -64,6 +64,15 @@ describe('matchAvailableOption', () => {
       'Yes', 'No',
     ])).toBe('No');
   });
+  it('maps privacy-preserving decline wording across ATS variants', () => {
+    expect(matchAvailableOption('Gender', 'Decline to self-identify', [
+      'Male', 'Female', "I don't wish to answer",
+    ])).toBe("I don't wish to answer");
+    expect(matchAvailableOption('Veteran Status', 'Decline to self-identify', [
+      'Protected veteran', 'Choose not to disclose',
+    ])).toBe('Choose not to disclose');
+  });
+
   it('maps a saved state abbreviation to an ATS state option', () => {
     expect(matchAvailableOption('Please provide the state/region where you reside', 'CA', [
       'California', 'Colorado', 'New York',

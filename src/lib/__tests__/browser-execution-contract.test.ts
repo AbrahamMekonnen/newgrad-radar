@@ -63,7 +63,10 @@ describe('browser execution contract', () => {
     const hiddenProxy = element('', { willValidate: true, checkValidity: () => false,
       getAttribute: (name: string) => name === 'aria-hidden' ? 'true' : null });
     const invalid = element('', { willValidate: true, checkValidity: () => false });
-    const root = { querySelectorAll: () => [hiddenProxy, invalid] };
+    const secondInvalid = element('', { willValidate: true, checkValidity: () => false });
+    const valid = element('', { willValidate: true, checkValidity: () => true });
+    const root = { querySelectorAll: () => [hiddenProxy, invalid, valid, secondInvalid] };
     expect(EXEC.requiredInvalid(root)).toBe(invalid);
+    expect(EXEC.requiredInvalids(root)).toEqual([invalid, secondInvalid]);
   });
 });

@@ -133,7 +133,8 @@
     const target = normalize(wanted);
     if (!got || !target) return false;
     if (got === target || got.includes(target) || target.includes(got)) return true;
-    if (target.includes('decline') && (got.includes('decline') || got.includes('prefer not') || got.includes('do not want'))) return true;
+    if (/decline|self identify|prefer not|do not wish|don t wish|not wish to answer/.test(target)
+      && /decline|prefer not|do not wish|don t wish|not wish to answer|choose not to disclose/.test(got)) return true;
     const targetTokens = new Set(target.split(' ').filter((x) => x.length > 2));
     const gotTokens = new Set(got.split(' ').filter((x) => x.length > 2));
     if (!targetTokens.size) return false;
@@ -576,6 +577,23 @@
     const contextual = genericChoice ? String(container?.textContent || '').replace(/\s+/g, ' ').trim() : '';
     return (contextual || primary).slice(0, 1000);
   };
+  const questionContainerFor = (element) => element.closest(
+    '.application-question, fieldset, [role="radiogroup"], [role="group"], [data-field-path], [data-automation-id*="question"], [class*="question"]'
+  );
+  const elementIsRequired = (element, label) => {
+    if (element.required || element.getAttribute('aria-required') === 'true'
+      || element.getAttribute('data-required') === 'true') return true;
+    const question = questionContainerFor(element);
+    if (element.type === 'radio' && element.name) {
+      const group = [...document.querySelectorAll('input[type="radio"]')]
+        .filter((item) => item.name === element.name);
+      if (group.some((item) => item.required || item.getAttribute('aria-required') === 'true')) return true;
+    }
+    const marker = question?.querySelector(
+      '[data-required="true"], [aria-label*="required" i], .required-indicator, .field-required, [class~="required"]'
+    );
+    return Boolean(marker || /(?:\*|\u2731)\s*$/.test(String(label || '').trim()));
+  };
   const liveFieldFor = (element, index = 0) => {
     let name = element.name || element.id || element.dataset.hireradarField;
     if (!name) {
@@ -593,12 +611,11 @@
     const section = String(
       sectionElement?.querySelector?.('legend, h2, h3, h4, [class*=heading], [class*=title]')?.textContent || ''
     ).replace(/\s+/g, ' ').trim().slice(0, 300);
-    const fieldId = [normalize(section), normalize(label), normalize(semanticType), String(index)]
+    const identity = String(element.name || element.id || element.dataset.hireradarField || index);
+    const fieldId = [normalize(section), normalize(label), normalize(semanticType), normalize(identity)]
       .filter(Boolean).join('|');
     const adapter = ATS?.detect(location.href);
-    const required = Boolean(element.required || element.getAttribute('aria-required') === 'true'
-      || element.closest('[aria-required=true], .required, [class*=required]')
-      || adapter?.isRequired?.(element));
+    const required = Boolean(elementIsRequired(element, label) || adapter?.isRequired?.(element));
     return { name, fieldId, label, section, type: semanticType, required, options, optionSignature: ATS?.optionSignature?.(options) || '' };
   };
   const controlHasValue = (element, field) => {
@@ -977,50 +994,54 @@
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
     const form = submit.form || submit.closest('form') || adapter?.validationRoot?.(submit) || document.querySelector('form');
-    const bad = adapter?.findInvalid?.(form) || EXEC?.requiredInvalid?.(form);
-    if (bad) {
-      const label = bad && (fieldLabelFor(bad) || bad.name || bad.id);
+    const adapterInvalid = adapter?.findInvalid?.(form);
+    const invalids = [...new Set([
+      ...(adapterInvalid ? [adapterInvalid] : []),
+      ...(EXEC?.requiredInvalids?.(form) || []),
+    ])];
+    if (invalids.length) {
+      const firstInvalid = invalids[0];
+      const firstLabel = fieldLabelFor(firstInvalid) || firstInvalid.name || firstInvalid.id;
       if (adapter?.repairInvalid && await adapter.repairInvalid({
-        invalid: bad, label, fields: data.fields || [], fillCombo, wait,
+        invalid: firstInvalid, label: firstLabel, fields: data.fields || [], fillCombo, wait,
       })) {
-        banner('HireRadar repaired the ATS-specific field and is retrying submission...');
+        banner('HireRadar repaired the ATS-specific field and is rechecking the complete form...');
         return true;
       }
-      if (bad?.type === 'radio') {
-        const group = [...form.querySelectorAll('input[type="radio"]')].filter((item) => item.name === bad.name);
-        const container = bad.closest('.application-question, fieldset, [role="radiogroup"], [class*="question"]');
-        const heading = container?.querySelector('legend, .application-label .text, .application-label, [class*="question-label"]');
-        const question = String(heading?.textContent || container?.textContent || '').replace(/\s+/g, ' ').trim();
-        const options = group.map((item) => labelTextFor(item) || item.value).map((value) => String(value).trim()).filter(Boolean);
-        if (question && data.browserWorker) {
-          const result = await resolveFieldBounded({ name: bad.name, label: question, type: 'radio', options }, bad.validationMessage || '');
-          if (result.accepted) {
-            banner('HireRadar resolved the required choice and is retrying submission...');
-            return true;
-          }
+
+      // Repair the full invalid set in one resolver transaction. The previous
+      // one-field path repeatedly rediscovered the same first error and never
+      // reached later questions.
+      const scanned = scanUnfilledFields();
+      const byKey = new Map(scanned.map((field) => [fieldKey(field), field]));
+      invalids.forEach((element, index) => {
+        const descriptor = liveFieldFor(element, 10000 + index);
+        if (descriptor.label && !byKey.has(fieldKey(descriptor))) {
+          byKey.set(fieldKey(descriptor), descriptor);
+        }
+      });
+      const repairFields = [...byKey.values()];
+      if (data.browserWorker && repairFields.length) {
+        const results = await resolveFieldsBatch(repairFields);
+        if (results.some((result) => result.accepted)) {
+          banner('HireRadar repaired the invalid fields and is rechecking the complete form...');
+          return true;
         }
       }
-      if (bad && bad.type !== 'radio' && data.browserWorker) {
-        const live = liveFieldFor(bad, 9999);
-        if (live.label) {
-          const result = await resolveFieldBounded(live, bad.validationMessage || '');
-          if (result.accepted) {
-            banner('HireRadar resolved the required field and is retrying submission...');
-            return true;
-          }
-        }
-      }
-      const descriptor = liveFieldFor(bad, 9999);
-      const diagnostic = EXEC?.safeDiagnostic?.({
-        code: 'required_field_unresolved',
-        ats: data.atsType,
-        fieldKey: fieldKey(descriptor),
-        controlType: bad.type || bad.tagName,
-        optionCount: bad instanceof HTMLSelectElement ? bad.options.length : undefined,
-        answerSource: (data.fields || []).find((field) => fieldKey(field) === fieldKey(descriptor))?.source,
-        retained: controlHasValue(bad, descriptor),
-        category: 'validation',
-      }) || { code: 'required_field_unresolved' };
+
+      const diagnostics = invalids.map((element, index) => {
+        const descriptor = liveFieldFor(element, 10000 + index);
+        return EXEC?.safeDiagnostic?.({
+          code: 'required_field_unresolved',
+          ats: data.atsType,
+          fieldKey: fieldKey(descriptor),
+          controlType: element.type || element.tagName,
+          optionCount: element instanceof HTMLSelectElement ? element.options.length : undefined,
+          answerSource: resolutionState.get(fieldKey(descriptor))?.answerSource,
+          retained: controlHasValue(element, descriptor),
+          category: resolutionState.get(fieldKey(descriptor))?.lastFailure || 'validation',
+        });
+      }).filter(Boolean);
       if (data.browserWorker) {
         await send({
           type: 'PROGRESS',
@@ -1028,11 +1049,18 @@
           detail: {
             filled: (data.fields || []).length,
             total: (data.fields || []).length,
-            detail: JSON.stringify({ message: 'ATS native validation blocked submission.', invalid: diagnostic }),
+            detail: JSON.stringify({
+              message: 'ATS native validation blocked submission.',
+              invalidCount: diagnostics.length,
+              invalid: diagnostics,
+            }),
           },
         });
       }
-      banner('The ATS still needs: "' + String(label || 'a required field').replace(/\s+/g, ' ').trim().slice(0, 60) + '". Fill it and it will submit.', true);
+      data.stopAutomation = true;
+      persist(data);
+      banner('The ATS still needs ' + diagnostics.length + ' required field'
+        + (diagnostics.length === 1 ? '' : 's') + '. Review the listed blockers and restart this application.', true);
       return false;
     }
     data.submitAttempts = (data.submitAttempts || 0) + 1;
@@ -1207,12 +1235,16 @@
           // protects against malformed ATS pages, while the attempted-key ledger
           // prevents retries for unresolved controls. A previously accepted field
           // may be retried only if a later React rerender cleared it.
-          for (let round = 1; round <= 20; round++) {
+          let previousSchemaSignature = '';
+          for (let round = 1; round <= 6; round++) {
             const liveBatch = scanUnfilledFields({ includeOptionalKnown: true }).filter((field) => {
               const key = fieldKey(field);
-              return !attemptedLive.has(key) || resolutionState.get(key)?.accepted === true;
+              return !attemptedLive.has(key);
             });
             if (!liveBatch.length) break;
+            const schemaSignature = liveBatch.map((field) => fieldKey(field)).sort().join('||');
+            if (schemaSignature === previousSchemaSignature) break;
+            previousSchemaSignature = schemaSignature;
             if (data.browserWorker) await send({
               type: 'PROGRESS', stage: 'filling',
               detail: {
@@ -1246,7 +1278,7 @@
             ...blockingLive,
             ...failedLive.filter((field) => blockingKeys.has(fieldKey(field))),
           ].map((field) => [fieldKey(field), field]));
-          const unresolvedLive = [...unresolvedByKey.values()];
+          const unresolvedLive = [...unresolvedByKey.values()].filter((field) => field.required);
           data.liveNeedsUser = unresolvedLive.map((field) => field.name);
           persist(data);
           if (unresolvedLive.length) {
