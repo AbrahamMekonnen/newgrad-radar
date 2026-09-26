@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { ResumeAutofill } from '@/components/autoapply';
 import { GettingStartedChecklist, type OnboardStateFlags } from './GettingStarted';
+import { startProductTour } from './ProductTour';
 
 const DONE_KEY = 'hr_onboarded_v1';
 const PERSONA_KEY = 'hr_persona';
@@ -197,10 +198,10 @@ export function OnboardingFlow() {
             </button>
           ) : (
             <button
-              onClick={finish}
+              onClick={() => { finish(); setTimeout(startProductTour, 300); }}
               className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
             >
-              Start exploring
+              Take the tour
             </button>
           )}
         </div>

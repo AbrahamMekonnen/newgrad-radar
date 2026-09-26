@@ -1,0 +1,55 @@
+/* Brand + dark-mode theming for the driver.js product tour popover. */
+.driver-popover.hr-tour {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.35);
+  max-width: 320px;
+}
+.driver-popover.hr-tour .driver-popover-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.driver-popover.hr-tour .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #475569;
+}
+.driver-popover.hr-tour .driver-popover-progress-text {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.driver-popover.hr-tour .driver-popover-next-btn,
+.driver-popover.hr-tour .driver-popover-done-btn {
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  text-shadow: none;
+}
+.driver-popover.hr-tour .driver-popover-next-btn:hover,
+.driver-popover.hr-tour .driver-popover-done-btn:hover {
+  background: #4338ca;
+}
+.driver-popover.hr-tour .driver-popover-prev-btn {
+  background: transparent;
+  color: #64748b;
+  border: none;
+  text-shadow: none;
+}
+.driver-popover.hr-tour .driver-popover-arrow {
+  border-color: #ffffff;
+}
+
+/* Dark mode */
+:root:not([data-theme='light']) .dark .driver-popover.hr-tour,
+.dark .driver-popover.hr-tour {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+.dark .driver-popover.hr-tour .driver-popover-title { color: #f8fafc; }
+.dark .driver-popover.hr-tour .driver-popover-description { color: #cbd5e1; }
+.dark .driver-popover.hr-tour .driver-popover-arrow { border-color: #1e293b; }
+.dark .driver-popover.hr-tour .driver-popover-close-btn { color: #94a3b8; }

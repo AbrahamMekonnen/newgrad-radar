@@ -9,6 +9,7 @@ import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar"
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { NotificationGateProvider } from "@/components/pwa/NotificationGate";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
+import { ProductTour } from "@/components/onboarding/ProductTour";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -110,6 +111,8 @@ export default function RootLayout({
 
           {/* First-run guided onboarding (self-gates to signed-in first-timers) */}
           <OnboardingFlow />
+          {/* Interactive spotlight product tour (driver.js) */}
+          <ProductTour />
           </NotificationGateProvider>
         </ThemeProvider>
       </body>

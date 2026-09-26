@@ -93,6 +93,7 @@ export function Navbar() {
               {/* Mobile menu button */}
               <button
                 onClick={() => setMobileMenuOpen(true)}
+                data-tour="menu"
                 className="xl:hidden p-2 -ml-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
                 aria-label="Open menu"
               >
@@ -114,6 +115,7 @@ export function Navbar() {
                     <Link
                       key={link.href}
                       href={link.href}
+                      data-tour={`nav-${link.href === '/' ? 'jobs' : link.href.slice(1)}`}
                       className={cn(
                         'px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-inset',
                         isActive
@@ -134,6 +136,7 @@ export function Navbar() {
               {/* Command Palette Button */}
               <button
                 onClick={openCommandPalette}
+                data-tour="search"
                 className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Open command palette"
               >
@@ -146,7 +149,7 @@ export function Navbar() {
               </button>
 
               <ThemeToggle />
-              {user && <NotificationBell userId={user.id} />}
+              {user && <span data-tour="bell"><NotificationBell userId={user.id} /></span>}
               {user ? (
                 <div ref={userMenuRef} className="relative flex items-center gap-2">
                   {/* Streak Badge - only show if streak > 0 */}

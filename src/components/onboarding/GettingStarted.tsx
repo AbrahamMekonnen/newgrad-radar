@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { startProductTour } from './ProductTour';
 
 export interface OnboardStateFlags {
   resume: boolean;      // resume uploaded
@@ -130,7 +131,7 @@ export function GettingStartedCard({ userId }: { userId: string }) {
     <div className="p-6">
       <GettingStartedChecklist flags={flags} />
       <button
-        onClick={() => (window as unknown as { __openOnboarding?: () => void }).__openOnboarding?.()}
+        onClick={() => startProductTour()}
         className="mt-3 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
       >
         Replay the guided tour
