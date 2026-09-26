@@ -949,7 +949,10 @@
       if (formControls === 0) {
         data.noFormSince ||= Date.now();
         persist(data);
-        if (EXEC?.withinTransitionGrace?.(data.noFormSince, Date.now(), 8000)) {
+        const companyWrapper = /(?:mongodb\.com|roblox\.com|samsara\.com|withwaymo\.com)$/.test(location.hostname)
+          || document.querySelectorAll('iframe').length > 0;
+        const transitionWindow = companyWrapper ? 30000 : 8000;
+        if (EXEC?.withinTransitionGrace?.(data.noFormSince, Date.now(), transitionWindow)) {
           banner('The ATS is changing pages. HireRadar is waiting for the next step or submission receipt...');
           return true;
         }
@@ -1172,6 +1175,21 @@
         if (running || terminal) return;
         running = true;
         try {
+          const pageText = normalize(document.body?.innerText || '');
+          const greenhouseClosed = /job-boards\.greenhouse\.io$/.test(location.hostname)
+            && (new URLSearchParams(location.search).get('error') === 'true'
+              || /current openings at|job not found|no longer accepting applications/.test(pageText));
+          if (greenhouseClosed) {
+            if (data.browserWorker) await send({
+              type: 'PROGRESS', stage: 'failed',
+              detail: { detail: 'The Greenhouse posting is closed or no longer exists.' },
+            });
+            data.stopAutomation = true;
+            persist(data);
+            stopExecution();
+            banner('This posting is closed or no longer accepting applications.', true);
+            return;
+          }
           if (isSuccessPage(data)) {
             try {
               await reportSuccess(data);
