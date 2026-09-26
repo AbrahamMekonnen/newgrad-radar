@@ -1,4 +1,4 @@
-import { matchAvailableOption } from '../form-option-matching';
+import { matchAvailableOption, matchFirstAvailablePreference } from '../form-option-matching';
 
 describe('matchAvailableOption', () => {
   const degrees = [
@@ -82,5 +82,22 @@ describe('matchAvailableOption', () => {
   it('normalizes common country aliases only to available choices', () => {
     expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))
       .toBe('United States');
+  });
+});
+
+describe('matchFirstAvailablePreference', () => {
+  const languages = ['Python 3', 'Python 2', 'Java', 'C++', 'C#', 'Javascript', 'Typescript'];
+
+  it('uses the first saved preference that the ATS actually offers', () => {
+    expect(matchFirstAvailablePreference('Preferred coding language', 'java, pyton', languages)).toBe('Java');
+  });
+
+  it('normalizes common language aliases and typos', () => {
+    expect(matchFirstAvailablePreference('Preferred coding language', 'pyton', languages)).toBe('Python 3');
+    expect(matchFirstAvailablePreference('Preferred coding language', 'ts', languages)).toBe('Typescript');
+  });
+
+  it('does not manufacture a choice absent from the current option set', () => {
+    expect(matchFirstAvailablePreference('Preferred coding language', 'Ruby, Go', languages)).toBeNull();
   });
 });

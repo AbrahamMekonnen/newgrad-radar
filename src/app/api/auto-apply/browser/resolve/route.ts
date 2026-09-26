@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { matchAvailableOption } from '@/lib/form-option-matching';
+import { matchAvailableOption, matchFirstAvailablePreference } from '@/lib/form-option-matching';
 import { classifyApplicationQuestion } from '@/lib/autoapply-question-policy';
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 
@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
     if (/language skill/.test(q) && fact('english_level') && pick(f, 'English', 'saved', 'Selected English from the confirmed language profile')) continue;
     if (/other languages|languages do you speak|additional languages/.test(q) && pick(f, fact('other_languages'), 'saved', 'Matched explicit language proficiency facts')) continue;
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
-    if (/coding language|programming language/.test(q) && pick(f, fact('coding_language'), 'saved', 'Matched the preferred coding language')) continue;
+    if (/coding language|programming language/.test(q)
+      && pick(f, matchFirstAvailablePreference(f.label, fact('coding_language'), optionLabels(f)), 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
       const location = norm([profile?.country, profile?.location].filter(Boolean).join(' '));
@@ -140,15 +141,19 @@ export async function POST(request: NextRequest) {
       const graduationYear = String(profile?.education_graduation_date || '').match(/\b(?:19|20)\d{2}\b/)?.[0];
       if (pick(f, graduationYear)) continue;
     }
-    if (/university|college|school|institution/.test(q)
-      && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)
+    if ((/^(school|university|college|institution)$/.test(q)
+      || (/university|college|school|institution/.test(q) && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)))
       && pick(f, profile?.education_school)) continue;
     if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q)) && pick(f, profile?.default_source)) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
-    if (/when can you start|available to start|start date/.test(q)
-      && pick(f, fact('available_start_date') || profile?.available_start_date, 'saved',
-        'Matched the confirmed availability date')) continue;
+    if (/when can you start|available to start|start date|when will you be available/.test(q)) {
+      const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
+      const confirmed = fact('available_start_date') || profile?.available_start_date;
+      if (pick(f, confirmed || roleTerm, confirmed ? 'saved' : 'job', confirmed
+        ? 'Matched the confirmed availability date'
+        : 'Matched the role term stated in the user-selected job title')) continue;
+    }
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
       && pick(f, `Yes, I am interested in the ${job.job_title} role.`, 'authorization', 'Confirmed interest in the user-authorized application')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))

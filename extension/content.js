@@ -581,6 +581,10 @@
     '.application-question, fieldset, [role="radiogroup"], [role="group"], [data-field-path], [data-automation-id*="question"], [class*="question"]'
   );
   const elementIsRequired = (element, label) => {
+    // Explicit optional state is authoritative. Broad ATS sections often also
+    // contain required controls and must not promote this control to required.
+    if (element.getAttribute('aria-required') === 'false'
+      || element.getAttribute('data-required') === 'false') return false;
     if (element.required || element.getAttribute('aria-required') === 'true'
       || element.getAttribute('data-required') === 'true') return true;
     const question = questionContainerFor(element);
@@ -779,20 +783,14 @@
           resolutionState.set(key, state);
           continue;
         }
-        const timeoutMarker = Symbol('field_timeout');
         let applied;
         try {
-          applied = await Promise.race([
-            fill({ ...field, value: answer.value, source: answer.source }),
-            wait(6000).then(() => timeoutMarker),
-          ]);
+          // fill() is internally bounded. Racing it against a timer does not
+          // cancel it; the abandoned operation keeps clicking after the next
+          // field starts. Keep interactive widgets strictly sequential.
+          applied = await fill({ ...field, value: answer.value, source: answer.source });
         } catch {
           state.lastFailure = 'apply_error';
-          resolutionState.set(key, state);
-          continue;
-        }
-        if (applied === timeoutMarker) {
-          state.lastFailure = 'field_timeout';
           resolutionState.set(key, state);
           continue;
         }
@@ -1239,7 +1237,8 @@
               detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Filling prepared field.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'field_filling', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts }), index: fieldIndex + 1 }) },
             });
             try {
-              const filled = await Promise.race([fill(field), wait(6000).then(() => false)]);
+              // Never abandon a live DOM interaction: it would continue clicking into later fields.
+              const filled = await fill(field);
               if (filled) {
                 await wait(200);
                 if (fieldAccepted(field)) {

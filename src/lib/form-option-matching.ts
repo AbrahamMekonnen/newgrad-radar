@@ -86,3 +86,18 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
   });
   return contained.length === 1 ? contained[0] : null;
 }
+
+export function matchFirstAvailablePreference(question: unknown, wanted: unknown, options: string[]): string | null {
+  const aliases: Record<string, string> = {
+    pyton: 'Python 3', python: 'Python 3', python3: 'Python 3',
+    js: 'Javascript', javascript: 'Javascript', ts: 'Typescript', typescript: 'Typescript',
+    cpp: 'C++', 'c plus plus': 'C++', csharp: 'C#', 'c sharp': 'C#',
+  };
+  for (const raw of String(wanted || '').split(/[,;|/]+/)) {
+    const value = raw.trim();
+    if (!value) continue;
+    const matched = matchAvailableOption(question, aliases[norm(value)] || value, options);
+    if (matched) return matched;
+  }
+  return null;
+}
