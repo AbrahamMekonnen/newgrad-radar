@@ -139,13 +139,16 @@ export async function searchCompanies<T extends RankableCompany>(
 ): Promise<T[]> {
   const query = (q || '').trim();
   if (query.length < 2) return [];
+  // Never surface the synthetic catch-all "unknown" company in search.
+  const dropUnknown = (rows: T[]) =>
+    rows.filter((r) => r.slug !== 'unknown' && (r.name || '').toLowerCase() !== 'unknown');
 
   // Primary: server-side Postgres trigram search (migration 056). Reliable,
   // indexed typo tolerance ("invidia" -> "Nvidia").
   try {
     const { data, error } = await supabase.rpc('search_companies', { q: query, lim: limit });
     if (!error && Array.isArray(data)) {
-      return data.slice(0, limit) as unknown as T[];
+      return dropUnknown(data as unknown as T[]).slice(0, limit);
     }
   } catch {
     /* RPC missing (migration not applied yet) — fall through to client fuzzy */
@@ -174,5 +177,5 @@ export async function searchCompanies<T extends RankableCompany>(
     ) as unknown as T[];
     results = [...results, ...fuzzy];
   }
-  return results.slice(0, limit);
+  return dropUnknown(results).slice(0, limit);
 }

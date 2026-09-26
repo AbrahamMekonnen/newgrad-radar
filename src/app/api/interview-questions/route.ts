@@ -128,6 +128,10 @@ export async function GET(request: NextRequest) {
       )
       .eq('is_duplicate', false)
       .eq('is_junk', false)
+      // Hide company-less rows — they render as an "Unknown" company and add no
+      // value to a company-focused prep view (they're also the noisiest sources).
+      .not('company_name', 'is', null)
+      .not('company_name', 'ilike', 'unknown')
       .order('interview_date', { ascending: false, nullsFirst: false })
       .order('scraped_at', { ascending: false });
 

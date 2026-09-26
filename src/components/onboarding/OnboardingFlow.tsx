@@ -57,15 +57,22 @@ export function OnboardingFlow() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getUser().then(({ data: { user: u } }) => {
+    const consider = (u: { id: string; email?: string } | null) => {
       if (cancelled || !u) return;
       setUser({ id: u.id, email: u.email || '' });
       loadFlags(u.id);
-      let doneFlag = true;
-      try { doneFlag = localStorage.getItem(DONE_KEY) === '1'; } catch { /* ignore */ }
-      if (!doneFlag) setOpen(true);
+      // Gate PER USER (not per browser) so a different account in the same
+      // browser still gets onboarded.
+      let done = true;
+      try { done = localStorage.getItem(`${DONE_KEY}_${u.id}`) === '1'; } catch { /* ignore */ }
+      if (!done) setOpen(true);
+    };
+    supabase.auth.getUser().then(({ data: { user: u } }) => consider(u));
+    // Also catch a sign-in that happens after this component mounts.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session?.user) consider(session.user);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, [supabase, loadFlags]);
 
   // Re-read live state whenever a step changes (so the checklist reflects the
@@ -73,7 +80,7 @@ export function OnboardingFlow() {
   useEffect(() => { if (user && open) loadFlags(user.id); }, [step, user, open, loadFlags]);
 
   const finish = () => {
-    try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
+    try { if (user) localStorage.setItem(`${DONE_KEY}_${user.id}`, '1'); } catch { /* ignore */ }
     setOpen(false);
   };
   const choosePersona = (p: Persona) => {
