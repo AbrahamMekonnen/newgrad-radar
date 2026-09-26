@@ -841,6 +841,24 @@
     return 'https://jobs.smartrecruiters.com/oneclick-ui/company/' + encodeURIComponent(company)
       + '/publication/' + encodeURIComponent(publication) + '?dcr_ci=' + encodeURIComponent(company);
   };
+  const canonicalGreenhouseApplication = (data) => {
+    if (/job-boards\.greenhouse\.io$/.test(location.hostname)) return '';
+    const params = new URLSearchParams(location.search);
+    const jobId = params.get('gh_jid') || location.pathname.match(/\/jobs?\/(\d+)/)?.[1];
+    if (!jobId) return '';
+    const knownBoards = {
+      'mongodb.com': 'mongodb',
+      'www.mongodb.com': 'mongodb',
+      'careers.roblox.com': 'roblox',
+      'careers.withwaymo.com': 'waymo',
+      'www.samsara.com': 'samsara',
+    };
+    const company = normalize(data?.companyName || '').replace(/ /g, '');
+    const board = knownBoards[location.hostname] || company;
+    if (!board || !/^\d+$/.test(jobId)) return '';
+    return 'https://job-boards.greenhouse.io/embed/job_app?for='
+      + encodeURIComponent(board) + '&token=' + encodeURIComponent(jobId);
+  };
   const openApplicationForm = () => {
     const actions = [...document.querySelectorAll('a, button')];
     const stableTrigger = document.querySelector('#st-apply, .job-apply .js-oneclick');
@@ -1120,6 +1138,15 @@
           type: 'PROGRESS', stage: 'waiting_for_user',
           detail: { detail: 'SmartRecruiters application action and publication URL were not found.' },
         });
+        return;
+      }
+      const canonicalApplication = canonicalGreenhouseApplication(data);
+      if (canonicalApplication && canonicalApplication !== location.href) {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'filling',
+          detail: { detail: 'Opening the canonical Greenhouse application form.' },
+        });
+        location.assign(canonicalApplication);
         return;
       }
       const fields = (data.fields || []).filter((field) =>
