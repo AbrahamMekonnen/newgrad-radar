@@ -18,6 +18,30 @@ const api = async (path, options = {}) => {
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
   method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, extensionVersion: EXTENSION_VERSION, runId: job.runId, ...extra }),
 });
+const receiptKey = (job) => 'receipt:' + job.id;
+const queueReceipt = async (job) => chrome.storage.local.set({
+  [receiptKey(job)]: { job, confirmedAt: Date.now(), attempts: 0 },
+});
+const clearReceipt = async (job) => chrome.storage.local.remove(receiptKey(job));
+let receiptFlushRunning = false;
+const flushPendingReceipts = async () => {
+  if (receiptFlushRunning) return;
+  receiptFlushRunning = true;
+  try {
+    const items = await chrome.storage.local.get(null);
+    const pending = Object.entries(items).filter(([key]) => key.startsWith('receipt:'));
+    for (const [key, entry] of pending) {
+      const job = entry?.job;
+      if (!job?.id || !job?.leaseId) { await chrome.storage.local.remove(key); continue; }
+      try {
+        await report(job, 'submitted');
+        await chrome.storage.local.remove(key);
+      } catch {
+        await chrome.storage.local.set({ [key]: { ...entry, attempts: Number(entry?.attempts || 0) + 1, lastAttemptAt: Date.now() } });
+      }
+    }
+  } finally { receiptFlushRunning = false; }
+};
 // Each version runs one bounded eight-tab conformance batch. Per-tab isolation
 // lets every ATS complete independently; a confirmed engine failure blocks later claims.
 const BATCH_SIZE = 8;
@@ -71,7 +95,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 }); void poll();
 });
-chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === POLL_ALARM) void poll(); });
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === POLL_ALARM) { void flushPendingReceipts(); void poll(); } });
 chrome.webNavigation.onCompleted.addListener(async (details) => {
   if (details.frameId === 0 || !/^https:\/\/job-boards\.greenhouse\.io\/embed\/job_app/i.test(details.url || '')) return;
   const result = await chrome.storage.session.get('job:' + details.tabId);
@@ -120,7 +144,11 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   const job = currentByTab.get(tabId) || result['job:' + tabId];
   currentByTab.delete(tabId);
   await chrome.storage.session.remove('job:' + tabId);
-  if (job) await report(job, 'failed', { detail: 'ATS tab closed before confirmed submission.' }).catch(() => undefined);
+  if (job) {
+    const pending = await chrome.storage.local.get(receiptKey(job));
+    if (pending[receiptKey(job)]) void flushPendingReceipts();
+    else await report(job, 'failed', { detail: 'ATS tab closed before confirmed submission.' }).catch(() => undefined);
+  }
   void poll();
 });
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -193,8 +221,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // same success; accept it when this tab already has a recorded receipt.
       if (!job) return message.stage === 'submitted' && !!result['submitted:' + tabId]
         ? { ok: true, alreadySubmitted: true } : { ok: false };
+      if (message.stage === 'submitted') await queueReceipt(job);
       await report(job, message.stage, message.detail || {});
       if (message.stage === 'submitted') {
+        await clearReceipt(job);
         await chrome.storage.session.set({ ['submitted:' + tabId]: { jobId: job.id, at: Date.now() } });
         currentByTab.delete(tabId);
         await chrome.storage.session.remove('job:' + tabId);
@@ -253,5 +283,6 @@ void (async () => {
       }
     }
   }
+  void flushPendingReceipts();
   void poll();
 })();

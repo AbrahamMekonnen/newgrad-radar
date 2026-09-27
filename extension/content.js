@@ -972,6 +972,26 @@
     if (!submit) {
       const next = adapter?.findNext?.(document) || EXEC?.findNextAction?.(document);
       if (next) {
+        const stepSignature = [location.pathname, location.search,
+          normalize(document.querySelector('h1, h2, [data-automation-id="pageHeaderTitle"]')?.textContent || ''),
+          normalize(next.textContent || next.value || '')].join('|');
+        if (data.pendingStep?.signature === stepSignature) {
+          const elapsed = now - Number(data.pendingStep.clickedAt || 0);
+          if (elapsed < 15000) {
+            banner('HireRadar completed this step and is waiting for the ATS to load the next one...');
+            return true;
+          }
+          if (data.browserWorker) await send({
+            type: 'PROGRESS', stage: 'waiting_for_user',
+            detail: { detail: JSON.stringify({ message: 'The ATS did not advance after Continue was selected.', diagnostic: EXEC?.safeDiagnostic?.({ code: 'step_transition_timeout', ats: data.atsType, step: stepSignature.slice(0, 80), category: 'transition' }) }) },
+          });
+          data.stopAutomation = true;
+          persist(data);
+          banner('The ATS did not advance to the next application step.', true);
+          return false;
+        }
+        data.pendingStep = { signature: stepSignature, clickedAt: now };
+        persist(data);
         banner('HireRadar completed this step and is continuing the application...');
         next.click();
         return true;
@@ -1162,6 +1182,14 @@
         });
         location.assign(canonicalApplication);
         return;
+      }
+      if (data.pendingStep) {
+        const currentStepSignature = [location.pathname, location.search,
+          normalize(document.querySelector('h1, h2, [data-automation-id="pageHeaderTitle"]')?.textContent || '')].join('|');
+        if (!String(data.pendingStep.signature || '').startsWith(currentStepSignature)) {
+          delete data.pendingStep;
+          persist(data);
+        }
       }
       const fields = (data.fields || []).filter((field) =>
         field.value !== null && field.value !== undefined && field.value !== '' && normalize(field.value) !== 'unfilled');

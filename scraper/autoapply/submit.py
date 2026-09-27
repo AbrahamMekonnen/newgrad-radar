@@ -8,7 +8,6 @@ invoked here.
 """
 from __future__ import annotations
 
-import io
 import re
 import datetime as dt
 from typing import Optional
@@ -107,44 +106,16 @@ def submit_application(ats: str, token: str, jid: str, apply_url: str,
         return {"status": "incomplete", "detail": f"unfilled required: {', '.join(missing[:6])}",
                 "at": _now()}
 
-    # Greenhouse's public form schema is readable, but its documented submission
-    # API requires the employer's private Job Board API key. Candidate-side code
-    # must use the human browser, where invisible reCAPTCHA runs at submission.
-    if ats == "greenhouse":
-        return {
-            "status": "browser_required",
-            "detail": "Greenhouse hosted form requires in-browser review and submission",
-            "page": page,
-            "at": _now(),
-        }
-
+    # An HTTP success code is not proof that an ATS accepted an application;
+    # several hosted boards return 200 for validation errors and bot challenges.
+    # All real submissions therefore run in the paired visible browser and only
+    # become submitted after its success-page detector records a durable receipt.
     gated, why = detect_captcha(page)
-    if gated:
-        return {"status": "needs_captcha", "detail": why, "page": page, "at": _now()}
-
-    resume = _resume_bytes(resume_url)
-    files = {}
-    if resume:
-        rn = _resume_field_name(ats, fields)
-        files[rn] = ("resume.pdf", io.BytesIO(resume), "application/pdf")
-
-    sent = {"post_url": _post_url(ats, token, jid, apply_url), "field_count": len(data),
-            "has_resume": bool(resume)}
-    if dry_run:
-        return {"status": "dry_run", "detail": "captcha-free; would submit", "sent": sent, "at": _now()}
-
-    try:
-        r = requests.post(sent["post_url"], data=data, files=files or None,
-                          headers=UA, timeout=45, allow_redirects=True)
-    except Exception as e:
-        return {"status": "submit_failed", "detail": str(e), "sent": sent, "at": _now()}
-
-    ok = r.status_code in (200, 201, 302) and not _CAPTCHA_RE.search(r.text[:5000])
     return {
-        "status": "submitted" if ok else "submit_failed",
-        "http_status": r.status_code,
-        "detail": "ok" if ok else f"unexpected response ({r.status_code})",
-        "sent": sent, "at": _now(),
+        "status": "needs_captcha" if gated else "browser_required",
+        "detail": why if gated else f"{ats} requires verified in-browser submission",
+        "page": page,
+        "at": _now(),
     }
 
 

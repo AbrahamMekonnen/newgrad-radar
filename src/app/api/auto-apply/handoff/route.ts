@@ -99,7 +99,7 @@ export async function PATCH(request: NextRequest) {
 
   const db = admin();
   const { data: row } = await db.from('autoapply_job_queue')
-    .select('id, user_id, job_id, submit_log, handoff_expires_at')
+    .select('id, user_id, job_id, ats_type, submit_log, handoff_expires_at')
     .eq('handoff_token', token).maybeSingle();
   if (!row || !row.handoff_expires_at || new Date(row.handoff_expires_at).getTime() < Date.now()) {
     return NextResponse.json({ error: 'Handoff expired' }, { status: 404, headers: cors });
@@ -110,42 +110,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   const submittedAt = new Date().toISOString();
-  const successLog = {
-    status: 'browser_confirmed',
-    detail: 'The ATS displayed a verified submission success page.',
-    at: submittedAt,
-  };
-  const { error } = await db.from('autoapply_job_queue').update({
-    status: 'submitted',
-    submitted_at: submittedAt,
-    submit_log: successLog,
-  }).eq('id', row.id).eq('handoff_token', token);
-  if (error) return NextResponse.json({ error: 'Could not record submission' }, { status: 500, headers: cors });
-
-  const { error: syncError } = await db.from('saved_jobs').upsert({
+  // The receipt trigger atomically reconciles queue, saved_jobs, and therefore
+  // application_logs. Retrying this request is safe because user_id/job_id is unique.
+  const { error } = await db.from('autoapply_submission_receipts').upsert({
     user_id: row.user_id,
     job_id: row.job_id,
-    status: 'applied',
-    applied_at: submittedAt,
-    updated_at: submittedAt,
+    queue_id: row.id,
+    ats_type: row.ats_type,
+    confirmation_source: 'legacy_handoff_success_page',
+    submitted_at: submittedAt,
   }, { onConflict: 'user_id,job_id' });
-  if (syncError) {
-    console.error('browser submission sync error:', syncError);
-    await db.from('autoapply_job_queue').update({
-      status: 'prepared',
-      submitted_at: null,
-      submit_log: {
-        status: 'sync_failed',
-        detail: 'The ATS accepted the application, but dashboard synchronization failed.',
-        at: new Date().toISOString(),
-      },
-    }).eq('id', row.id).eq('handoff_token', token);
-    return NextResponse.json({ error: 'Could not synchronize submission' }, { status: 500, headers: cors });
-  }
-
-  await db.from('autoapply_job_queue').update({
-    handoff_token: null,
-    handoff_expires_at: null,
-  }).eq('id', row.id).eq('handoff_token', token);
+  if (error) return NextResponse.json({ error: 'Could not record submission' }, { status: 500, headers: cors });
   return NextResponse.json({ ok: true, submittedAt }, { headers: cors });
 }

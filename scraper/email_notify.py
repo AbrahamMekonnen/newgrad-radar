@@ -33,6 +33,15 @@ FROM_EMAIL = os.environ.get("FROM_EMAIL", "NewGrad Radar <jobs@updates.newgradra
 FROM_NAME = "NewGrad Radar"
 
 
+def email_provider_available() -> bool:
+    """Return whether at least one fully configured email transport exists."""
+    return bool(
+        BREVO_API_KEY
+        or RESEND_API_KEY
+        or (SMTP_HOST and SMTP_USER and SMTP_PASS)
+    )
+
+
 def send_via_brevo(to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
     """Send email via Brevo (Sendinblue) API. 300 emails/day free."""
     if not BREVO_API_KEY:

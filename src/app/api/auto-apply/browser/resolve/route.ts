@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption, matchFirstAvailablePreference } from '@/lib/form-option-matching';
 import { classifyApplicationQuestion } from '@/lib/autoapply-question-policy';
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
+import { salaryAnswerForField } from '@/lib/autoapply-salary';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -22,10 +23,13 @@ export async function POST(request: NextRequest) {
   if (!device || device.revoked_at) return NextResponse.json({ error: 'Unpaired browser' }, { status: 401, headers: cors });
   const { jobId, fields, planId: requestedPlanId, fastOnly } = await request.json().catch(() => ({}));
   if (!jobId || !Array.isArray(fields) || fields.length > 50) return NextResponse.json({ error: 'Invalid fields' }, { status: 400, headers: cors });
-  const { data: job } = await store.from('autoapply_job_queue').select('job_title,company_name')
+  const { data: job } = await store.from('autoapply_job_queue').select('job_id,job_title,company_name')
     .eq('id', jobId).eq('user_id', device.user_id).maybeSingle();
   if (!job) return NextResponse.json({ error: 'Application not found' }, { status: 404, headers: cors });
-  const { data: profile } = await store.from('user_profiles').select('*').eq('user_id', device.user_id).maybeSingle();
+  const [{ data: profile }, { data: jobMarket }] = await Promise.all([
+    store.from('user_profiles').select('*').eq('user_id', device.user_id).maybeSingle(),
+    store.from('jobs').select('salary_min,salary_max').eq('id', job.job_id).maybeSingle(),
+  ]);
   const custom = (profile?.custom_answers || {}) as Record<string, string>;
   const fact = (key: string) => custom['__fact:' + key];
   const planId = requestedPlanId || crypto.randomUUID();
@@ -160,7 +164,9 @@ export async function POST(request: NextRequest) {
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
     if (/bay area|san francisco area/.test(q) && pick(f, profile?.bay_area_resident === true ? 'Yes' : profile?.bay_area_resident === false ? 'No' : null)) continue;
-    if (/salary|compensation/.test(q) && pick(f, profile?.expected_salary || profile?.salary_expectation)) continue;
+    if (/salary|compensation/.test(q)
+      && pick(f, salaryAnswerForField(f.label, f.type, jobMarket, profile), 'market_evidence',
+        'Used the posted salary range or an explicit candidate salary preference')) continue;
     if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const inferred = /us citizen|permanent resident|green card/.test(authorization) ? 'No'

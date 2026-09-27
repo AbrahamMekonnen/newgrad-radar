@@ -97,7 +97,17 @@ export async function PATCH(request: NextRequest) {
   const { data: row } = await db.from('autoapply_job_queue')
     .select('id, user_id, job_id').eq('id', id).eq('user_id', device.user_id)
     .eq('browser_device_id', device.id).eq('browser_lease_id', leaseId).maybeSingle();
-  if (!row) return json({ error: 'Lease expired' }, 409);
+  if (!row) {
+    // The receipt RPC may have committed even if its HTTP response was lost.
+    // Let the browser outbox reconcile that confirmed success idempotently
+    // after navigation, tab closure, or a temporary network failure.
+    if (stage === 'submitted') {
+      const { data: existingReceipt } = await db.from('autoapply_submission_receipts')
+        .select('submitted_at').eq('queue_id', id).eq('user_id', device.user_id).maybeSingle();
+      if (existingReceipt) return json({ ok: true, submittedAt: existingReceipt.submitted_at, alreadyRecorded: true });
+    }
+    return json({ error: 'Lease expired' }, 409);
+  }
 
   const now = new Date().toISOString();
   // A complete preflight can report many required controls. Preserve the whole

@@ -11,7 +11,7 @@ import os
 from db import get_client
 from notify import send_ntfy
 from webpush import push_to_user
-from email_notify import send_email
+from email_notify import email_provider_available, send_email
 
 
 # ============================================
@@ -57,7 +57,7 @@ def get_instant_alerts(job_ids: list[str]) -> dict[str, list[dict]]:
     for i in range(0, len(job_ids), CHUNK):
         batch = job_ids[i:i + CHUNK]
         res = client.table("alert_matches").select(
-            "id, alert_id, job_id, "
+            "id, alert_id, job_id, push_status, email_status, delivery_attempts, "
             "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
             "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
         ).in_("job_id", batch).eq(
@@ -100,6 +100,9 @@ def get_instant_alerts(job_ids: list[str]) -> dict[str, list[dict]]:
             "alert_id": row["alert_id"],
             "alert_name": alert["name"],
             "job_id": row["job_id"],
+            "push_status": row.get("push_status", "pending"),
+            "email_status": row.get("email_status", "pending"),
+            "delivery_attempts": row.get("delivery_attempts", 0),
             "push_enabled": alert["push_enabled"],
             "email_enabled": alert["email_enabled"],
             "ntfy_topic": ntfy_by_user.get(user_id),
@@ -128,7 +131,7 @@ def get_digest_alerts(mode: str = "daily") -> dict[str, list[dict]]:
 
     # Query pending digest matches
     result = client.table("alert_matches").select(
-        "id, alert_id, job_id, "
+        "id, alert_id, job_id, push_status, email_status, delivery_attempts, "
         "job_alerts!inner(id, user_id, name, push_enabled, email_enabled), "
         "jobs!inner(id, title, company_name, company_slug, location, url, apply_url, ats_type, tier, role_types)"
     ).eq(
@@ -168,6 +171,9 @@ def get_digest_alerts(mode: str = "daily") -> dict[str, list[dict]]:
             "alert_id": row["alert_id"],
             "alert_name": alert["name"],
             "job_id": row["job_id"],
+            "push_status": row.get("push_status", "pending"),
+            "email_status": row.get("email_status", "pending"),
+            "delivery_attempts": row.get("delivery_attempts", 0),
             "push_enabled": alert["push_enabled"],
             "email_enabled": alert["email_enabled"],
             "ntfy_topic": ntfy_by_user.get(user_id),
@@ -254,6 +260,8 @@ def send_digest_notifications(
     matches: list[dict],
     mode: str,
     dry_run: bool = False,
+    send_push: Optional[bool] = None,
+    send_email_channel: Optional[bool] = None,
 ) -> dict[str, int]:
     """Send digest notifications for a user's accumulated matches.
 
@@ -287,8 +295,8 @@ def send_digest_notifications(
     first_match = matches[0]
     ntfy_topic = first_match.get("ntfy_topic")
     email = first_match.get("email")
-    push_enabled = first_match.get("push_enabled", False)
-    email_enabled = first_match.get("email_enabled", False)
+    push_enabled = any(m.get("push_enabled", False) for m in matches) if send_push is None else send_push
+    email_enabled = any(m.get("email_enabled", False) for m in matches) if send_email_channel is None else send_email_channel
 
     # Send summary push notification
     if push_enabled and (ntfy_topic or user_id):
@@ -414,6 +422,60 @@ def mark_alerts_delivered(match_ids: list[str]) -> int:
         return updated
 
 
+def record_delivery_outcome(
+    match: dict,
+    push_sent: bool,
+    email_sent: bool,
+    dry_run: bool = False,
+) -> str:
+    """Persist independent channel outcomes and return the aggregate status."""
+    push_enabled = bool(match.get("push_enabled"))
+    email_enabled = bool(match.get("email_enabled"))
+    old_push = match.get("push_status", "pending")
+    old_email = match.get("email_status", "pending")
+
+    push_status = (
+        "skipped" if not push_enabled else
+        "delivered" if old_push == "delivered" or push_sent else
+        "failed"
+    )
+    email_status = (
+        "skipped" if not email_enabled else
+        "delivered" if old_email == "delivered" or email_sent else
+        "failed"
+    )
+    complete = push_status in ("delivered", "skipped") and email_status in ("delivered", "skipped")
+    attempts = int(match.get("delivery_attempts") or 0) + 1
+    aggregate = "delivered" if complete else ("failed" if attempts >= 8 else "pending")
+
+    if dry_run:
+        return aggregate
+
+    now = datetime.now(timezone.utc).isoformat()
+    errors = []
+    if push_status == "failed":
+        errors.append("push delivery failed or has no reachable subscription")
+    if email_status == "failed":
+        errors.append(
+            "email provider is not configured" if not email_provider_available()
+            else "email provider rejected the delivery"
+        )
+    payload = {
+        "push_status": push_status,
+        "email_status": email_status,
+        "delivery_status": aggregate,
+        "delivery_attempts": attempts,
+        "last_delivery_error": "; ".join(errors) or None,
+        "delivered_at": now if complete else None,
+    }
+    if push_status == "delivered" and old_push != "delivered":
+        payload["push_delivered_at"] = now
+    if email_status == "delivered" and old_email != "delivered":
+        payload["email_delivered_at"] = now
+    get_client().table("alert_matches").update(payload).eq("id", match["match_id"]).execute()
+    return aggregate
+
+
 # ============================================
 # MAIN PROCESSING FUNCTIONS
 # ============================================
@@ -438,6 +500,7 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
         "email_sent": 0,
         "matches_delivered": 0,
         "auto_apply_queued": 0,
+        "delivery_failed": 0,
     }
 
     if not new_jobs:
@@ -457,8 +520,6 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
     print(f"  Processing instant alerts for {len(alerts_by_user)} users...")
     stats["auto_apply_queued"] = queue_auto_apply_matches(alerts_by_user, dry_run)
 
-    delivered_match_ids = []
-
     for user_id, matches in alerts_by_user.items():
         user_push = 0
         user_email = 0
@@ -469,8 +530,8 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
                 email=match.get("email"),
                 alert_name=match["alert_name"],
                 job=match["job"],
-                push_enabled=match.get("push_enabled", False),
-                email_enabled=match.get("email_enabled", False),
+                push_enabled=match.get("push_enabled", False) and match.get("push_status") != "delivered",
+                email_enabled=match.get("email_enabled", False) and match.get("email_status") != "delivered",
                 dry_run=dry_run,
                 user_id=user_id,
             )
@@ -482,14 +543,16 @@ def process_instant_alerts(new_jobs: list[dict], dry_run: bool = False) -> dict:
                 user_email += 1
                 stats["email_sent"] += 1
 
-            delivered_match_ids.append(match["match_id"])
+            aggregate = record_delivery_outcome(
+                match, result["push_sent"], result["email_sent"], dry_run
+            )
+            if aggregate == "delivered":
+                stats["matches_delivered"] += 1
+            else:
+                stats["delivery_failed"] += 1
 
         if user_push > 0 or user_email > 0:
             stats["users_notified"] += 1
-
-    # Mark matches as delivered
-    if not dry_run and delivered_match_ids:
-        stats["matches_delivered"] = mark_alerts_delivered(delivered_match_ids)
 
     return stats
 
@@ -514,6 +577,7 @@ def process_digest_alerts(mode: str = "daily", dry_run: bool = False) -> dict:
         "total_jobs": 0,
         "matches_delivered": 0,
         "auto_apply_queued": 0,
+        "delivery_failed": 0,
     }
 
     try:
@@ -529,16 +593,19 @@ def process_digest_alerts(mode: str = "daily", dry_run: bool = False) -> dict:
     print(f"  Processing {mode} digest for {len(alerts_by_user)} users...")
     stats["auto_apply_queued"] = queue_auto_apply_matches(alerts_by_user, dry_run)
 
-    delivered_match_ids = []
-
     for user_id, matches in alerts_by_user.items():
         stats["total_jobs"] += len(matches)
 
+        pending_push = [m for m in matches if m.get("push_enabled") and m.get("push_status") != "delivered"]
+        pending_email = [m for m in matches if m.get("email_enabled") and m.get("email_status") != "delivered"]
+        delivery_matches = list({m["match_id"]: m for m in pending_push + pending_email}.values()) or matches
         result = send_digest_notifications(
             user_id=user_id,
-            matches=matches,
+            matches=delivery_matches,
             mode=mode,
             dry_run=dry_run,
+            send_push=bool(pending_push),
+            send_email_channel=bool(pending_email),
         )
 
         if result["push_count"] > 0:
@@ -549,12 +616,14 @@ def process_digest_alerts(mode: str = "daily", dry_run: bool = False) -> dict:
             if result["push_count"] == 0:  # Don't double count
                 stats["users_notified"] += 1
 
-        # Collect match IDs for marking delivered
-        delivered_match_ids.extend(m["match_id"] for m in matches)
-
-    # Mark matches as delivered
-    if not dry_run and delivered_match_ids:
-        stats["matches_delivered"] = mark_alerts_delivered(delivered_match_ids)
+        push_sent = result["push_count"] > 0
+        email_sent = result["email_count"] > 0
+        for match in matches:
+            aggregate = record_delivery_outcome(match, push_sent, email_sent, dry_run)
+            if aggregate == "delivered":
+                stats["matches_delivered"] += 1
+            else:
+                stats["delivery_failed"] += 1
 
     return stats
 

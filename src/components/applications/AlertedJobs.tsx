@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 
 interface AlertJob { id: string; title: string; company_name: string; location?: string | null; url: string; }
-interface Match { id: string; job_id: string; source?: string; delivery_status: string; delivery_mode: string; delivered_at?: string | null; created_at: string; alert_names: string[]; job: AlertJob; }
+interface Match { id: string; job_id: string; source?: string; delivery_status: string; delivery_mode: string; delivered_at?: string | null; created_at: string; push_status?: string; email_status?: string; last_delivery_error?: string | null; alert_names: string[]; job: AlertJob; }
 
 type SourceKey = 'all' | 'watchlist' | 'alert' | 'all_jobs';
 const SOURCE_LABEL: Record<string, string> = { watchlist: 'Watchlist', alert: 'Alert', all_jobs: 'All Jobs' };
@@ -90,8 +90,11 @@ export function AlertedJobs() {
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 font-medium">{SOURCE_LABEL[match.source || 'alert'] || 'Notified'}</span>
             {match.alert_names.map((name) => <span key={name} className="rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1">{name}</span>)}
+            {match.push_status && <span className={`rounded-full px-2 py-1 ${match.push_status === 'delivered' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>Push: {match.push_status}</span>}
+            {match.email_status && <span className={`rounded-full px-2 py-1 ${match.email_status === 'delivered' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>Email: {match.email_status}</span>}
             <span className="text-gray-400 py-1">{new Date(match.delivered_at || match.created_at).toLocaleString()}</span>
           </div>
+          {match.last_delivery_error && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Delivery retry pending: {match.last_delivery_error}</p>}
           {messages[match.job_id] && <p className="mt-2 text-xs text-indigo-600 dark:text-indigo-400">{messages[match.job_id]}</p>}
         </div>
         <div className="flex gap-2 shrink-0">

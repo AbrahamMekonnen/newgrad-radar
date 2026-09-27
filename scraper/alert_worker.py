@@ -35,6 +35,10 @@ def main() -> None:
         job_ids = list(dict.fromkeys(row["job_id"] for row in rows))
         result = process_instant_alerts([{"id": job_id} for job_id in job_ids], dry_run=False)
     print(f"Alert delivery complete ({args.mode}): {result}")
+    if result.get("delivery_failed", 0):
+        raise SystemExit(
+            f"Alert delivery incomplete: {result['delivery_failed']} match(es) remain pending or failed"
+        )
 
 
 if __name__ == "__main__":

@@ -51,20 +51,18 @@ def _submit_one(client, COMPANIES, r: dict, profile, dry_run: bool) -> str:
     result = submit_application(ats, token, str(jid), apply_url, fields,
                                resume_url=getattr(profile, "resume_url", ""), dry_run=dry_run)
     st = result.get("status")
-    # 'submitted' leaves the inbox; anything else returns to 'prepared' with a note
-    # (needs_captcha / incomplete / submit_failed / dry_run) so the user can act.
-    new_status = "submitted" if st == "submitted" else "prepared"
+    # Hosted ATS forms are handed to the paired visible browser. Only its
+    # verified success receipt can produce a submitted state.
+    new_status = "waiting_for_browser" if st in ("browser_required", "needs_captcha") else "prepared"
     patch = {"submit_log": result}
-    if st == "submitted":
-        patch["submitted_at"] = _now()
+    if new_status == "waiting_for_browser":
+        patch.update({"execution_channel": "user_browser", "authorization_source": "direct_click"})
     _write(client, r["id"], new_status, result, patch)
 
     # Mirror real outcomes onto the Applications page (application_logs). Only a
     # true submit or a genuine failure is logged; needs_captcha stays a one-tap
     # action in the inbox (it wasn't submitted), so it isn't logged as applied.
-    if st == "submitted":
-        _log_application(client, r["user_id"], r["job_id"], ats, "submitted", None, _now())
-    elif st in ("submit_failed", "incomplete"):
+    if st in ("submit_failed", "incomplete"):
         _log_application(client, r["user_id"], r["job_id"], ats, "failed",
                          result.get("detail", "submit failed"), None)
 

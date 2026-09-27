@@ -20,6 +20,7 @@ export async function GET() {
   // 1) Saved-alert matches (source: 'alert').
   const { data, error } = await db.from('alert_matches').select(
     'id, alert_id, job_id, delivery_status, delivery_mode, delivered_at, created_at, ' +
+    'push_status, email_status, last_delivery_error, ' +
     'job_alerts!inner(id, user_id, name), ' +
     `jobs!inner(${JOB_COLS})`
   ).eq('job_alerts.user_id', user.id).order('created_at', { ascending: false }).limit(300);
@@ -30,7 +31,8 @@ export async function GET() {
 
   interface RawRow {
     id: string; alert_id: string; job_id: string; delivery_status: string; delivery_mode: string;
-    delivered_at: string | null; created_at: string;
+    delivered_at: string | null; created_at: string; push_status: string; email_status: string;
+    last_delivery_error: string | null;
     job_alerts: { name?: string }; jobs: Record<string, unknown>;
   }
   // Key by (job_id, source) so a job can appear under each section it was
@@ -49,6 +51,8 @@ export async function GET() {
     byKey.set(key, {
       id: row.id, job_id: row.job_id, source: 'alert', delivery_status: row.delivery_status,
       delivery_mode: row.delivery_mode, delivered_at: row.delivered_at, created_at: row.created_at,
+      push_status: row.push_status, email_status: row.email_status,
+      last_delivery_error: row.last_delivery_error,
       alert_names: alert?.name ? [alert.name] : [], job,
     });
   }
