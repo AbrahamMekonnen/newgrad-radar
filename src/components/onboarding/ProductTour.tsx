@@ -45,7 +45,7 @@ const STOPS: Stop[] = [
   { page: '/', kind: 'spot', sel: '[data-tour="search"]', side: 'bottom',
     title: '🔍 Search anything',
     desc: 'Jump to any company or role instantly — or press ⌘K / Ctrl-K from anywhere in the app.' },
-  { page: '/', kind: 'spot', sel: '#main-content',
+  { page: '/', kind: 'spot', sel: '[data-tour="topbar"]', side: 'bottom',
     title: '📋 All Jobs — your home feed',
     desc: 'Every new-grad & tech role lives here. Scroll down to filter by role, experience level, sponsorship, work mode and salary.' },
   { page: '/', kind: 'nav', to: '/my-list', label: 'Watchlist', sel: '[data-tour="nav-my-list"]', side: 'bottom',
@@ -61,7 +61,7 @@ const STOPS: Stop[] = [
     desc: 'Click Applications to see everything you’ve applied to.' },
 
   // ---- Applications ----
-  { page: '/applications', kind: 'spot', sel: '#main-content',
+  { page: '/applications', kind: 'spot', sel: '[data-tour="topbar"]', side: 'bottom',
     title: '⚡ Your application pipeline',
     desc: 'Every application — manual or auto-applied — is tracked here with its live status.' },
   { page: '/applications', kind: 'nav', to: '/interview-prep', label: 'Interview Prep', sel: '[data-tour="nav-interview-prep"]', side: 'bottom',
@@ -69,7 +69,7 @@ const STOPS: Stop[] = [
     desc: 'Click Interview Prep.' },
 
   // ---- Interview Prep ----
-  { page: '/interview-prep', kind: 'spot', sel: '#main-content',
+  { page: '/interview-prep', kind: 'spot', sel: '[data-tour="topbar"]', side: 'bottom',
     title: '🎯 Real interview questions',
     desc: 'Actual questions asked at each company — filter by company, type and difficulty to prep for exactly who you’re interviewing with.' },
   { page: '/interview-prep', kind: 'nav', to: '/recruiters', label: 'Recruiters', sel: '[data-tour="nav-recruiters"]', side: 'bottom',
@@ -77,7 +77,7 @@ const STOPS: Stop[] = [
     desc: 'Click Recruiters.' },
 
   // ---- Recruiters ----
-  { page: '/recruiters', kind: 'spot', sel: '#main-content',
+  { page: '/recruiters', kind: 'spot', sel: '[data-tour="topbar"]', side: 'bottom',
     title: '📧 Reach recruiters',
     desc: 'Search any company to find its recruiters, then email all of them in one click with a ready-to-send message.' },
   { page: '/recruiters', kind: 'navmenu', to: '/profile', label: 'My Profile', sel: '[data-tour="usermenu"]', side: 'bottom',
@@ -110,7 +110,7 @@ const STOPS: Stop[] = [
     desc: 'Open your account menu again — Click Next and we’ll take you to Settings to turn on notifications.' },
 
   // ---- Settings (notifications) — finish ----
-  { page: '/settings', kind: 'spot', sel: '#main-content',
+  { page: '/settings', kind: 'spot', sel: '[data-tour="topbar"]', side: 'bottom',
     title: '🔔 Turn on notifications',
     desc: 'Enable notifications so job alerts actually reach you. That’s the whole app — you’re ready to go! 🎉' },
 ];
@@ -149,6 +149,7 @@ export function ProductTour() {
   const dRef = useRef<Driver | null>(null);
   const navigatingRef = useRef(false);
   const navPendingRef = useRef(false);   // true while a tour-driven navigation is in flight
+  const shownRef = useRef<{ path: string; index: number } | null>(null); // segment currently on screen
   const cleanupRef = useRef<Array<() => void>>([]);
   const [paused, setPaused] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -166,6 +167,7 @@ export function ProductTour() {
     runClean();
     try { dRef.current?.destroy(); } catch { /* ignore */ }
     dRef.current = null;
+    shownRef.current = null;
     navigatingRef.current = false;
   }, []);
 
@@ -228,8 +230,16 @@ export function ProductTour() {
     // Wait for the first anchor to paint (page may have just navigated / be
     // hydrating). #main-content always exists, so those resolve immediately.
     const first = segment[0];
-    if (first.sel !== '#main-content' && !qs(first.sel)) {
+    const alwaysThere = (sel: string) => sel === '#main-content' || sel === '[data-tour="topbar"]';
+    if (!alwaysThere(first.sel) && !qs(first.sel)) {
       if (attempt < 12) { setTimeout(() => run(attempt + 1), 200); return; }
+    }
+
+    // Already showing this exact segment? Don't tear it down and rebuild — that
+    // redundant destroy+create is what makes the overlay flicker.
+    if (dRef.current && shownRef.current?.path === pathname && shownRef.current?.index === i
+        && document.querySelector('.driver-popover')) {
+      setPaused(false); navPendingRef.current = false; return;
     }
 
     destroyTour(true);
@@ -237,7 +247,12 @@ export function ProductTour() {
 
     // Resolve each stop to a concrete driver step. Every step gets an element so
     // driver.js always renders (a leading element-less step silently no-ops).
-    const fallback = qs('#main-content') ? '#main-content' : 'body';
+    // Prefer the small, always-in-view sticky top bar as the generic anchor.
+    // Anchoring to a viewport-taller element like #main-content makes driver.js
+    // scroll-loop on mobile (scrollIntoView → scroll event → refresh → repeat),
+    // which looks like the page "flickering on and off".
+    const fallback = qs('[data-tour="topbar"]') ? '[data-tour="topbar"]'
+      : (qs('#main-content') ? '#main-content' : 'body');
     const steps: DriveStep[] = segment.map((s) => {
       let elSel = s.sel;
       let title = s.title;
@@ -245,11 +260,13 @@ export function ProductTour() {
 
       if (s.kind === 'nav') {
         // Prefer the real, visible top-nav link so the user learns the path by
-        // clicking it. On narrow screens the nav collapses to a hamburger.
+        // clicking it. On narrow screens the nav collapses to a hamburger — there
+        // we anchor the (small, in-view) top bar and just advance on Next, rather
+        // than fighting the drawer (which caused flicker + double-navigation).
         if (!isVisible(qs(s.sel))) {
-          elSel = isVisible(qs('[data-tour="menu"]')) ? '[data-tour="menu"]' : (qs(s.sel) ? s.sel : fallback);
-          title = `☰ Open the menu`;
-          desc = `${s.label} lives in the menu — open it, then tap ${s.label}. (Click Next and we’ll take you there.)`;
+          elSel = fallback;
+          title = `☰ ${s.label}`;
+          desc = `On a small screen, ${s.label} lives in the ☰ menu up here. Tap Next and we’ll open it for you.`;
         }
       } else if (s.kind === 'navmenu') {
         if (!isVisible(qs(s.sel))) elSel = fallback;
@@ -260,11 +277,11 @@ export function ProductTour() {
       const anchored = elSel !== fallback && !!qs(elSel);
       const popover: DriveStep['popover'] = { title, description: desc };
       if (anchored && s.side) { popover!.side = s.side; popover!.align = 'start'; }
-      // Block clicks INSIDE big container steps (#main-content / body fallback) so
-      // the user can't accidentally click a job card and get whisked off-tour.
-      // Real interactive targets (nav links, the auto-apply card, form fields)
-      // stay clickable so the walkthrough is still hands-on.
-      const bigContainer = elSel === '#main-content' || elSel === 'body';
+      // Block clicks INSIDE big container / generic anchor steps so the user
+      // can't accidentally click a card or nav item and get whisked off-tour.
+      // Real interactive targets (the auto-apply card, form fields, the nav link
+      // a nav-step points at) stay clickable so the walkthrough is hands-on.
+      const bigContainer = elSel === '#main-content' || elSel === 'body' || elSel === '[data-tour="topbar"]';
       const step: DriveStep = { element: elSel, popover };
       (step as DriveStep & { disableActiveInteraction?: boolean }).disableActiveInteraction = bigContainer;
       return step;
@@ -289,10 +306,8 @@ export function ProductTour() {
         return;
       }
       if (s.kind === 'nav') {
-        const menuBtn = qs('[data-tour="menu"]');
-        if (menuBtn && !isVisible(qs(s.sel))) { try { menuBtn.click(); } catch { /* ignore */ } }
         destroyTour(true);
-        setTimeout(() => router.push(s.to || dest), menuBtn && !isVisible(qs(s.sel)) ? 400 : 0);
+        setTimeout(() => router.push(s.to || dest), 0);
         return;
       }
       // spot that ends a segment but next stop is elsewhere (shouldn't normally
@@ -321,6 +336,7 @@ export function ProductTour() {
       // way to "lose" it with no path back. Exit is only via the ✕ button.
       allowClose: false,
       showButtons: ['next', 'previous', 'close'],
+      smoothScroll: false,
       overlayColor: '#0f172a',
       overlayOpacity: 0.72,
       stagePadding: 6,
@@ -337,6 +353,7 @@ export function ProductTour() {
       onCloseClick: () => endTour(),
     });
     dRef.current = d;
+    shownRef.current = { path: pathname, index: i };
     setI(i);
     setPaused(false);
     navPendingRef.current = false;
@@ -353,15 +370,9 @@ export function ProductTour() {
         link.addEventListener('click', onClick, { capture: true, once: true });
         cleanupRef.current.push(() => link.removeEventListener('click', onClick, { capture: true } as EventListenerOptions));
       }
-    } else if (last.kind === 'nav') {
-      // Mobile: real link is hidden. Let a click on the hamburger progress + open.
-      const ham = qs('[data-tour="menu"]');
-      if (ham) {
-        const onClick = () => { setI(nextGlobal); navPendingRef.current = true; destroyTour(true); setTimeout(() => router.push(last.to || STOPS[nextGlobal]?.page || '/'), 300); };
-        ham.addEventListener('click', onClick, { capture: true, once: true });
-        cleanupRef.current.push(() => ham.removeEventListener('click', onClick, { capture: true } as EventListenerOptions));
-      }
     }
+    // On mobile the nav link is hidden; that step anchors the top bar and simply
+    // advances on Next (see advance()), so there is no hamburger listener here.
   }, [pathname, router, destroyTour, finishTour, endTour, segmentFrom]);
 
   // Resume on every pathname change while active.
