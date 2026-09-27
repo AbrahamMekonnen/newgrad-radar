@@ -25,7 +25,7 @@ export const optionSetHash = (field: ResolutionField) => createHash('sha256')
 export const isSensitiveFact = (label: unknown) => /citizen|citizenship|visa|sponsor|work authori[sz]ation|legally authori[sz]ed|veteran|disab|gender|sex|race|ethni|relig|age|18|criminal|convict|security clearance|export control|government official|background check/.test(String(label || '').toLowerCase());
 
 export const mayUseAi = (field: ResolutionField) => {
-  if ((field.attempt || 1) < 2 || isSensitiveFact(field.label)) return false;
+  if (isSensitiveFact(field.label)) return false;
   const q = String(field.label || '').toLowerCase();
   return !field.options?.length || /why|describe|tell us|project|worked on|similar role|accomplishment|experience|additional information|cover letter|motivat|interest|strength|challenge|learn/.test(q);
 };

@@ -1,7 +1,7 @@
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionSetHash, scopedAnswerKey, validateResolutionAnswer } from '../field-resolution';
 describe('field resolution policy', () => {
-  it('allows AI for prose only on the final bounded attempt', () => {
-    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(false);
+  it('classifies prose for deferred AI while excluding sensitive facts', () => {
+    expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(true);
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 2 })).toBe(true);
     expect(mayUseAi({ name: 'similar', label: 'Have you worked on similar projects?', attempt: 2, options: ['Yes', 'No'] })).toBe(true);
   });

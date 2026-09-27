@@ -45,32 +45,37 @@
   };
 
   const setCheckboxValue = async (element, checked) => {
-    if (element.checked === checked) return true;
-    element.focus();
-    element.click();
-    await wait(80);
-    if (element.checked === checked) return true;
-
-    // Styled ATS checkboxes sometimes attach the click handler to the label
-    // while leaving the input visually hidden or replacing it after a render.
-    const label = element.labels?.[0]
-      || (element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null)
-      || element.closest('label');
-    if (label && label !== element) {
-      label.click();
+    try {
+      if (element.checked === checked) return true;
+      element.focus();
+      element.click();
       await wait(80);
       if (element.checked === checked) return true;
-    }
 
-    // Final standards-based fallback for controlled inputs. Dispatching both
-    // events lets React and native validation observe the committed state.
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set;
-    if (setter) setter.call(element, checked);
-    else element.checked = checked;
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    await wait(80);
-    return element.checked === checked;
+      // Styled ATS checkboxes sometimes attach the click handler to the label
+      // while leaving the input visually hidden or replacing it after a render.
+      const escapedId = element.id && globalThis.CSS?.escape ? CSS.escape(element.id) : '';
+      const label = element.labels?.[0]
+        || (escapedId ? document.querySelector(`label[for="${escapedId}"]`) : null)
+        || element.closest('label');
+      if (label && label !== element) {
+        label.click();
+        await wait(80);
+        if (element.checked === checked) return true;
+      }
+
+      // Final standards-based fallback for controlled inputs. Dispatching both
+      // events lets React and native validation observe the committed state.
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set;
+      if (setter) setter.call(element, checked);
+      else element.checked = checked;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(80);
+      return element.checked === checked;
+    } catch {
+      return false;
+    }
   };
 
   const buttonText = (button) => normalize(button.textContent);

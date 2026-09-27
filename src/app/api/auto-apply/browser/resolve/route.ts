@@ -56,6 +56,14 @@ export async function POST(request: NextRequest) {
     if (/^(full |legal )?name\b/.test(q) && pick(f, [profile?.first_name, profile?.last_name].filter(Boolean).join(' '))) continue;
     if (/^email(?: address)?\b/.test(q) && pick(f, profile?.email)) continue;
     if (/^(phone|mobile|telephone)(?: number)?\b/.test(q) && pick(f, profile?.phone)) continue;
+    if (/linkedin/.test(q) && pick(f, profile?.linkedin_url)) continue;
+    if (/portfolio/.test(q) && pick(f, profile?.portfolio_url)) continue;
+    if (/github/.test(q) && pick(f, profile?.github_url)) continue;
+    if (/current company|current employer/.test(q) && pick(f, profile?.current_company)) continue;
+    if (/most recent employer|previous employer/.test(q)) {
+      const recentEmployer = profile?.current_company || profile?.prior_employers?.[0];
+      if (pick(f, recentEmployer)) continue;
+    }
     if (/current.*government employee|currently.*government/.test(q) && pick(f, fact('government_current'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/government.*past 10 years|former.*government|within the past 10 years/.test(q) && pick(f, fact('government_past_10_years'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
@@ -148,7 +156,9 @@ export async function POST(request: NextRequest) {
     if ((/^(school|university|college|institution)$/.test(q)
       || (/university|college|school|institution/.test(q) && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)))
       && pick(f, profile?.education_school)) continue;
-    if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q)) && pick(f, profile?.default_source)) continue;
+    if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q))
+      && pick(f, profile?.default_source || 'Careers Website', profile?.default_source ? 'profile' : 'policy',
+        'Used the saved source or the company careers-site source for a job selected in HireRadar')) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
     if (/when can you start|available to start|start date|when will you be available/.test(q)) {
