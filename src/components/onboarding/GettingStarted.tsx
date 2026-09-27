@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { createClient } from '@/lib/supabase/client';
 import { startProductTour } from './ProductTour';
 
@@ -15,7 +17,7 @@ export interface OnboardStateFlags {
 }
 
 export interface ChecklistItem {
-  key: keyof OnboardStateFlags;
+  key: string;
   label: string;
   desc: string;
   href: string;
@@ -24,8 +26,11 @@ export interface ChecklistItem {
 
 export function buildChecklist(s: OnboardStateFlags): ChecklistItem[] {
   return [
+    // Endowed progress: the account already exists, so the user starts the list
+    // partway done — a well-established nudge that measurably lifts completion.
+    { key: 'account', label: 'Create your account', desc: 'Done — welcome aboard!', href: '/profile', done: true },
     { key: 'resume', label: 'Upload your resume', desc: 'We auto-fill your whole profile from it.', href: '/settings/profile', done: s.resume },
-    { key: 'profile', label: 'Finish your profile', desc: 'Add work authorization & sponsorship — the two things a resume can’t tell us.', href: '/settings/profile', done: s.profile },
+    { key: 'profile', label: 'Finish your Auto-Apply profile', desc: 'Add work authorization & sponsorship — so we can apply on your behalf.', href: '/settings/profile', done: s.profile },
     { key: 'track', label: 'Track a company', desc: 'Get notified the moment it posts a new role.', href: '/my-list', done: s.track },
     { key: 'alert', label: 'Create a job alert', desc: 'Get pinged when a matching role goes live.', href: '/settings/alerts', done: s.alert },
     { key: 'notify', label: 'Turn on notifications', desc: 'So alerts actually reach you.', href: '/settings', done: s.notify },
@@ -33,7 +38,31 @@ export function buildChecklist(s: OnboardStateFlags): ChecklistItem[] {
   ];
 }
 
-/** Compact adaptive checklist with a progress bar. Auto-reflects real state. */
+/** Animated SVG progress ring (goal-gradient cue). */
+function ProgressRing({ pct }: { pct: number }) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+        <circle cx="32" cy="32" r={r} fill="none" strokeWidth="6" className="stroke-gray-200 dark:stroke-slate-700" />
+        <motion.circle
+          cx="32" cy="32" r={r} fill="none" strokeWidth="6" strokeLinecap="round"
+          className="stroke-indigo-600 dark:stroke-indigo-400"
+          strokeDasharray={c}
+          initial={false}
+          animate={{ strokeDashoffset: c - (c * pct) / 100 }}
+          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-bold text-gray-900 dark:text-white">{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+/** Gamified adaptive checklist with an animated ring + celebration at 100%. */
 export function GettingStartedChecklist({
   flags,
   onItemClick,
@@ -44,19 +73,43 @@ export function GettingStartedChecklist({
   const items = buildChecklist(flags);
   const done = items.filter((i) => i.done).length;
   const pct = Math.round((done / items.length) * 100);
+  const remaining = items.length - done;
+
+  // Confetti once, the moment the list first hits 100%.
+  const celebrated = useRef(false);
+  useEffect(() => {
+    if (pct >= 100 && !celebrated.current) {
+      celebrated.current = true;
+      try {
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.4 }, colors: ['#6366f1', '#22c55e', '#f59e0b', '#ec4899'] });
+      } catch { /* best-effort */ }
+    }
+  }, [pct]);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-gray-900 dark:text-white">Getting started</span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">{done}/{items.length} done</span>
+      <div className="flex items-center gap-4 mb-4">
+        <ProgressRing pct={pct} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            {pct >= 100 ? 'You’re fully set up! 🎉' : 'Getting started'}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {pct >= 100
+              ? 'Every step complete — we’re working for you.'
+              : `${done} of ${items.length} done · ${remaining} to go`}
+          </p>
+        </div>
       </div>
-      <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-slate-700 overflow-hidden mb-3">
-        <div className="h-full rounded-full bg-indigo-600 transition-all duration-500" style={{ width: `${pct}%` }} />
-      </div>
+
       <ul className="space-y-1.5">
-        {items.map((it) => (
-          <li key={it.key}>
+        {items.map((it, idx) => (
+          <motion.li
+            key={it.key}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.04 }}
+          >
             <Link
               href={it.href}
               onClick={onItemClick}
@@ -72,7 +125,17 @@ export function GettingStartedChecklist({
                 }`}
                 aria-hidden="true"
               >
-                {it.done ? '✓' : ''}
+                <AnimatePresence>
+                  {it.done && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                    >
+                      ✓
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </span>
               <span className="min-w-0">
                 <span className={`block text-sm font-medium ${it.done ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>
@@ -81,7 +144,7 @@ export function GettingStartedChecklist({
                 {!it.done && <span className="block text-xs text-gray-500 dark:text-gray-400">{it.desc}</span>}
               </span>
             </Link>
-          </li>
+          </motion.li>
         ))}
       </ul>
     </div>
@@ -90,8 +153,9 @@ export function GettingStartedChecklist({
 
 /**
  * Self-loading Getting-Started card for the My Profile hub: reads the user's real
- * state, shows the adaptive checklist, and offers to replay the guided tour.
- * Hides itself once every step is complete.
+ * state, shows the gamified checklist, and offers to (re)play the guided tour.
+ * Stays visible even at 100% (shows the celebration state) for one session, but
+ * collapses on next load once complete.
  */
 export function GettingStartedCard({ userId }: { userId: string }) {
   const supabase = createClient();
@@ -128,13 +192,13 @@ export function GettingStartedCard({ userId }: { userId: string }) {
   if (allDone) return null; // nothing left to nudge
 
   return (
-    <div className="p-6">
+    <div className="p-6" data-tour="gs-card">
       <GettingStartedChecklist flags={flags} />
       <button
         onClick={() => startProductTour()}
         className="mt-3 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
       >
-        Replay the guided tour
+        ▸ Replay the guided tour
       </button>
     </div>
   );

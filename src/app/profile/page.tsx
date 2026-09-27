@@ -158,14 +158,16 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
           </div>
         </div>
 
-        <LinkCard
-          title="Auto-Apply"
-          description="Set up your profile to automatically fill out job applications"
-          href="/settings/profile"
-          cta="Configure Auto-Apply Profile"
-          colorClass="text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
-          icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-        />
+        <div data-tour="pf-autoapply-card">
+          <LinkCard
+            title="Auto-Apply"
+            description="Set up your profile to automatically fill out job applications"
+            href="/settings/profile"
+            cta="Configure Auto-Apply Profile"
+            colorClass="text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
+          />
+        </div>
 
         <LinkCard
           title="Resume"

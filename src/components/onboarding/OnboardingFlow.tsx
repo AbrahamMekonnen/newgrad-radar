@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { AnimatePresence, motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 import { ResumeAutofill } from '@/components/autoapply';
 import { GettingStartedChecklist, type OnboardStateFlags } from './GettingStarted';
@@ -29,6 +30,8 @@ export function OnboardingFlow() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [dir, setDir] = useState(1); // slide direction: 1 = forward, -1 = back
+  const go = (next: number) => { setDir(next >= step ? 1 : -1); setStep(next); };
   const [flags, setFlags] = useState<OnboardStateFlags>({
     resume: false, profile: false, track: false, alert: false, notify: false, applied: false,
   });
@@ -86,7 +89,7 @@ export function OnboardingFlow() {
   const choosePersona = (p: Persona) => {
     // Persisted so the app can tailor defaults (e.g. experience filter) later.
     try { localStorage.setItem(PERSONA_KEY, p); } catch { /* ignore */ }
-    setStep(1);
+    go(1);
   };
 
   // Expose a global opener so a "Take the tour" button anywhere can re-open it.
@@ -101,8 +104,16 @@ export function OnboardingFlow() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={finish} />
-      <div className="relative w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-h-[92vh] overflow-y-auto">
+      <motion.div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={finish}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        className="relative w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-h-[92vh] overflow-y-auto">
         {/* header: progress dots + skip */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
           <div className="flex items-center gap-1.5">
@@ -115,7 +126,16 @@ export function OnboardingFlow() {
           </button>
         </div>
 
-        <div className="p-5 sm:p-6">
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+        <motion.div
+          key={step}
+          custom={dir}
+          initial={{ opacity: 0, x: dir * 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: dir * -40 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="p-5 sm:p-6"
+        >
           {/* STEP 0 — welcome + routing question */}
           {step === 0 && (
             <div>
@@ -185,12 +205,13 @@ export function OnboardingFlow() {
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
+        </AnimatePresence>
 
         {/* footer nav */}
         <div className="sticky bottom-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
           <button
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            onClick={() => go(Math.max(0, step - 1))}
             disabled={step === 0}
             className="text-sm font-medium text-gray-500 disabled:opacity-0 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
@@ -198,21 +219,23 @@ export function OnboardingFlow() {
           </button>
           {step < steps.length - 1 ? (
             <button
-              onClick={() => setStep((s) => s + 1)}
+              onClick={() => go(step + 1)}
               className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
             >
               {step === 1 ? 'Next' : 'Continue'}
             </button>
           ) : (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => { finish(); setTimeout(startProductTour, 300); }}
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+              className="rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 hover:from-indigo-700 hover:to-violet-700 transition-colors"
             >
-              Take the tour
-            </button>
+              ✨ Take the interactive tour
+            </motion.button>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

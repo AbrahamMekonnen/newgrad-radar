@@ -162,6 +162,7 @@ export function Navbar() {
 
                   <button
                     onClick={() => setShowDropdown(!showDropdown)}
+                    data-tour="usermenu"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                     aria-expanded={showDropdown}
                     aria-haspopup="true"
@@ -181,6 +182,7 @@ export function Navbar() {
                     >
                       <Link
                         href="/profile"
+                        data-tour="menu-profile"
                         className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700/50 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700/50 transition-colors"
                         onClick={() => setShowDropdown(false)}
                         role="menuitem"
@@ -189,6 +191,7 @@ export function Navbar() {
                       </Link>
                       <Link
                         href="/settings"
+                        data-tour="menu-settings"
                         className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700/50 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700/50 transition-colors"
                         onClick={() => setShowDropdown(false)}
                         role="menuitem"

@@ -601,6 +601,7 @@ function MyListContent({ userId }: { userId: string }) {
         </button>
         <button
           onClick={() => setActiveTab('add-companies')}
+          data-tour="wl-add-tab"
           className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'add-companies'
               ? 'border-blue-600 text-blue-600'

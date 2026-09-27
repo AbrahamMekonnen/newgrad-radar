@@ -302,7 +302,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Resume */}
-      <section>
+      <section data-tour="ap-resume">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Resume</h2>
         <div className="flex items-center gap-4">
           <div className="flex-1">
@@ -375,7 +375,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Auto-Apply Settings */}
-      <section>
+      <section data-tour="ap-autoapply">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Auto-Apply Settings</h2>
         <div className="space-y-4">
           <Checkbox
@@ -425,7 +425,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Pre-filled Answers */}
-      <section>
+      <section data-tour="ap-work-auth">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Pre-filled Answers</h2>
         <p className="text-sm text-gray-500 mb-4">
           These answers will be used to auto-fill common application questions
@@ -676,9 +676,11 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             {message.text}
           </div>
         )}
-        <Button type="submit" variant="primary" disabled={saving} className="w-full sm:w-auto min-h-[48px] sm:min-h-0">
-          {saving ? 'Saving...' : 'Save Profile'}
-        </Button>
+        <span data-tour="ap-save" className="inline-block w-full sm:w-auto">
+          <Button type="submit" variant="primary" disabled={saving} className="w-full sm:w-auto min-h-[48px] sm:min-h-0">
+            {saving ? 'Saving...' : 'Save Profile'}
+          </Button>
+        </span>
       </div>
     </form>
   );
