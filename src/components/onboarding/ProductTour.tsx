@@ -148,9 +148,12 @@ export function ProductTour() {
   const router = useRouter();
   const dRef = useRef<Driver | null>(null);
   const navigatingRef = useRef(false);
+  const navPendingRef = useRef(false);   // true while a tour-driven navigation is in flight
   const cleanupRef = useRef<Array<() => void>>([]);
   const [paused, setPaused] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
+  const celebrateRef = useRef(false);
+  useEffect(() => { celebrateRef.current = celebrate; }, [celebrate]);
 
   const getI = () => { try { return parseInt(localStorage.getItem(IK) || '0', 10) || 0; } catch { return 0; } };
   const setI = (n: number) => { try { localStorage.setItem(IK, String(n)); } catch { /* ignore */ } };
@@ -212,6 +215,7 @@ export function ProductTour() {
     // got bounced to login, reloaded elsewhere). Pause — never kill — and let the
     // floating pill bring them back.
     if (stop.page !== pathname) {
+      navPendingRef.current = false;
       destroyTour(true);
       setPaused(true);
       return;
@@ -256,18 +260,26 @@ export function ProductTour() {
       const anchored = elSel !== fallback && !!qs(elSel);
       const popover: DriveStep['popover'] = { title, description: desc };
       if (anchored && s.side) { popover!.side = s.side; popover!.align = 'start'; }
-      return { element: elSel, popover };
+      // Block clicks INSIDE big container steps (#main-content / body fallback) so
+      // the user can't accidentally click a job card and get whisked off-tour.
+      // Real interactive targets (nav links, the auto-apply card, form fields)
+      // stay clickable so the walkthrough is still hands-on.
+      const bigContainer = elSel === '#main-content' || elSel === 'body';
+      const step: DriveStep = { element: elSel, popover };
+      (step as DriveStep & { disableActiveInteraction?: boolean }).disableActiveInteraction = bigContainer;
+      return step;
     });
 
     // Never hand driver.js an empty step list (it logs "No steps to drive
     // through"). Should never happen given the guards above, but stay safe.
-    if (steps.length === 0) { setPaused(true); return; }
+    if (steps.length === 0) { navPendingRef.current = false; setPaused(true); return; }
 
     const advance = () => {
       const s = segment[segment.length - 1];
       setI(nextGlobal);
       if (nextGlobal >= TOTAL) { finishTour(); return; }
       const dest = STOPS[nextGlobal].page;
+      navPendingRef.current = true;
       if (s.kind === 'navmenu') {
         // Teach where it lives: flash the account menu open, then navigate.
         const btn = qs('[data-tour="usermenu"]');
@@ -286,7 +298,7 @@ export function ProductTour() {
       // spot that ends a segment but next stop is elsewhere (shouldn't normally
       // happen, but stay safe)
       destroyTour(true);
-      if (dest !== pathname) router.push(dest); else setTimeout(() => run(), 150);
+      if (dest !== pathname) router.push(dest); else { navPendingRef.current = false; setTimeout(() => run(), 150); }
     };
 
     const goBack = (dv: Driver) => {
@@ -305,6 +317,10 @@ export function ProductTour() {
       showProgress: segment.length > 1,
       progressText: '{{current}} of {{total}} on this page',
       animate: true,
+      // Don't let an overlay click or ESC silently destroy the tour — that was a
+      // way to "lose" it with no path back. Exit is only via the ✕ button.
+      allowClose: false,
+      showButtons: ['next', 'previous', 'close'],
       overlayColor: '#0f172a',
       overlayOpacity: 0.72,
       stagePadding: 6,
@@ -323,6 +339,7 @@ export function ProductTour() {
     dRef.current = d;
     setI(i);
     setPaused(false);
+    navPendingRef.current = false;
     d.drive();
 
     // If the last step of a segment is a real top-nav link, also let the user's
@@ -332,7 +349,7 @@ export function ProductTour() {
     if (last.kind === 'nav' && isVisible(qs(last.sel))) {
       const link = qs(last.sel);
       if (link) {
-        const onClick = () => { setI(nextGlobal); destroyTour(true); };
+        const onClick = () => { setI(nextGlobal); navPendingRef.current = true; destroyTour(true); };
         link.addEventListener('click', onClick, { capture: true, once: true });
         cleanupRef.current.push(() => link.removeEventListener('click', onClick, { capture: true } as EventListenerOptions));
       }
@@ -340,7 +357,7 @@ export function ProductTour() {
       // Mobile: real link is hidden. Let a click on the hamburger progress + open.
       const ham = qs('[data-tour="menu"]');
       if (ham) {
-        const onClick = () => { setI(nextGlobal); destroyTour(true); setTimeout(() => router.push(last.to || STOPS[nextGlobal]?.page || '/'), 300); };
+        const onClick = () => { setI(nextGlobal); navPendingRef.current = true; destroyTour(true); setTimeout(() => router.push(last.to || STOPS[nextGlobal]?.page || '/'), 300); };
         ham.addEventListener('click', onClick, { capture: true, once: true });
         cleanupRef.current.push(() => ham.removeEventListener('click', onClick, { capture: true } as EventListenerOptions));
       }
@@ -360,11 +377,30 @@ export function ProductTour() {
       }
     } catch { /* ignore */ }
 
-    const t = setTimeout(() => { if (isActive()) run(); else setPaused(false); }, 350);
-    const onStart = () => { setI(0); try { localStorage.setItem(AK, '1'); } catch { /* ignore */ } setCelebrate(false); run(); };
+    const t = setTimeout(() => { if (isActive()) { navPendingRef.current = true; run(); } else setPaused(false); }, 350);
+    const onStart = () => { setI(0); try { localStorage.setItem(AK, '1'); } catch { /* ignore */ } setCelebrate(false); navPendingRef.current = true; run(); };
     window.addEventListener('hr-tour-start', onStart);
+
+    // Watchdog: the tour is *unlosable*. If it's active but no step is currently
+    // showing (the user clicked something and navigated, a page swallowed the
+    // driver, whatever) always surface the resume pill so there's a way back.
+    const watchdog = window.setInterval(() => {
+      try {
+        if (!isActive()) { setPaused(false); return; }
+        // A step is showing (ref OR a popover on screen), we're mid-navigation,
+        // or celebrating → all fine, keep the pill hidden.
+        if (celebrateRef.current || navPendingRef.current || dRef.current) return;
+        if (document.querySelector('.driver-popover')) { setPaused(false); return; }
+        if (getI() >= TOTAL) return;
+        // Tour is active but nothing is on screen → surface the pill so there is
+        // always a way back, however the driver went away.
+        setPaused(true);
+      } catch { /* ignore */ }
+    }, 900);
+
     return () => {
       clearTimeout(t);
+      clearInterval(watchdog);
       window.removeEventListener('hr-tour-start', onStart);
       destroyTour(true);
     };
@@ -376,6 +412,7 @@ export function ProductTour() {
     const i = getI();
     const dest = STOPS[i]?.page || '/';
     setPaused(false);
+    navPendingRef.current = true;
     if (dest !== pathname) router.push(dest);
     else setTimeout(() => run(), 100);
   };
@@ -384,33 +421,31 @@ export function ProductTour() {
 
   return (
     <>
-      {/* Floating resume pill — the "way back" when the tour is paused. */}
-      <AnimatePresence>
-        {paused && (
-          <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.9 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="fixed bottom-5 right-5 z-[95] flex items-center gap-2 rounded-full bg-white dark:bg-slate-800 shadow-2xl border border-indigo-200 dark:border-indigo-500/40 pl-4 pr-2 py-2"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500" />
-            </span>
-            <button onClick={resume} className="text-sm font-semibold text-gray-900 dark:text-white">
-              Resume tour <span className="text-gray-400 dark:text-gray-500">· {stepNum}/{TOTAL}</span>
-            </button>
-            <button
-              onClick={endTour}
-              aria-label="End tour"
-              className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              ✕
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Floating resume pill — the "way back" when the tour is paused. Uses a
+          CSS transition (not rAF-driven animation) so it reliably shows/hides and
+          can never get stuck as an invisible node that blocks corner clicks. */}
+      <div
+        aria-hidden={!paused}
+        className={`fixed bottom-5 left-5 z-[95] flex items-center gap-2 rounded-full bg-white dark:bg-slate-800 shadow-2xl border border-indigo-200 dark:border-indigo-500/40 pl-4 pr-2 py-2 transition-all duration-300 ease-out ${
+          paused ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' : 'opacity-0 translate-y-6 scale-90 pointer-events-none'
+        }`}
+      >
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500" />
+        </span>
+        <button onClick={resume} tabIndex={paused ? 0 : -1} className="text-sm font-semibold text-gray-900 dark:text-white">
+          Resume tour <span className="text-gray-400 dark:text-gray-500">· {stepNum}/{TOTAL}</span>
+        </button>
+        <button
+          onClick={endTour}
+          aria-label="End tour"
+          tabIndex={paused ? 0 : -1}
+          className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          ✕
+        </button>
+      </div>
 
       {/* Completion celebration. */}
       <AnimatePresence>
