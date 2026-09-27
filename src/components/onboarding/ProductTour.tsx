@@ -107,6 +107,7 @@ export function ProductTour() {
       dRef.current = null;
       document.documentElement.classList.remove('driver-active', 'driver-fade');
       const d = driver({
+        steps,
         showProgress: true,
         animate: true,
         overlayOpacity: 0.7,
