@@ -634,3 +634,52 @@ body {
     transform: scale(1);
   }
 }
+
+/* =========================================================================
+   Native app feel on phones (<= 767px). Scoped so DESKTOP WEB IS UNCHANGED:
+   every rule here lives inside a max-width media query and desktop matches none
+   of it. Goal: on a phone the site should feel like an app, not a web page.
+   ========================================================================= */
+
+/* Safe-area helpers (notch / home indicator), usable at any width but only
+   meaningful on devices that report insets. */
+.app-safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.app-safe-top { padding-top: env(safe-area-inset-top); }
+
+@media (max-width: 767px) {
+  /* No pull-to-refresh / rubber-band bounce — the biggest "this is a website"
+     tell. Stops the whole page (and the sticky header) from dragging down. */
+  html, body {
+    overscroll-behavior: none;
+  }
+  body {
+    -webkit-overflow-scrolling: touch; /* momentum scrolling */
+  }
+
+  /* App chrome (top bar + bottom tab bar) shouldn't feel like text on a page:
+     no blue tap flash, no long-press callout, no text selection. Content and
+     inputs keep normal selection so job descriptions stay copyable. */
+  nav[data-app-chrome], [data-app-chrome] {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Push the sticky top bar below the status bar / notch. */
+  nav[data-tour="topbar"] {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Reserve space so page content never hides behind the fixed bottom tab bar.
+     Only applies when the bar is actually present (signed-in), via :has(). */
+  body:has([data-bottom-tabbar]) #main-content {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+
+  /* Float the tour resume pill and feedback button above the bottom tab bar. */
+  body:has([data-bottom-tabbar]) [data-tour-pill],
+  body:has([data-bottom-tabbar]) [data-feedback-btn] {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}

@@ -253,30 +253,47 @@ export function ProductTour() {
     // which looks like the page "flickering on and off".
     const fallback = qs('[data-tour="topbar"]') ? '[data-tour="topbar"]'
       : (qs('#main-content') ? '#main-content' : 'body');
+    // On a phone the destination usually has a real bottom-tab item — point the
+    // nav step at THAT so the user taps actual nav (interactive), popover above.
+    const tabSelFor = (to?: string) => `[data-tour="tab-${to === '/' ? 'jobs' : (to || '').slice(1)}"]`;
+
     const steps: DriveStep[] = segment.map((s) => {
       let elSel = s.sel;
       let title = s.title;
       let desc = s.desc;
+      let sideOverride: Side | undefined;
 
       if (s.kind === 'nav') {
         // Prefer the real, visible top-nav link so the user learns the path by
-        // clicking it. On narrow screens the nav collapses to a hamburger — there
-        // we anchor the (small, in-view) top bar and just advance on Next, rather
-        // than fighting the drawer (which caused flicker + double-navigation).
+        // clicking it. On narrow screens: prefer the real bottom-tab item; else
+        // fall back to the (small, in-view) top bar and advance on Next.
         if (!isVisible(qs(s.sel))) {
-          elSel = fallback;
-          title = `☰ ${s.label}`;
-          desc = `On a small screen, ${s.label} lives in the ☰ menu up here. Tap Next and we’ll open it for you.`;
+          const tabSel = tabSelFor(s.to);
+          if (isVisible(qs(tabSel))) {
+            elSel = tabSel;
+            sideOverride = 'top'; // bar is at the bottom → popover above it
+            desc = `Tap ${s.label} in the bottom bar — that’s how you reach it on your phone.`;
+          } else {
+            elSel = fallback;
+            title = `☰ ${s.label}`;
+            desc = `On a small screen, ${s.label} lives in the ☰ menu up here. Tap Next and we’ll open it for you.`;
+          }
         }
       } else if (s.kind === 'navmenu') {
-        if (!isVisible(qs(s.sel))) elSel = fallback;
+        // Phone: profile is a bottom tab — point there instead of the account menu.
+        if (!isVisible(qs(s.sel))) {
+          const tabSel = tabSelFor(s.to);
+          if (isVisible(qs(tabSel))) { elSel = tabSel; sideOverride = 'top'; desc = `Tap ${s.label} in the bottom bar.`; }
+          else elSel = fallback;
+        }
       } else if (!isVisible(qs(s.sel))) {
         elSel = fallback;
       }
 
       const anchored = elSel !== fallback && !!qs(elSel);
       const popover: DriveStep['popover'] = { title, description: desc };
-      if (anchored && s.side) { popover!.side = s.side; popover!.align = 'start'; }
+      const side = sideOverride || s.side;
+      if (anchored && side) { popover!.side = side; popover!.align = 'start'; }
       // Block clicks INSIDE big container / generic anchor steps so the user
       // can't accidentally click a card or nav item and get whisked off-tour.
       // Real interactive targets (the auto-apply card, form fields, the nav link
@@ -359,20 +376,27 @@ export function ProductTour() {
     navPendingRef.current = false;
     d.drive();
 
-    // If the last step of a segment is a real top-nav link, also let the user's
-    // OWN click on it advance the tour (so they truly learn the path). We save
-    // progress in capture phase, then let the link navigate naturally.
+    // Let the user's OWN tap on the real nav control advance the tour (so they
+    // truly learn the path): the desktop top-nav link, or on a phone the bottom
+    // tab item. We save progress in capture phase, then let it navigate naturally.
     const last = segment[segment.length - 1];
-    if (last.kind === 'nav' && isVisible(qs(last.sel))) {
-      const link = qs(last.sel);
+    let navAnchorSel: string | null = null;
+    if (last.kind === 'nav') {
+      if (isVisible(qs(last.sel))) navAnchorSel = last.sel;                       // desktop link
+      else if (isVisible(qs(tabSelFor(last.to)))) navAnchorSel = tabSelFor(last.to); // phone bottom tab
+    } else if (last.kind === 'navmenu') {
+      // Only the phone bottom-tab is a direct navigate target; the desktop path
+      // (account menu) advances via Next in advance().
+      if (!isVisible(qs(last.sel)) && isVisible(qs(tabSelFor(last.to)))) navAnchorSel = tabSelFor(last.to);
+    }
+    if (navAnchorSel) {
+      const link = qs(navAnchorSel);
       if (link) {
         const onClick = () => { setI(nextGlobal); navPendingRef.current = true; destroyTour(true); };
         link.addEventListener('click', onClick, { capture: true, once: true });
         cleanupRef.current.push(() => link.removeEventListener('click', onClick, { capture: true } as EventListenerOptions));
       }
     }
-    // On mobile the nav link is hidden; that step anchors the top bar and simply
-    // advances on Next (see advance()), so there is no hamburger listener here.
   }, [pathname, router, destroyTour, finishTour, endTour, segmentFrom]);
 
   // Resume on every pathname change while active.
@@ -437,6 +461,7 @@ export function ProductTour() {
           can never get stuck as an invisible node that blocks corner clicks. */}
       <div
         aria-hidden={!paused}
+        data-tour-pill
         className={`fixed bottom-5 left-5 z-[95] flex items-center gap-2 rounded-full bg-white dark:bg-slate-800 shadow-2xl border border-indigo-200 dark:border-indigo-500/40 pl-4 pr-2 py-2 transition-all duration-300 ease-out ${
           paused ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' : 'opacity-0 translate-y-6 scale-90 pointer-events-none'
         }`}

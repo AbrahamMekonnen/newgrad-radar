@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Navbar } from "@/components/layout/Navbar";
+import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { CommandPalette } from "@/components/ui/CommandPalette";
@@ -55,6 +56,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#2563eb",
+  // Extend under the notch/home indicator so we can pad with safe-area insets and
+  // the app fills the whole screen (native-app feel). We keep pinch-zoom enabled
+  // (no maximumScale) for accessibility.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -108,6 +113,9 @@ export default function RootLayout({
           {/* PWA: register the service worker + offer install */}
           <ServiceWorkerRegistrar />
           <InstallPrompt />
+
+          {/* Native-style bottom tab bar (phones, signed-in only) */}
+          <BottomTabBar />
 
           {/* First-run guided onboarding (self-gates to signed-in first-timers) */}
           <OnboardingFlow />
