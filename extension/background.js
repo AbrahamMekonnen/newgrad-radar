@@ -1,6 +1,7 @@
 importScripts('batch-policy.js');
 const DEFAULT_ORIGIN = 'https://newgrad-radar.vercel.app';
 const POLL_ALARM = 'hireradar-poll';
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const currentByTab = new Map();
 const stored = () => chrome.storage.local.get(['origin', 'deviceToken', 'paused', 'canaryCompleted', 'canaryFailed']);
 const api = async (path, options = {}) => {
@@ -15,7 +16,7 @@ const api = async (path, options = {}) => {
   return data;
 };
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
-  method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, ...extra }),
+  method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, extensionVersion: EXTENSION_VERSION, ...extra }),
 });
 // Each version runs one bounded eight-tab conformance batch. Per-tab isolation
 // lets every ATS complete independently; a confirmed engine failure blocks later claims.
@@ -229,6 +230,12 @@ void (async () => {
   if (local.runtimeVersion !== version) {
     const keys = managed.map(([key]) => key);
     const tabs = keys.map((key) => Number(key.slice(4))).filter(Number.isFinite);
+    // Release every prior-version lease before removing its tab record. If the
+    // record is deleted first, onRemoved cannot identify the job and the queue
+    // remains blocked until the lease expires.
+    await Promise.allSettled(managed.map(([, job]) => report(job, 'failed', {
+      detail: 'Browser helper upgraded to ' + version + '; restarting this application with the current runtime.',
+    })));
     if (keys.length) await chrome.storage.session.remove(keys);
     await chrome.storage.session.set({ batchClaimCount: 0 });
     await Promise.allSettled(tabs.map((tabId) => chrome.tabs.remove(tabId)));

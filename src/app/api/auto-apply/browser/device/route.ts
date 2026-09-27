@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const device = await deviceFor(request);
   if (!device) return json({ error: 'Unpaired browser' }, 401);
-  const { id, leaseId, stage, detail, filled, total } = await request.json().catch(() => ({}));
+  const { id, leaseId, stage, detail, filled, total, extensionVersion } = await request.json().catch(() => ({}));
   const allowed = ['tab_opened', 'filling', 'waiting_for_user', 'submit_started', 'submitted', 'failed'];
   if (!id || !leaseId || !allowed.includes(stage)) return json({ error: 'Invalid progress report' }, 400);
   const db = admin();
@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest) {
   // A complete preflight can report many required controls. Preserve the whole
   // bounded diagnostic set so one run reveals every blocker instead of only
   // the first few fields.
-  const progress = { stage, detail: String(detail || '').slice(0, 8000), filled, total, at: now };
+  const progress = { stage, detail: String(detail || '').slice(0, 8000), filled, total, extensionVersion: String(extensionVersion || 'unknown').slice(0, 20), at: now };
   // Persist sanitized field outcomes separately from the latest progress blob.
   // Labels, answers, option values, and resume content are deliberately absent.
   let parsedDetail: { diagnostic?: Record<string, unknown>; diagnostics?: Record<string, unknown>[] } = {};
