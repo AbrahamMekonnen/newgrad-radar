@@ -595,6 +595,12 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </div>
           ))}
           <Input
+            label="Earliest available start date"
+            value={customFact('available_start_date')}
+            onChange={(e) => handleFactChange('available_start_date', e.target.value)}
+            placeholder="Immediately, two weeks after offer, or 2027-06-01"
+          />
+          <Input
             label="High school name"
             value={customFact('high_school_name')}
             onChange={(e) => handleFactChange('high_school_name', e.target.value)}

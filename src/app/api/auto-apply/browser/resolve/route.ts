@@ -65,13 +65,13 @@ export async function POST(request: NextRequest) {
     if (/demographic.*consent|consent.*demographic|collecting storing and processing.*demographic/.test(q)
       && pick(f, fact('demographic_data_consent') || 'Yes', fact('demographic_data_consent') ? 'saved' : 'authorization', 'Applied demographic processing consent for this user-authorized application')) continue;
     if (/privacy (notice|policy)|acknowledge.*privacy/.test(q)) {
-      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : null;
+      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('privacy_acknowledgement') || soleAcknowledgement,
         fact('privacy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required privacy acknowledgement')) continue;
     }
     if (/arbitration/.test(q)) {
-      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : null;
+      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('arbitration_acknowledgement') || soleAcknowledgement,
         fact('arbitration_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required arbitration acknowledgement')) continue;
@@ -81,19 +81,19 @@ export async function POST(request: NextRequest) {
         fact('ai_notetaker_consent') ? 'saved' : 'policy',
         'Used the saved preference or conservative AI-notetaker opt-out')) continue;
     if (/unauthorized outside assistance|interview process.*outside assistance|adhere to these guidelines/.test(q)) {
-      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : null;
+      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('interview_assistance_policy_acknowledgement') || soleAcknowledgement,
         fact('interview_assistance_policy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required interview-policy acknowledgement')) continue;
     }
     if (/candidate ai responsible use policy|responsible use of ai|ai use policy/.test(q)) {
-      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : null;
+      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('ai_use_policy_acknowledgement') || soleAcknowledgement,
         fact('ai_use_policy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required employer AI-use policy acknowledgement')) continue;
     }
     if (/certif|truthful|information.*(true|accurate|complete)/.test(q)) {
-      const soleCertification = optionLabels(f).length === 1 ? optionLabels(f)[0] : null;
+      const soleCertification = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('truthfulness_certification') || soleCertification,
         fact('truthfulness_certification') ? 'saved' : 'authorization',
         'Applied the saved or sole required truthfulness certification')) continue;

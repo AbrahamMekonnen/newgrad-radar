@@ -44,6 +44,35 @@
     element.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
+  const setCheckboxValue = async (element, checked) => {
+    if (element.checked === checked) return true;
+    element.focus();
+    element.click();
+    await wait(80);
+    if (element.checked === checked) return true;
+
+    // Styled ATS checkboxes sometimes attach the click handler to the label
+    // while leaving the input visually hidden or replacing it after a render.
+    const label = element.labels?.[0]
+      || (element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null)
+      || element.closest('label');
+    if (label && label !== element) {
+      label.click();
+      await wait(80);
+      if (element.checked === checked) return true;
+    }
+
+    // Final standards-based fallback for controlled inputs. Dispatching both
+    // events lets React and native validation observe the committed state.
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set;
+    if (setter) setter.call(element, checked);
+    else element.checked = checked;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait(80);
+    return element.checked === checked;
+  };
+
   const buttonText = (button) => normalize(button.textContent);
   const clickManualEntry = async (field) => {
     if (!String(field.name || '').endsWith('_text') && field.category !== 'cover_letter') return;
@@ -424,13 +453,10 @@
         const boxes = checkboxGroupFor(element);
         const option = bestMatch(boxes, answerLabel(field), labelTextFor);
         if (!option) return false;
-        if (!option.checked) option.click();
-        option.dispatchEvent(new Event('change', { bubbles: true }));
-        return Boolean(option.checked);
+        return setCheckboxValue(option, true);
       }
       const checked = !['false', 'no', '0', ''].includes(normalize(value));
-      if (element.checked !== checked) element.click();
-      return element.checked === checked;
+      return setCheckboxValue(element, checked);
     }
     if (String(element.value || '').trim()) return true; // never overwrite user edits
     setNativeValue(element, value);
