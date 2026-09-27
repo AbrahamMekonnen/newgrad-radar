@@ -8,6 +8,7 @@
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const ATS = globalThis.HireRadarATS;
   const EXEC = globalThis.HireRadarExecution;
+  const CB = globalThis.HireRadarCombobox;
 
   // Messaging that can never throw. chrome.runtime.sendMessage throws
   // "Extension context invalidated" (synchronously) when this content script is
@@ -193,11 +194,15 @@
     ? [normalize(field.label), normalize(field.type)].filter(Boolean).join('|')
     : [String(field.name || ''), normalize(field.type)].filter(Boolean).join('|'));
   const visibleOptions = (owner) => {
+    // Strict scoping to THIS control's own menu (kills cross-widget contamination
+    // where a document-wide scan grabbed the phone-country picker's options).
+    if (CB) return CB.scopedOptions(owner, { requireLayout: true });
     const controlledId = owner?.getAttribute?.('aria-controls') || owner?.getAttribute?.('aria-owns');
     const controlled = controlledId && document.getElementById(controlledId);
     const nearbyPopup = owner?.closest?.('[class*=select], [class*=combobox], [role=group]')
       ?.querySelector?.('[role=listbox], [role=menu], [class*=menu], [class*=options]');
-    const root = controlled || nearbyPopup || document;
+    const root = controlled || nearbyPopup;
+    if (!root) return []; // never fall back to document — that is the contamination bug
     const selector = [
       '[role="option"]', '[role="menuitemradio"]', '[role="radio"]',
       '[data-option-index]', '[data-value]', '[aria-selected]',
@@ -217,15 +222,23 @@
     const isLocation = /location/i.test([field.label, field.category, element.id, element.name].filter(Boolean).join(' '));
     const isCountry = /country/i.test(String(field.label || element.id || element.name || ''));
     const selectedLocation = isLocation && document.querySelector('#selected-location, input[name="selectedLocation"]');
-    if (existing && existing !== 'select' && optionMatches(existing, wanted) && (!selectedLocation || selectedLocation.value)) return true;
-    if (existing && existing !== 'select' && !isLocation) return true;
+    const retainedText = CB?.retainedText?.(element) || '';
+    if (retainedText && (!wanted || optionMatches(retainedText, wanted))
+      && (!selectedLocation || selectedLocation.value)) return true;
+    // Native/custom non-search controls may expose their committed value directly.
+    // A combobox input's value is only search text and is never completion proof.
+    if (!CB && existing && existing !== 'select' && optionMatches(existing, wanted)
+      && (!selectedLocation || selectedLocation.value)) return true;
 
-    element.focus();
-    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-    element.click();
-    await wait(350);
+    if (CB) await CB.openCombobox(element, { settle: 350 });
+    else {
+      element.focus();
+      element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      element.click();
+      await wait(350);
+    }
     let candidates = visibleOptions(element);
-    if (!candidates.length) {
+    if (!candidates.length && !CB) {
       element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
       element.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
       await wait(350);
@@ -299,10 +312,13 @@
       return false;
     }
     unresolvedChoiceSignatures.delete(field.name);
-    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-    if (option.isConnected) option.click();
+    if (CB) await CB.selectOption(option, { settle: 300 });
+    else {
+      option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      if (option.isConnected) option.click();
+      await wait(250);
+    }
     element.dispatchEvent(new Event('change', { bubbles: true }));
-    await wait(250);
     if (controlHasValue(element, field)) return true;
 
     // Some React controls ignore synthetic option clicks but accept the same
@@ -638,9 +654,9 @@
       return element.checked;
     }
     if (element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete')) {
-      // React-Select keeps search text in the input while no option is selected.
-      // Require retained selection UI rather than treating that search text as
-      // a completed answer.
+      // A controlled combobox's input value is search text. Completion requires
+      // committed selection UI owned by this control.
+      if (CB) return CB.retained(element);
       let container = element.parentElement;
       for (let depth = 0; container && depth < 6; depth++, container = container.parentElement) {
         const selected = container.querySelector(':scope > [class*=singleValue], :scope > [class*=single-value], [aria-selected=true]');
@@ -1266,7 +1282,19 @@
           const remaining = fields.length - completed.size;
           if (data.browserWorker) await send({
             type: 'PROGRESS', stage: 'filling',
-            detail: { filled: completed.size, total: fields.length, detail: JSON.stringify({ message: 'Prepared field pass complete.', remaining }) },
+            detail: {
+              filled: completed.size, total: fields.length,
+              detail: JSON.stringify({
+                message: 'Prepared field pass complete.', remaining,
+                diagnostics: fields.map((field) => EXEC?.safeDiagnostic?.({
+                  code: 'prepared_field_outcome', ats: data.atsType,
+                  fieldKey: fieldKey(field), controlType: field.type,
+                  answerSource: field.source, retained: completed.has(field.name),
+                  category: completed.has(field.name) ? 'accepted' : 'not_retained',
+                  attempt: preparedLedger?.get(field)?.attempts,
+                })),
+              }),
+            },
           });
           // Resolve live fields that the server prep missed — including ones the
           // ATS renders LATE (dynamic controls). Only newly-seen fields are sent,
@@ -1310,6 +1338,26 @@
             const results = await resolveFieldsBatch(liveBatch);
             liveBatch.forEach((field, index) => {
               if (!results[index]?.accepted) failedLive.push(field);
+            });
+            if (data.browserWorker) await send({
+              type: 'PROGRESS', stage: 'filling',
+              detail: {
+                filled: completed.size, total: fields.length,
+                detail: JSON.stringify({
+                  message: 'Live field resolution pass complete.', round,
+                  diagnostics: liveBatch.map((field, index) => {
+                    const state = resolutionState.get(fieldKey(field));
+                    return EXEC?.safeDiagnostic?.({
+                      code: 'live_field_outcome', ats: data.atsType,
+                      fieldKey: fieldKey(field), controlType: field.type,
+                      answerSource: state?.answerSource,
+                      retained: results[index]?.accepted === true,
+                      category: results[index]?.accepted ? 'accepted' : (state?.lastFailure || 'unresolved'),
+                      attempt: state?.attempt, optionCount: field.options?.length,
+                    });
+                  }),
+                }),
+              },
             });
             await wait(500);
           }

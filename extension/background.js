@@ -16,7 +16,7 @@ const api = async (path, options = {}) => {
   return data;
 };
 const report = async (job, stage, extra = {}) => api('/api/auto-apply/browser/device', {
-  method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, extensionVersion: EXTENSION_VERSION, ...extra }),
+  method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage, extensionVersion: EXTENSION_VERSION, runId: job.runId, ...extra }),
 });
 // Each version runs one bounded eight-tab conformance batch. Per-tab isolation
 // lets every ATS complete independently; a confirmed engine failure blocks later claims.
@@ -35,15 +35,16 @@ async function poll() {
     while (currentByTab.size < capacity && batchClaimCount < BATCH_SIZE) {
       const data = await api('/api/auto-apply/browser/device');
       if (!data.job) break;
+      const job = { ...data.job, runId: crypto.randomUUID() };
       try {
-        const tab = await chrome.tabs.create({ url: data.job.jobUrl, active: false });
+        const tab = await chrome.tabs.create({ url: job.jobUrl, active: false });
         if (!tab.id) throw new Error('Could not create ATS tab.');
-        currentByTab.set(tab.id, data.job);
+        currentByTab.set(tab.id, job);
         batchClaimCount += 1;
-        await chrome.storage.session.set({ ['job:' + tab.id]: data.job, batchClaimCount });
-        await report(data.job, 'tab_opened');
+        await chrome.storage.session.set({ ['job:' + tab.id]: job, batchClaimCount });
+        await report(job, 'tab_opened');
       } catch (error) {
-        await report(data.job, 'failed', { detail: 'Could not open the ATS tab: ' + error.message }).catch(() => undefined);
+        await report(job, 'failed', { detail: 'Could not open the ATS tab: ' + error.message }).catch(() => undefined);
       }
     }
   } catch (error) {
@@ -79,7 +80,7 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: details.tabId, frameIds: [details.frameId] },
-      files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'content.js'],
+      files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'combobox-interaction.js', 'content.js'],
     });
   } catch (error) {
     await report(job, 'failed', { detail: 'Could not attach to the embedded Greenhouse form: ' + error.message }).catch(() => undefined);
@@ -109,7 +110,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     return;
   }
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'content.js'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js', 'combobox-interaction.js', 'content.js'] });
   } catch (error) {
     await report(job, 'failed', { detail: 'Could not start the ATS page helper: ' + error.message }).catch(() => undefined);
   }
