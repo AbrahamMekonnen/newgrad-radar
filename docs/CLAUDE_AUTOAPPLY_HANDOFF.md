@@ -14,7 +14,21 @@ Read these first:
 
 - `docs/AUTOAPPLY_FAILURE_AUDIT.md`
 - `docs/BROWSER_FIRST_AUTOAPPLY_ARCHITECTURE.md`
+- `docs/research/AUTOAPPLY_COMBOBOX_INTERACTION.md` — root causes + contract for ATS dropdowns (pointer-open, strict option scoping, own-box retained check), live-validated
 - this file
+
+## Current status (2026-09-27, extension 0.18.4)
+
+The custom-dropdown interaction layer was root-caused live and fixed generally
+(not per-field): react-aria controls need a POINTER press to open; options are now
+scoped to the control's own menu (no more phone-widget contamination); the
+retained-value check is scoped to the control's own box (a 6-ancestor walk had let
+an empty field inherit a neighbour's value and get skipped). Verified live on
+Greenhouse (Roblox) and Ashby (Ramp). Details + per-ATS coverage:
+`docs/research/AUTOAPPLY_COMBOBOX_INTERACTION.md`. Implementation:
+`extension/combobox-interaction.js`; tests: `src/lib/__tests__/combobox-interaction.test.ts`.
+Still needs a real authorized run per ATS to confirm end to end; Workday /
+SmartRecruiters remain un-validated.
 
 Do not print, commit, or paste `.env.local` values. API keys and a Supabase service-role token were previously pasted into chat and should be rotated by the owner. Use only local environment variables and GitHub/Vercel secrets.
 
