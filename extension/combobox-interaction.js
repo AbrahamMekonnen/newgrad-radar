@@ -131,14 +131,18 @@
   // The retained selection UI (react-select single-value, or an aria-selected
   // option shown inline). This is verification of a real committed choice, not
   // the search text a controlled input may still hold.
+  //
+  // CRITICAL: scope strictly to THIS control's own box. An earlier version walked
+  // up to 6 ancestors doing a broad descendant [class*=single-value] search, which
+  // matched a NEIGHBOURING filled select's value — so an empty required field
+  // looked complete, got skipped, and quietly blocked submission. The committed
+  // value always lives inside this control's own .select__control / container.
   const retainedText = (input) => {
-    let container = controlRoot(input);
-    for (let depth = 0; container && depth < 6; depth++, container = container.parentElement) {
-      const selected = container.querySelector
-        && container.querySelector(':scope > [class*="single-value"], :scope > [class*="singleValue"], [class*="single-value"], [class*="singleValue"], [aria-selected="true"]');
-      const text = String((selected && selected.textContent) || '').trim();
-      if (text && !/^select$|^choose/i.test(norm(text))) return text;
-    }
+    const root = control(input) || controlRoot(input) || input;
+    if (!root || !root.querySelector) return '';
+    const selected = root.querySelector('[class*="single-value"], [class*="singleValue"], [aria-selected="true"]');
+    const text = String((selected && selected.textContent) || '').trim();
+    if (text && !/^select$|^choose/i.test(norm(text))) return text;
     return '';
   };
   const retained = (input) => Boolean(retainedText(input));

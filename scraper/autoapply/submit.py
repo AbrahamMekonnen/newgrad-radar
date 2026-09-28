@@ -106,6 +106,18 @@ def submit_application(ats: str, token: str, jid: str, apply_url: str,
         return {"status": "incomplete", "detail": f"unfilled required: {', '.join(missing[:6])}",
                 "at": _now()}
 
+    # Greenhouse hosted forms always complete in the paired browser: the
+    # documented submit API needs the employer's private Job Board key and an
+    # invisible reCAPTCHA runs at submission. That is known without a page fetch,
+    # so we never make a network call just to route it to the browser.
+    if ats == "greenhouse":
+        return {
+            "status": "browser_required",
+            "detail": "Greenhouse hosted form requires verified in-browser submission",
+            "page": page,
+            "at": _now(),
+        }
+
     # An HTTP success code is not proof that an ATS accepted an application;
     # several hosted boards return 200 for validation errors and bot challenges.
     # All real submissions therefore run in the paired visible browser and only

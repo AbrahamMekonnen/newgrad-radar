@@ -87,6 +87,21 @@ describe('retained-selection verification (not search text)', () => {
     input.value = 'Bachel'; // controlled search text, no committed option
     expect(CB.retained(input)).toBe(false);
   });
+
+  it('does NOT bleed a neighbouring filled select into an empty one', () => {
+    // Two questions in one form section: degree filled, demographic empty. The
+    // empty control must read as empty (regression: a broad ancestor walk matched
+    // the neighbour's single-value, so empty required fields were silently skipped).
+    html(`<form><div class="section">
+      ${reactSelect({ id: 'degree--0', open: false, single: "Bachelor's Degree" })}
+      ${reactSelect({ id: 'question_1', open: false })}
+    </div></form>`);
+    const degree = document.getElementById('degree--0')!;
+    const demographic = document.getElementById('question_1')!;
+    expect(CB.retained(degree)).toBe(true);
+    expect(CB.retainedText(degree)).toBe("Bachelor's Degree");
+    expect(CB.retained(demographic)).toBe(false); // must NOT inherit the degree value
+  });
 });
 
 describe('open-strategy ordering (pointer → keyboard → mouse), verified each time', () => {
