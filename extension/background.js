@@ -42,10 +42,11 @@ const flushPendingReceipts = async () => {
     }
   } finally { receiptFlushRunning = false; }
 };
-// Each version runs one bounded eight-tab conformance batch. Per-tab isolation
-// lets every ATS complete independently; a confirmed engine failure blocks later claims.
-const BATCH_SIZE = 8;
-const adaptiveCapacity = (state = {}) => HireRadarBatchPolicy.capacity(state, BATCH_SIZE);
+// Process up to 50 authorized applications while limiting the browser to seven
+// active ATS tabs. One application-specific failure must not stop the cohort.
+const CAMPAIGN_SIZE = 50;
+const MAX_CONCURRENT = 7;
+const adaptiveCapacity = (state = {}) => HireRadarBatchPolicy.capacity(state, MAX_CONCURRENT);
 let pollRunning = false;
 async function poll() {
   if (pollRunning) return;
@@ -56,7 +57,7 @@ async function poll() {
     const capacity = adaptiveCapacity(state);
     const batchState = await chrome.storage.session.get('batchClaimCount');
     let batchClaimCount = Number(batchState.batchClaimCount || 0);
-    while (currentByTab.size < capacity && batchClaimCount < BATCH_SIZE) {
+    while (currentByTab.size < capacity && batchClaimCount < CAMPAIGN_SIZE) {
       const data = await api('/api/auto-apply/browser/device');
       if (!data.job) break;
       const job = { ...data.job, runId: crypto.randomUUID() };
@@ -171,7 +172,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'STATUS') {
       const state = await stored();
-      return { ...state, activeCount: currentByTab.size, capacity: adaptiveCapacity(state) };
+      const batch = await chrome.storage.session.get('batchClaimCount');
+      return { ...state, activeCount: currentByTab.size, capacity: adaptiveCapacity(state),
+        campaignClaimed: Number(batch.batchClaimCount || 0), campaignSize: CAMPAIGN_SIZE };
     }
     if (message.type === 'PAGE_READY') {
       const tabId = sender.tab?.id;

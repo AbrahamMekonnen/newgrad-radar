@@ -3,7 +3,7 @@ async function render() {
   const state = await ask({ type: 'STATUS' });
   document.getElementById('disconnected').hidden = !!state.deviceToken;
   document.getElementById('connected').hidden = !state.deviceToken;
-  document.getElementById('status').textContent = state.paused ? 'Paused. No applications will start.' : 'Connected - ' + state.activeCount + ' active of ' + state.capacity + ' parallel slots.';
+  document.getElementById('status').textContent = state.paused ? 'Paused. No applications will start.' : 'Connected — ' + state.activeCount + ' active of ' + state.capacity + ' parallel slots. Campaign: ' + state.campaignClaimed + ' of ' + state.campaignSize + ' opened.';
   document.getElementById('pause').textContent = state.paused ? 'Resume' : 'Pause';
   document.getElementById('pause').dataset.paused = String(!!state.paused);
 }
