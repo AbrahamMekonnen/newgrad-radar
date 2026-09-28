@@ -158,14 +158,22 @@ def main() -> None:
         if len(cohort) != args.size:
             raise SystemExit(f"Refusing partial release: selected {len(cohort)} of {args.size}")
         selected = {row["queue_id"] for row in cohort}
-        # Keep this board isolated: return every non-cohort row to review state.
-        for row in queue:
-            if row["id"] not in selected and row["status"] in ("waiting_for_browser", "waiting_for_user"):
-                client.table("autoapply_job_queue").update({"status": "prepared"}).eq("id", row["id"]).execute()
+        # Keep unclaimed work from other ATSes out of this campaign while
+        # preserving active leases and tabs that are waiting for user input.
+        unclaimed = (client.table("autoapply_job_queue").select("id")
+                     .eq("user_id", user_id)
+                     .in_("status", ["submit_requested", "waiting_for_browser"])
+                     .limit(5000).execute().data or [])
+        for row in unclaimed:
+            if row["id"] not in selected:
+                client.table("autoapply_job_queue").update({
+                    "status": "prepared", "browser_stage": "paused_for_isolated_campaign",
+                }).eq("id", row["id"]).execute()
         for row in cohort:
             client.table("autoapply_job_queue").update({
                 "status": "waiting_for_browser", "execution_channel": "user_browser",
                 "authorization_source": "standing_rule", "browser_stage": "cohort_released",
+                "priority": 0,
             }).eq("id", row["queue_id"]).execute()
 
     print(json.dumps({"report": str(report), "selected": len(cohort),

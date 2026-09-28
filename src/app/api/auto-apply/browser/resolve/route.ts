@@ -149,13 +149,21 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('high_school_name'), 'saved', 'Matched the confirmed high-school name')) continue;
     if (/high school.*graduat.*year|year of high school graduation/.test(q)
       && pick(f, fact('high_school_graduation_year'), 'saved', 'Matched the confirmed high-school graduation year')) continue;
+    const graduationDate = String(profile?.education_graduation_date || '');
+    const graduationYear = graduationDate.match(/\b(?:19|20)\d{2}\b/)?.[0];
+    const graduationMonth = graduationDate.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    if (/end date month|graduation month|month.*graduat/.test(q)
+      && pick(f, graduationMonth, 'profile', 'Split the confirmed graduation date into its month')) continue;
+    if (/end date year|graduation year|year.*graduat|graduat.*year|year.*degree|degree.*year/.test(q)
+      && pick(f, graduationYear, 'profile', 'Split the confirmed graduation date into its year')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
-      const graduationYear = String(profile?.education_graduation_date || '').match(/\b(?:19|20)\d{2}\b/)?.[0];
       if (pick(f, graduationYear)) continue;
     }
     if ((/^(school|university|college|institution)$/.test(q)
       || (/university|college|school|institution/.test(q) && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)))
       && pick(f, profile?.education_school)) continue;
+    if (/how did you hear|where did you hear|heard about/.test(q) && /careers? (website|site)|company website/.test(q)
+      && f.type === 'checkbox' && pick(f, 'Yes', 'policy', 'Selected the careers-site source checkbox')) continue;
     if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q))
       && pick(f, profile?.default_source || 'Careers Website', profile?.default_source ? 'profile' : 'policy',
         'Used the saved source or the company careers-site source for a job selected in HireRadar')) continue;
