@@ -239,9 +239,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.session.remove('job:' + tabId);
       } else if (message.stage === 'waiting_for_user') {
         // Keep the tab-to-job record so a later manual completion can still be
-        // recorded, but release the execution slot. The per-cycle claim count
-        // prevents this from silently draining more than seven queue rows.
+        // recorded, but mark it terminal for capacity accounting. A Manifest
+        // V3 worker restart must not restore old waiting tabs as active work.
         currentByTab.delete(tabId);
+        await chrome.storage.session.set({ ['job:' + tabId]: { ...job, waitingForUser: true } });
       } else if (message.stage === 'failed') {
         currentByTab.delete(tabId);
         await chrome.storage.session.remove('job:' + tabId);
@@ -285,7 +286,7 @@ void (async () => {
       const tabId = Number(key.slice(4));
       try {
         await chrome.tabs.get(tabId);
-        currentByTab.set(tabId, job);
+        if (!job?.waitingForUser) currentByTab.set(tabId, job);
       } catch {
         await chrome.storage.session.remove(key);
         await report(job, 'failed', { detail: 'ATS tab no longer exists.' }).catch(() => undefined);
