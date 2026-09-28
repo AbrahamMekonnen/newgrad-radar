@@ -11,6 +11,22 @@ control retained. `noForm` = URL rendered no application form (closed/expired jo
 or wrapper) — excluded from the pass rate. `comboRetainedPct` = react-select /
 react-aria / autocomplete controls that committed a value.
 
+## Round 3 — 2026-09-27 (50/board; async typeaheads segregated)
+
+| Board | forms | rendered | fullyOk* | combobox retained | async typeahead | notes |
+|-------|-------|----------|----------|-------------------|-----------------|-------|
+| Greenhouse | 50 | 40 | **37** | **97%** (145) | 100% | 10 closed; residual 4 = no-label phone-country widget (product-handled via adapter + phone linkage) |
+| Ashby | 50 | 22 | 21 | 88% (8) | 100% | 28 closed/expired (stale pipeline); 1 "did not open" |
+| Lever | 2 | 2 | 2 | n/a | n/a | native `<select>` |
+
+*fullyOk = every non-typeahead control retained (async location/school reported apart;
+they verified 100% once given a real query). Fixed-list dropdowns, multi-selects,
+demographics, degree, availability, coding-language, yes/no, native selects: ~100%.
+
+Trend: Greenhouse combobox retention 91% (R1) → 100% (R2, 25) → 97% (R3, 50, larger
+sample); the multi-value fix removed the systematic failure. Remaining misses are
+the phone-country widget (product-special-cased) and closed jobs, not the contract.
+
 ## Round 2 — 2026-09-27 (after multi-value retention fix)
 
 | Board | forms | rendered | fullyOk | combo retained | notes |

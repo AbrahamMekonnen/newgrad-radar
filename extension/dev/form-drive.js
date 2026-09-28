@@ -57,14 +57,24 @@ window.__hrDrive = async function () {
         const o = [...el.options].find((x) => norm(x.textContent) === want) || [...el.options].find((x) => want && norm(x.textContent).includes(want)) || [...el.options].find((x) => x.value && !/^select|^choose/i.test(norm(x.textContent)));
         if (o) { el.value = o.value; el.dispatchEvent(new W.Event('change', { bubbles: true })); ok = String(el.value) === String(o.value); reason = ok ? '' : 'value not set'; } else reason = 'no option';
       } else if (rawType === 'combobox') {
-        kind = el.getAttribute('aria-autocomplete') ? 'autocomplete' : 'combobox';
+        const hint = `${el.id} ${el.name} ${label}`;
+        const isLoc = /location|city/i.test(hint);
+        const isSchool = /school|university|college|institution/i.test(hint);
         const opened = await openC(el);
-        if (!opened && !scoped(el).length) { reason = 'did not open'; }
+        let opts = scoped(el);
+        // Async TYPEAHEADS (location, school) render options only after a real query
+        // — the shipped fillCombo handles these with dedicated logic. Segregate them
+        // so this generic harness doesn't misreport them as fixed-combobox regressions.
+        const async = (isLoc || isSchool) && !opts.length;
+        kind = async ? 'typeahead' : (el.getAttribute('aria-autocomplete') ? 'autocomplete' : 'combobox');
+        if (!opened && !opts.length && !async) { reason = 'did not open'; }
         else {
-          let opts = scoped(el);
-          if (!opts.length) { setNative(el, textVal(label)); await sleep(1200); opts = scoped(el); }
+          if (!opts.length) {
+            const query = isLoc ? P.city : isSchool ? P.school : textVal(label);
+            setNative(el, query); await sleep(async ? 1900 : 1200); opts = scoped(el);
+          }
           if (!opts.length) reason = 'no options';
-          else { press(pickOpt(label, opts)); await sleep(320); ok = !!retained(el); reason = ok ? '' : 'not retained'; }
+          else { press(pickOpt(label, opts)); await sleep(340); ok = !!retained(el); reason = ok ? '' : 'not retained'; }
         }
         try { el.dispatchEvent(kev('keydown', 'Escape', 27)); el.blur && el.blur(); } catch {}
       } else if (rawType === 'radio') {
@@ -95,7 +105,7 @@ window.__hrDrive = async function () {
   const combo = [...grp('combobox'), ...grp('autocomplete')];
   return {
     url: location.href.slice(0, 90), host: location.hostname, total: report.length,
-    counts: { combobox: combo.length, comboOk: combo.filter((r) => r.ok).length, select: grp('select').length, selOk: grp('select').filter((r) => r.ok).length, text: grp('text').length + grp('email').length + grp('tel').length + grp('url').length, radio: grp('radio').length, yesno: grp('yesno').length, yesnoOk: grp('yesno').filter((r) => r.ok).length },
+    counts: { combobox: combo.length, comboOk: combo.filter((r) => r.ok).length, select: grp('select').length, selOk: grp('select').filter((r) => r.ok).length, text: grp('text').length + grp('email').length + grp('tel').length + grp('url').length, radio: grp('radio').length, yesno: grp('yesno').length, yesnoOk: grp('yesno').filter((r) => r.ok).length, typeahead: grp('typeahead').length, typeaheadOk: grp('typeahead').filter((r) => r.ok).length },
     fail: report.filter((r) => !r.ok).map((r) => ({ label: r.label, kind: r.kind, reason: r.reason, req: r.required })),
     fileInputs: document.querySelectorAll('input[type=file]').length,
   };

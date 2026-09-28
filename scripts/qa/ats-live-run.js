@@ -32,10 +32,17 @@ async function driveOne(context, board, url) {
   const page = await context.newPage();
   const out = { board, url };
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
     // Give the SPA form time to render; wait for any real control.
-    await page.waitForSelector('form, [role="combobox"], [data-field-path], input, select', { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(1500);
+    await page.waitForSelector('form, [role="combobox"], [data-field-path], input, select', { timeout: 18000 }).catch(() => {});
+    if (board === 'ashby') {
+      // Ashby is a heavier SPA; wait specifically for its question entries and a
+      // beat longer so a slow render is not miscounted as a closed job.
+      await page.waitForSelector('[data-field-path], .ashby-application-form-field-entry', { timeout: 12000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+    } else {
+      await page.waitForTimeout(1500);
+    }
     await page.evaluate(HARNESS); // defines window.__hrDrive
     const report = await page.evaluate(() => window.__hrDrive());
     out.report = report;
@@ -73,19 +80,25 @@ async function runBoard(browser, board, list) {
 function summarize(board, results) {
   const loaded = results.filter((r) => r.report);
   const errored = results.filter((r) => r.error);
-  let combo = 0, comboOk = 0, sel = 0, selOk = 0;
+  let combo = 0, comboOk = 0, sel = 0, selOk = 0, loc = 0, locOk = 0;
   const failReasons = {};
   for (const r of loaded) {
-    combo += r.report.counts.combobox; comboOk += r.report.counts.comboOk;
-    sel += r.report.counts.select; selOk += r.report.counts.selOk;
+    const c = r.report.counts;
+    combo += c.combobox; comboOk += c.comboOk;
+    sel += c.select; selOk += c.selOk;
+    loc += (c.typeahead || 0); locOk += (c.typeaheadOk || 0);
     for (const f of r.report.fail) { const k = `${f.kind}:${f.reason}`; failReasons[k] = (failReasons[k] || 0) + 1; }
   }
   const withControls = loaded.filter((r) => r.report.total > 0);
   const noForm = loaded.filter((r) => r.report.total === 0).length; // closed/expired/no form rendered
-  const formsFullyOk = withControls.filter((r) => r.report.fail.length === 0).length;
+  // "fully ok" for the combobox contract = no non-typeahead failures. Async
+  // typeaheads (location/school) are product-special-cased and reported apart.
+  const formsFullyOk = withControls.filter((r) => r.report.fail.every((f) => f.kind === 'typeahead')).length;
   return {
     board, forms: results.length, loaded: loaded.length, errored: errored.length, noForm,
-    formsWithControls: withControls.length, formsFullyOk, comboboxes: combo, comboRetainedPct: combo ? Math.round((comboOk / combo) * 100) : null,
+    formsWithControls: withControls.length, formsFullyOk,
+    asyncTypeaheads: loc, typeaheadOkPct: loc ? Math.round((locOk / loc) * 100) : null,
+    comboboxes: combo, comboRetainedPct: combo ? Math.round((comboOk / combo) * 100) : null,
     selects: sel, selectOkPct: sel ? Math.round((selOk / sel) * 100) : null,
     topFailReasons: Object.entries(failReasons).sort((a, b) => b[1] - a[1]).slice(0, 12),
     errorSamples: [...new Set(errored.map((r) => r.error))].slice(0, 6),
