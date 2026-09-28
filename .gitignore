@@ -68,3 +68,6 @@ scraper/form_report.json
 # Telegram discovered-channel cache (regenerated each run)
 scraper/sources/interview_questions/.telegram_channels.json
 scraper/sources/interview_questions/.telegram_entities.json
+
+# Local ATS QA run outputs (scratch)
+.qa/

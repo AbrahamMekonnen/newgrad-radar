@@ -75,6 +75,16 @@ describe('retained-selection verification (not search text)', () => {
     expect(CB.retainedText(input)).toBe("Bachelor's Degree");
   });
 
+  it('detects a MULTI-select chip as retained (locations, languages, etc.)', () => {
+    html(`<div class="select__container"><div class="select__control"><div class="select__value-container">
+      <div class="select__multi-value"><div class="select__multi-value__label">New York</div></div>
+      <div class="select__input-container"><input id="loc" role="combobox" aria-expanded="false" /></div>
+    </div></div></div>`);
+    const input = document.getElementById('loc')!;
+    expect(CB.retained(input)).toBe(true);
+    expect(CB.retainedText(input)).toBe('New York');
+  });
+
   it('does NOT treat placeholder / empty as retained', () => {
     html(reactSelect({ open: false }));
     const input = document.getElementById('degree--0')!;

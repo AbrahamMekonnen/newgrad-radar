@@ -144,7 +144,10 @@
     // Committed-value UI across versions (all scoped to THIS control):
     //  v3–v5: .select__single-value · classic v1/v2: .Select-value-label / .Select-value
     //  generic ARIA: an [aria-selected=true] option shown inline.
-    const selected = root.querySelector('[class*="single-value"], [class*="singleValue"], [class*="value-label"], [class*="Select-value"], [aria-selected="true"]');
+    // Includes MULTI-select chips (.select__multi-value / .select__multi-value__label):
+    // multi-selects (locations, languages, "previously employed by…") commit values
+    // as chips, not a single-value, and were wrongly read as empty → retried/blocked.
+    const selected = root.querySelector('[class*="single-value"], [class*="singleValue"], [class*="multi-value"], [class*="value-label"], [class*="Select-value"], [aria-selected="true"]');
     const text = String((selected && selected.textContent) || '').trim();
     if (text && !/^select$|^choose/i.test(norm(text))) return text;
     // Autocomplete-style comboboxes (Ashby, and many custom typeaheads) keep the
