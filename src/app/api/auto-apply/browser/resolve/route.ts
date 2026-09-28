@@ -157,6 +157,17 @@ export async function POST(request: NextRequest) {
     const graduationDate = String(profile?.education_graduation_date || '');
     const graduationYear = graduationDate.match(/\b(?:19|20)\d{2}\b/)?.[0];
     const graduationMonth = graduationDate.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    if (/confirm.*graduation date.*(?:fall|spring|summer|winter)/.test(q) && graduationDate) {
+      const normalizedGraduation = norm(graduationDate);
+      const allowedTerms = [...q.matchAll(/\b(fall|spring|summer|winter)\s+((?:19|20)\d{2})\b/g)]
+        .map((match) => `${match[1]} ${match[2]}`);
+      const month = norm(graduationMonth);
+      const season = /dec|nov|oct|sep/.test(month) ? 'fall'
+        : /aug|jul|jun|may/.test(month) ? 'summer'
+        : /apr|mar|feb|jan/.test(month) ? 'spring' : '';
+      const actualTerm = season && graduationYear ? `${season} ${graduationYear}` : normalizedGraduation;
+      if (pick(f, allowedTerms.includes(actualTerm) ? 'Yes' : 'No', 'profile', 'Compared the confirmed graduation date with the listed eligible terms')) continue;
+    }
     if (/end date month|graduation month|month.*graduat/.test(q)
       && pick(f, graduationMonth, 'profile', 'Split the confirmed graduation date into its month')) continue;
     if (/end date year|graduation year|year.*graduat|graduat.*year|year.*degree|degree.*year/.test(q)
