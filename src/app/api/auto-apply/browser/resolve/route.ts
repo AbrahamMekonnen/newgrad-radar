@@ -156,6 +156,15 @@ export async function POST(request: NextRequest) {
       && pick(f, graduationMonth, 'profile', 'Split the confirmed graduation date into its month')) continue;
     if (/end date year|graduation year|year.*graduat|graduat.*year|year.*degree|degree.*year/.test(q)
       && pick(f, graduationYear, 'profile', 'Split the confirmed graduation date into its year')) continue;
+    const educationStartDate = String(fact('education_start_date') || '');
+    const educationStartYear = educationStartDate.match(/\b(?:19|20)\d{2}\b/)?.[0];
+    const educationStartMonth = educationStartDate.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    if (/start date month|education start month|month.*start/.test(q)
+      && pick(f, educationStartMonth, 'saved', 'Split the confirmed education start date into its month')) continue;
+    if (/start date year|education start year|year.*start/.test(q)
+      && pick(f, educationStartYear, 'saved', 'Split the confirmed education start date into its year')) continue;
+    if (/\bgpa\b|grade point average/.test(q)
+      && pick(f, profile?.education_gpa, 'profile', 'Matched the confirmed cumulative GPA')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
       if (pick(f, graduationYear)) continue;
     }
