@@ -1,8 +1,12 @@
-import sys
+import importlib.util
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from release_autoapply_cohort import matches
+_PATH = Path(__file__).with_name("release-autoapply-cohort.py")
+_SPEC = importlib.util.spec_from_file_location("release_autoapply_cohort", _PATH)
+_MODULE = importlib.util.module_from_spec(_SPEC)
+assert _SPEC and _SPEC.loader
+_SPEC.loader.exec_module(_MODULE)
+matches = _MODULE.matches
 
 
 FILTERS = {
