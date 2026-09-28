@@ -16,4 +16,9 @@ describe('browser batch canary policy', () => {
     expect(policy.outcome({ canaryCompleted: 0 }, 'waiting_for_user').canaryCompleted).toBe(1);
     expect(policy.outcome({ canaryCompleted: 1 }, 'submitted').canaryCompleted).toBe(2);
   });
+  it('rolls over a full campaign only after active applications finish', () => {
+    expect(policy.shouldRollover(50, 0, 50)).toBe(true);
+    expect(policy.shouldRollover(50, 1, 50)).toBe(false);
+    expect(policy.shouldRollover(49, 0, 50)).toBe(false);
+  });
 });

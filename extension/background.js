@@ -57,6 +57,12 @@ async function poll() {
     const capacity = adaptiveCapacity(state);
     const batchState = await chrome.storage.session.get('batchClaimCount');
     let batchClaimCount = Number(batchState.batchClaimCount || 0);
+    // Do not remain silently idle after completing a 50-job window. Start the
+    // next authorized window only after all active ATS tabs have terminated.
+    if (HireRadarBatchPolicy.shouldRollover(batchClaimCount, currentByTab.size, CAMPAIGN_SIZE)) {
+      batchClaimCount = 0;
+      await chrome.storage.session.set({ batchClaimCount });
+    }
     while (currentByTab.size < capacity && batchClaimCount < CAMPAIGN_SIZE) {
       const data = await api('/api/auto-apply/browser/device');
       if (!data.job) break;
