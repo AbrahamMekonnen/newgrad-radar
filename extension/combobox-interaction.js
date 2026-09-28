@@ -88,6 +88,7 @@
 
   const controlRoot = (input) =>
     (input.closest && (input.closest('[class*="select__container"]') || input.closest('[class*="select-shell"]')
+      || input.closest('[class*="Select--"], [class*="Select-container"], [class*="select-container"]')
       || input.closest('[class*="combobox"]') || input.closest('[role="combobox"]')?.parentElement))
     || input.parentElement || input;
 
@@ -105,7 +106,7 @@
     // 2) A menu rendered inside the control's own container (inline react-select).
     const rootEl = controlRoot(input);
     const inline = rootEl && rootEl.querySelector
-      && rootEl.querySelector('[class*="select__menu"], [role="listbox"], [role="menu"], [class*="menu-list"], [class*="dropdown"]');
+      && rootEl.querySelector('[class*="select__menu"], [class*="Select-menu"], [role="listbox"], [role="menu"], [class*="menu-list"], [class*="dropdown"]');
     return inline || null;
   };
 
@@ -140,14 +141,31 @@
   const retainedText = (input) => {
     const root = control(input) || controlRoot(input) || input;
     if (!root || !root.querySelector) return '';
-    const selected = root.querySelector('[class*="single-value"], [class*="singleValue"], [aria-selected="true"]');
+    // Committed-value UI across versions (all scoped to THIS control):
+    //  v3–v5: .select__single-value · classic v1/v2: .Select-value-label / .Select-value
+    //  generic ARIA: an [aria-selected=true] option shown inline.
+    const selected = root.querySelector('[class*="single-value"], [class*="singleValue"], [class*="value-label"], [class*="Select-value"], [aria-selected="true"]');
     const text = String((selected && selected.textContent) || '').trim();
     if (text && !/^select$|^choose/i.test(norm(text))) return text;
+    // Autocomplete-style comboboxes (Ashby, and many custom typeaheads) keep the
+    // committed value in the input itself, with no single-value chip. Trust it
+    // ONLY when the menu is closed — an open menu means the text is still an
+    // uncommitted search query. react-select clears its own input on close, so
+    // this never mis-reads react-select search text as a selection.
+    const isCombo = input.getAttribute
+      && (input.getAttribute('aria-autocomplete') || input.getAttribute('role') === 'combobox');
+    const expanded = input.getAttribute && input.getAttribute('aria-expanded') === 'true';
+    const val = String((input && input.value) || '').trim();
+    if (isCombo && !expanded && val && !/^select$|^choose/i.test(norm(val))) return val;
     return '';
   };
   const retained = (input) => Boolean(retainedText(input));
 
-  const control = (input) => (input.closest && (input.closest('[class*="select__control"]')
+  // The control's own interactive box, across react-select versions:
+  //  v3–v5 / Greenhouse "remix": .select__control (or prefixed *__control)
+  //  classic v1/v2: .Select-control
+  //  generic ARIA: the [role=combobox] element itself.
+  const control = (input) => (input.closest && (input.closest('[class*="select__control"], [class*="__control"], [class*="Select-control"], [class*="select-control"]')
     || input.closest('[role="combobox"]'))) || input;
 
   // Open strategies, tried in order, each VERIFIED before moving on:

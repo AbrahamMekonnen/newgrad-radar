@@ -88,6 +88,20 @@ describe('retained-selection verification (not search text)', () => {
     expect(CB.retained(input)).toBe(false);
   });
 
+  it('treats a CLOSED autocomplete input value as committed (Ashby-style), but not while open', () => {
+    // Ashby keeps the committed value in the input, with no single-value chip.
+    html(`<div class="_fieldEntry ashby-application-form-field-entry">
+      <div class="_inputContainer">
+        <input class="ashby-application-form-input-autocomplete" role="combobox"
+               aria-autocomplete="list" aria-expanded="false" value="San Francisco, California, United States" />
+      </div></div>`);
+    const input = document.querySelector('input') as HTMLInputElement;
+    expect(CB.retained(input)).toBe(true);
+    // While the menu is open the same text is an uncommitted search query.
+    input.setAttribute('aria-expanded', 'true');
+    expect(CB.retained(input)).toBe(false);
+  });
+
   it('does NOT bleed a neighbouring filled select into an empty one', () => {
     // Two questions in one form section: degree filled, demographic empty. The
     // empty control must read as empty (regression: a broad ancestor walk matched
