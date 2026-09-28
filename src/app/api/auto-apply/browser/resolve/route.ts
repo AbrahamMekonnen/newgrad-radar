@@ -111,8 +111,13 @@ export async function POST(request: NextRequest) {
     if (/language skill/.test(q) && fact('english_level') && pick(f, 'English', 'saved', 'Selected English from the confirmed language profile')) continue;
     if (/other languages|languages do you speak|additional languages/.test(q) && pick(f, fact('other_languages'), 'saved', 'Matched explicit language proficiency facts')) continue;
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
-    if (/coding language|programming language/.test(q)
-      && pick(f, matchFirstAvailablePreference(f.label, fact('coding_language'), optionLabels(f)), 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
+    if (/coding language|programming language/.test(q)) {
+      const options = optionLabels(f);
+      const language = options.length
+        ? matchFirstAvailablePreference(f.label, fact('coding_language'), options)
+        : fact('coding_language');
+      if (pick(f, language, 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
+    }
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
       const location = norm([profile?.country, profile?.location].filter(Boolean).join(' '));
@@ -172,7 +177,7 @@ export async function POST(request: NextRequest) {
       || (/university|college|school|institution/.test(q) && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)))
       && pick(f, profile?.education_school)) continue;
     if (/how did you hear|where did you hear|heard about/.test(q) && /careers? (website|site)|company website/.test(q)
-      && f.type === 'checkbox' && pick(f, 'Yes', 'policy', 'Selected the careers-site source checkbox')) continue;
+      && /checkbox/.test(String(f.type || '')) && pick(f, 'Careers Website', 'policy', 'Selected the careers-site source checkbox')) continue;
     if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q))
       && pick(f, profile?.default_source || 'Careers Website', profile?.default_source ? 'profile' : 'policy',
         'Used the saved source or the company careers-site source for a job selected in HireRadar')) continue;
@@ -219,11 +224,13 @@ export async function POST(request: NextRequest) {
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
         'profile', 'Compared confirmed employment history with the employer')) continue;
     }
-    if (policy?.id === 'previous_employment' || /previously worked|ever worked at|worked at .* before|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|ever worked (?:at|for)|worked at .* before|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
     }
+    if (/military status/.test(q)
+      && pick(f, fact('veteran_preference') || privacyDecline, fact('veteran_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (policy?.resolution === 'ai_grounded' || mayUseAi(f)) prose.push(f);
     else unresolved.push(f);
   }
