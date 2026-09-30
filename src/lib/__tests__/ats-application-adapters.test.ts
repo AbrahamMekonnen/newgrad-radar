@@ -38,6 +38,12 @@ describe('browser ATS adapters', () => {
     ])).toBe("Bachelor's degree");
   });
 
+  it('maps a saved country to an abbreviated ATS country option', () => {
+    expect(ATS.matchOption('Please select the country where you currently reside', 'United States', [
+      'Canada', 'UK', 'US', 'Other',
+    ])).toBe('US');
+  });
+
   it('rejects a stale fill-plan answer after a dynamic option set changes', () => {
     const original = {
       name: 'degree', fieldId: 'education|degree|0', label: 'Degree',

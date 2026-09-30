@@ -64,10 +64,15 @@
     if (/country/.test(q)) {
       const aliases = {
         us: 'united states', usa: 'united states', 'u s': 'united states',
+        'united states of america': 'united states',
         uk: 'united kingdom', 'u k': 'united kingdom',
+        'great britain': 'united kingdom',
       };
       const country = aliases[target] || target;
-      const option = usable.find((candidate) => normalize(candidate) === country);
+      const option = usable.find((candidate) => {
+        const normalized = normalize(candidate);
+        return (aliases[normalized] || normalized) === country;
+      });
       if (option) return option;
     }
 
