@@ -349,26 +349,41 @@ export async function POST(request: NextRequest) {
       profile?.career_goals && `Career goals: ${profile.career_goals}`,
       storyBank && `Their own words (reuse these facts and voice):\n${storyBank}`,
       profile?.resume_text && `Resume:\n${String(profile.resume_text).slice(0, 2500)}`,
-      profile?.writing_sample && `Writing sample (match this VOICE and rhythm, not its facts):\n${String(profile.writing_sample).slice(0, 1200)}`,
     ].filter(Boolean).join('\n') || '(limited background — stay honest and specific to what is given)';
+    // Voice-matching is the single biggest lever for not reading as AI: given a real
+    // sample of how THIS person writes, the model imitates a specific human instead of
+    // inventing a generic-competent voice (which is what every rule-only prompt plateaus
+    // at). When present it leads the prompt; when absent we fall back to register rules.
+    const voice = String(profile?.writing_sample || '').trim().slice(0, 1400);
+    const firstName = profile?.first_name || 'the candidate';
+    const voiceBlock = voice
+      ? `THIS IS HOW ${firstName.toUpperCase()} ACTUALLY WRITES. Study the voice closely: sentence length and rhythm, word choice, how blunt or formal it is, its little habits. Write every answer so it reads like the SAME person wrote it on a focused day. Match the voice, not the topic or the facts of the sample.
+"""
+${voice}
+"""
+
+`
+      : '';
     const jobContext = [
       `Role: ${job.job_title} at ${job.company_name}`,
       Array.isArray(jobMarket?.role_types) && jobMarket.role_types.length && `Role focus: ${jobMarket.role_types.join(', ')}`,
       jobMarket?.funding_stage && `Company stage: ${jobMarket.funding_stage}`,
       jobMarket?.description && `Job posting (pull REAL specifics from here for "why this role/company" — the actual product, team, or problem):\n${String(jobMarket.description).slice(0, 1700)}`,
     ].filter(Boolean).join('\n');
-    const prompt = `You are ${profile?.first_name || 'the candidate'} filling out this job application yourself. Write each open-ended answer in your own voice, from your real background — the way a thoughtful person writes after sitting down for twenty focused minutes, not a template.
+    const prompt = `You are ${firstName} filling out this job application yourself. ${voice ? 'Write every answer in the voice shown above.' : 'Write each open-ended answer in your own natural voice, from your real background, the way a real person types after sitting down for twenty focused minutes, not a template.'}
 
-HARD RULES
+${voiceBlock}HARD RULES
 - Truth only. Use ONLY the facts in CANDIDATE and JOB below. Never invent an employer, title, date, number, metric, tool, or achievement. If a question cannot be answered truthfully from those facts, return "" for it.
 - Be specific. Every answer names at least one concrete, real detail from CANDIDATE (a project, a technology, a result, a moment). For "why this company/role", tie it to something specific and true from the JOB posting (the actual product, team, or problem it describes). Never vague praise like "your commitment to innovation" or "a great opportunity".
-- Sound like a person. First person, contractions, one clear point of view. Really vary sentence length: include at least one short sentence (under eight words) in each answer, next to a longer one. If a writing sample is given, match its rhythm and vocabulary.
+- Sound like a real person, not an assistant or a polished essay. Understate rather than oversell. Cut sweeping, self-impressed lines ("exactly the kind of scale I want", "a natural next step", "lines up perfectly"). Plain is good. First person, contractions, one clear point of view.
+- Vary rhythm honestly: uneven sentence lengths, at least one short sentence next to a longer one. But every short sentence must carry a real fact or a turn in thought, never just announce a feeling — standalone lines like "That was hard." or "I loved it." are banned.
+- Don't force a connection. If a project doesn't genuinely relate to the role, don't pretend it does. For "why this company" it's fine to just say plainly and specifically what you'd want to build there.
 - Don't wrap it in a bow. Do not end every answer with a reflective summary like "this taught me...", "what draws me in is...", or "it made a real impact." Let some answers stop on a concrete detail instead. Vary how each one ends, and don't reuse the same closing shape twice.
 - Format cleanly. Plain prose, straight quotes, a normal hyphen in words like "real-time", "%" with no space. Essays: at most two short paragraphs, about 120-180 words, and let their lengths differ. No headings or bullet lists unless the question explicitly asks for a list. No greeting or sign-off unless it is a cover letter, and then keep it simple.
 
 NEVER USE (these read as AI): the em dash "—"; "not just X but Y" / "not only ... but also"; three-part lists for rhythm; and these words/phrases: leverage, passionate, delve, tapestry, robust, seamless, synergy, spearheaded, results-driven, detail-oriented, proven track record, cutting-edge, game-changer, elevate, streamline, "excited to contribute", "I am writing to apply", "in today's fast-paced world". Do not start two answers the same way.
 
-Before returning, reread every answer and delete anything templated or generic. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
+Before returning, reread every answer as the recruiter who reads 300 a day. Delete anything templated, generic, self-impressed, or that sounds generated${voice ? ', and anything that does not sound like the writing sample above' : ''}. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
 
 CANDIDATE:
 ${candidate}

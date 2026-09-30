@@ -683,9 +683,20 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
               className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Writing sample</label>
-            <textarea rows={5} value={formData.writing_sample || ''} onChange={(e) => handleChange('writing_sample', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Paste a paragraph you wrote naturally. The agent uses its style, not its facts." />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Writing sample <span className="text-indigo-600 font-semibold">(biggest quality boost)</span>
+            </label>
+            <p className="text-xs text-gray-500 mb-1">
+              This is the single most important field for making written answers sound like you and not like AI.
+              Paste a paragraph or two you actually wrote in your normal voice, a Slack message, an email, a Reddit
+              comment, anything unedited. The agent copies your rhythm and word choices, not the facts.
+            </p>
+            <textarea rows={6} value={formData.writing_sample || ''} onChange={(e) => handleChange('writing_sample', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder={"e.g. \"honestly I got into building stuff because I hate doing the same thing twice. my first app was a script that renamed my messy download folder. it broke constantly. I kept fixing it anyway...\""} />
+            {(formData.writing_sample || '').trim().length > 0 && (formData.writing_sample || '').trim().length < 200 && (
+              <p className="text-xs text-amber-600 mt-1">Add a bit more, aim for 3+ sentences so the voice is clear to copy.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Preferred tone</label>
