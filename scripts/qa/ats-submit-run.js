@@ -58,6 +58,20 @@ async function main() {
   const { data: devices } = await db.from('autoapply_browser_devices')
     .select('user_id').is('revoked_at', null).order('last_seen_at', { ascending: false }).limit(1);
   if (!devices?.[0]) throw new Error('No paired user found.');
+  const { data: activeDevices } = await db.from('autoapply_browser_devices')
+    .select('id,name,paused').eq('user_id', devices[0].user_id).is('revoked_at', null);
+  const staleQaDevices = (activeDevices || []).filter((item) => item.name === 'Playwright E2E submission QA');
+  if (staleQaDevices.length) {
+    const interruptedAt = new Date().toISOString();
+    for (const stale of staleQaDevices) {
+      await db.from('autoapply_browser_devices').update({ revoked_at: interruptedAt }).eq('id', stale.id);
+    }
+    // An interrupted QA process cannot execute its finally block. Restore only
+    // when its active temp device proves this process caused the stale pause.
+    for (const regular of (activeDevices || []).filter((item) => item.name !== 'Playwright E2E submission QA')) {
+      await db.from('autoapply_browser_devices').update({ paused: false }).eq('id', regular.id);
+    }
+  }
   const token = crypto.randomBytes(32).toString('base64url');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const { data: device, error } = await db.from('autoapply_browser_devices').insert({
@@ -77,13 +91,9 @@ async function main() {
   }
 
   const browser = await chromium.launch({ channel: 'chrome', headless: false });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
-  await context.addInitScript(() => {
-    globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
-  });
-  // Init scripts execute in an isolated Playwright bootstrap before page CSP is
-  // enforced, matching how a browser extension content script is installed.
-  for (const file of modules) await context.addInitScript({ path: file });
+  // Real extension content scripts are not blocked by a page's script-src CSP.
+  // bypassCSP gives the QA injection harness the same privilege boundary.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', bypassCSP: true });
   const results = [];
   try {
     for (let index = 0; index < limit; index++) {
@@ -139,7 +149,16 @@ async function main() {
         }
         return { ok: false };
       });
+      await page.addInitScript(() => {
+        globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
+      });
+      const injectProductionEngine = async () => {
+        if (await page.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
+        for (const file of modules) await page.addScriptTag({ path: file });
+      };
+      page.on('domcontentloaded', () => { void injectProductionEngine().catch(() => {}); });
       await page.goto(job.jobUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await injectProductionEngine();
       const outcome = await Promise.race([
         terminal,
         new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),
