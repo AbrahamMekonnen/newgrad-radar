@@ -112,8 +112,8 @@ def classify_question_smart(text: str, question_type: str | None = None) -> Qual
                 "type": "boolean",
                 "instructions": "Would an interviewer ask this OF a candidate during a job interview?",
                 "criteria": {
-                    "true": "a genuine interview question: coding/algorithm/data-structure, SQL, system design, ML, a CS/technical concept, or a behavioral question",
-                    "false": "anything else even if phrased as a question — study/prep advice, 'how do you study', discussion, opinions, job-search chatter, meta commentary, headings, navigation, ads, or fragments",
+                    "true": "a genuine question an interviewer asks a candidate during a job interview: coding/algorithm/data-structure, SQL, system design, ML, a CS/technical concept, or a behavioral question",
+                    "false": "anything else even if phrased as a question — study/prep advice, 'how do you study', discussion, opinions, job-search chatter, meta commentary, headings, navigation, ads, or fragments; recruiter/sourcing outreach ('happy where you are?', 'looking for a new opportunity', 'need interview support', 'DM me'); questions a candidate asks the employer (reverse-interview); and promotional or placement-brag messages",
                 },
             }},
         )

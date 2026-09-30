@@ -42,13 +42,18 @@ REAL_Q_INSTRUCTION = (
     "Would an interviewer ask this OF a candidate during a job interview?"
 )
 REAL_Q_CRITERIA = {
-    "true": ("a genuine interview question a candidate was asked: a coding/algorithm/"
-             "data-structure problem, SQL, system design, ML, a CS or technical concept "
-             "question, or a behavioral question (\"tell me about a time...\")"),
+    "true": ("a genuine question an INTERVIEWER asks a CANDIDATE during a job interview: "
+             "a coding/algorithm/data-structure problem, SQL, system design, ML, a CS or "
+             "technical concept question, or a behavioral question (\"tell me about a "
+             "time...\")"),
     "false": ("anything else, EVEN IF phrased as a question: study or prep advice, "
               "\"how do you study/prepare\", general discussion, opinions, job-search or "
               "salary chatter, meta commentary, headings, navigation, ads, personal "
-              "updates, code dumps, or fragments"),
+              "updates, code dumps, or fragments; recruiter or sourcing outreach "
+              "(\"happy where you are?\", \"are you looking for a new opportunity\", "
+              "\"need interview support\", \"DM me\"); questions a CANDIDATE asks the "
+              "employer (reverse-interview, e.g. \"where does this job take you in 3 "
+              "years?\"); and promotional, placement-brag, or DM-solicitation messages"),
 }
 
 
