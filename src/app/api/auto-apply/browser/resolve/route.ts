@@ -190,7 +190,11 @@ export async function POST(request: NextRequest) {
     if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
-    if (/^clearance eligibility$/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
+    if (/^clearance eligibility$/.test(q)) {
+      const citizenship = norm(fact('citizenship_status'));
+      if (pick(f, /u s citizen|united states citizen/.test(citizenship) ? 'Yes' : citizenship ? 'No' : null,
+        'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
+    }
     if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;
     if (/export control|u s person|itar|ear/.test(q) && pick(f, fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
@@ -257,6 +261,10 @@ export async function POST(request: NextRequest) {
       && pick(f, educationStartYear, 'saved', 'Split the confirmed education start date into its year')) continue;
     if (/\bgpa\b|grade point average/.test(q)
       && pick(f, profile?.education_gpa, 'profile', 'Matched the confirmed cumulative GPA')) continue;
+    if (/expected graduation date.*2028 or later/.test(q)) {
+      const year = Number(graduationYear || 0);
+      if (pick(f, year ? (year >= 2028 ? 'Yes' : 'No') : null, 'profile', 'Compared the confirmed graduation year with 2028')) continue;
+    }
     if (/\bsat\b/.test(q) && pick(f, fact('sat_score'), 'saved', 'Matched the confirmed SAT response')) continue;
     if (/\bact\b.*(?:score|test)|(?:score|test).*\bact\b/.test(q) && pick(f, fact('act_score'), 'saved', 'Matched the confirmed ACT response')) continue;
     if (/\bgre\b/.test(q) && pick(f, fact('gre_score'), 'saved', 'Matched the confirmed GRE response')) continue;
@@ -277,6 +285,8 @@ export async function POST(request: NextRequest) {
         'Used the saved source or the company careers-site source for a job selected in HireRadar')) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
+    if (/available to start full time/.test(q)
+      && pick(f, fact('full_time_start_window'), 'saved', 'Matched the confirmed full-time start window')) continue;
     if (/when can you start|available to start|start date|when will you be available/.test(q)) {
       const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
       const confirmed = fact('available_start_date') || profile?.available_start_date;
@@ -302,6 +312,18 @@ export async function POST(request: NextRequest) {
     }
     if (/current title|current job title|most recent title|previous title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
+    if (/current or previous job title/.test(q)
+      && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or previous job title')) continue;
+    if (/proudest accomplishment/.test(q) && pick(f, profile?.proud_project, 'profile', 'Used the candidate-confirmed accomplishment')) continue;
+    if (/first location preference|preferred office location/.test(q)
+      && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved first office location')) continue;
+    if (/location preference.*open to relocating/.test(q)
+      && pick(f, profile?.willing_to_relocate ? 'Any/all' : fact('relocation_locations'), 'profile', 'Matched the confirmed relocation preference')) continue;
+    if (/currently eligible to work/.test(q)) {
+      const authorization = norm(profile?.work_authorization);
+      const eligible = /citizen|permanent resident|green card|authorized/.test(authorization) || profile?.require_sponsorship === false;
+      if (pick(f, eligible ? 'Yes' : authorization ? 'No' : null, 'profile', 'Matched confirmed work eligibility')) continue;
+    }
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
       && pick(f, `Yes, I am interested in the ${job.job_title} role.`, 'authorization', 'Confirmed interest in the user-authorized application')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))

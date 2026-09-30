@@ -70,9 +70,14 @@ const seedFacts = {
   engineering_preference_2: 'Full Stack',
   engineering_preference_3: 'Infrastructure',
   desired_employment: 'Full-time',
-  finance_interest: 'Yes',
+  finance_interest: 'Interested but considering all opportunities',
   employment_obligations: 'No',
   other_processes: 'None',
+  full_time_start_window: 'Q4 2026 (October - December)',
+  first_location_preference: 'San Francisco, CA, United States',
+  'what is your expected graduation month year': 'May 2028',
+  'when are you available for a 12 week internship check all that apply': 'Summer 2027',
+  'how did you hear about twilio': 'Careers Website',
 };
 
 async function activeUserId() {

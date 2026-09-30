@@ -48,6 +48,8 @@ describe('field resolution policy', () => {
     expect(matchAvailableOption('What is your military status?', 'No', ['I am a protected veteran', 'I am not a protected veteran'])).toBe('I am not a protected veteran');
     expect(matchAvailableOption('Active security clearance(s)', 'None', ['Top Secret', 'I do not have an active clearance'])).toBe('I do not have an active clearance');
     expect(matchAvailableOption('SAT score', 'Not taken', ['1400-1600', 'I did not take the SAT'])).toBe('I did not take the SAT');
+    expect(matchAvailableOption('Expected graduation month/year', 'May 2028', ['Jan - April 2028', 'May - Aug 2028'])).toBe('May - Aug 2028');
+    expect(matchAvailableOption('Cumulative GPA', '3.6', ['4.0 or higher', '3.5 - 3.99', '3.49 - 3.0'])).toBe('3.5 - 3.99');
   });
 });
 

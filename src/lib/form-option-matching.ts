@@ -37,7 +37,29 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (option) return option;
   }
   if (/security clearance|clearance level|active clearance/.test(q) && /^(no|none|no clearance)$/.test(target)) {
-    const option = usable.find((candidate) => /no (?:active )?clearance|do not have|none|not applicable/.test(norm(candidate)));
+    const option = usable.find((candidate) => /no (?:active )?clearance|do not have|never held|none|not applicable/.test(norm(candidate)));
+    if (option) return option;
+  }
+  if (/graduation month|expected graduation|graduation date/.test(q)) {
+    const year = target.match(/\b(20\d{2})\b/)?.[1];
+    const month = target.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/)?.[1];
+    if (year && month) {
+      const number = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+        .findIndex((value) => month.startsWith(value)) + 1;
+      const band = number <= 4 ? /jan.*april/ : number <= 8 ? /may.*aug/ : /sep.*dec/;
+      const option = usable.find((candidate) => norm(candidate).includes(year) && band.test(norm(candidate)));
+      if (option) return option;
+    }
+  }
+  if (/\bgpa\b|grade point average/.test(q) && /^\d(?:\.\d+)?$/.test(target)) {
+    const score = Number(target);
+    const option = usable.find((candidate) => {
+      const text = norm(candidate);
+      const nums = [...text.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+      if (/or higher|and above|above/.test(text)) return nums.length > 0 && score >= nums[0];
+      if (/or below|and below|below/.test(text)) return nums.length > 0 && score <= nums[0];
+      return nums.length >= 2 && score >= Math.min(nums[0], nums[1]) && score <= Math.max(nums[0], nums[1]);
+    });
     if (option) return option;
   }
   if (/\b(sat|act|gre)\b/.test(q) && /not taken|none|not applicable|n a/.test(target)) {
