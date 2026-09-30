@@ -95,6 +95,11 @@ async function main() {
   // bypassCSP gives the QA injection harness the same privilege boundary.
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', bypassCSP: true });
   const results = [];
+  const runStamp = `${Date.now()}`;
+  const evidenceDir = path.join(ROOT, '.qa', `submission-evidence-${ats}-${runStamp}`);
+  const out = path.join(ROOT, '.qa', `submission-e2e-${ats}-${runStamp}.json`);
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  const saveReport = () => fs.writeFileSync(out, JSON.stringify({ ats, limit, completed: results.length, results }, null, 2));
   try {
     for (let index = 0; index < limit; index++) {
       let job;
@@ -127,6 +132,19 @@ async function main() {
       let finish;
       const terminal = new Promise((resolve) => { finish = resolve; });
       const page = await context.newPage();
+      const progressEvents = [];
+      const networkEvents = [];
+      const consoleErrors = [];
+      page.on('console', (message) => {
+        if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 1000));
+      });
+      page.on('response', (response) => {
+        const request = response.request();
+        if (['document', 'xhr', 'fetch'].includes(request.resourceType())) {
+          networkEvents.push({ method: request.method(), status: response.status(), url: response.url().slice(0, 1000) });
+          if (networkEvents.length > 100) networkEvents.shift();
+        }
+      });
       await page.exposeBinding('__hrMessage', async (_, message) => {
         if (message.type === 'PAGE_READY') return { job };
         if (message.type === 'FETCH_FILE') {
@@ -139,6 +157,8 @@ async function main() {
           method: 'POST', body: JSON.stringify({ jobId: job.id, planId: message.planId, fields: message.fields, fastOnly: message.fastOnly === true }),
         });
         if (message.type === 'PROGRESS') {
+          progressEvents.push({ at: new Date().toISOString(), stage: message.stage,
+            detail: message.detail, filled: message.filled, total: message.total });
           const result = await api(token, '/api/auto-apply/browser/device', {
             method: 'PATCH', body: JSON.stringify({ id: job.id, leaseId: job.leaseId, stage: message.stage,
               detail: message.detail, filled: message.filled, total: message.total,
@@ -163,7 +183,44 @@ async function main() {
         terminal,
         new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),
       ]);
-      results.push({ id: job.id, company: job.companyName, title: job.jobTitle, ...outcome });
+      await page.waitForTimeout(750).catch(() => {});
+      const evidence = await page.evaluate(() => {
+        const visible = (element) => {
+          const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const labelFor = (element) => {
+          const byFor = element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null;
+          return (byFor?.innerText || element.closest('label')?.innerText || element.getAttribute('aria-label') ||
+            element.getAttribute('placeholder') || element.name || '').trim().replace(/\s+/g, ' ').slice(0, 500);
+        };
+        const controls = [...document.querySelectorAll('input,select,textarea,[role="combobox"],[role="listbox"]')]
+          .filter(visible).map((element) => {
+            const type = (element.getAttribute('type') || element.tagName || element.getAttribute('role') || '').toLowerCase();
+            const sensitive = /password|ssn|social security/i.test(`${element.name || ''} ${labelFor(element)}`);
+            const rawValue = 'value' in element ? String(element.value || '') : String(element.textContent || '');
+            return {
+              label: labelFor(element), name: element.name || '', type,
+              required: Boolean(element.required || element.getAttribute('aria-required') === 'true'),
+              value: sensitive ? '[redacted]' : rawValue.slice(0, 1000), checked: Boolean(element.checked),
+              valid: element.checkValidity ? element.checkValidity() : null,
+              validationMessage: String(element.validationMessage || '').slice(0, 500),
+              ariaInvalid: element.getAttribute('aria-invalid'), disabled: Boolean(element.disabled),
+              options: element.tagName === 'SELECT' ? [...element.options].map((o) => ({ text: o.text.trim().slice(0, 300), value: o.value.slice(0, 300), selected: o.selected })).slice(0, 200) : [],
+            };
+          });
+        const errorText = [...document.querySelectorAll('[role="alert"],.error,.errors,.field-error,.validation-error,[aria-invalid="true"]')]
+          .filter(visible).map((node) => String(node.innerText || node.textContent || '').trim().replace(/\s+/g, ' '))
+          .filter(Boolean).slice(0, 100);
+        return { url: location.href, title: document.title, controls,
+          unresolvedRequired: controls.filter((c) => c.required && (!c.valid || !c.value) && !c.checked),
+          visibleErrors: [...new Set(errorText)] };
+      }).catch((error) => ({ captureError: String(error) }));
+      const screenshot = path.join(evidenceDir, `${String(index + 1).padStart(2, '0')}-${job.id}.png`);
+      await page.screenshot({ path: screenshot, fullPage: true }).catch((error) => { evidence.screenshotError = String(error); });
+      results.push({ id: job.id, company: job.companyName, title: job.jobTitle, ...outcome,
+        progressEvents, evidence, networkEvents, consoleErrors, screenshot });
+      saveReport();
       console.log(`[${index + 1}/${limit}] ${job.companyName} — ${outcome.stage}`);
       await page.close().catch(() => {});
     }
@@ -174,8 +231,7 @@ async function main() {
       await db.from('autoapply_browser_devices').update({ paused: other.paused }).eq('id', other.id);
     }
   }
-  const out = path.join(ROOT, '.qa', `submission-e2e-${ats}-${Date.now()}.json`);
-  fs.writeFileSync(out, JSON.stringify({ ats, limit, results }, null, 2));
+  saveReport();
   console.log(JSON.stringify({ report: out, outcomes: results.reduce((a, r) => ((a[r.stage] = (a[r.stage] || 0) + 1), a), {}) }, null, 2));
   process.exit(0);
 }
