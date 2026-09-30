@@ -27,6 +27,8 @@
     fieldKey: String(input?.fieldKey || '').slice(0, 160),
     controlType: String(input?.controlType || '').slice(0, 40),
     optionCount: Number.isFinite(input?.optionCount) ? input.optionCount : undefined,
+    optionPreview: Array.isArray(input?.optionPreview)
+      ? input.optionPreview.slice(0, 12).map((value) => String(value || '').slice(0, 120)) : undefined,
     answerSource: String(input?.answerSource || '').slice(0, 40),
     retained: typeof input?.retained === 'boolean' ? input.retained : undefined,
     category: String(input?.category || '').slice(0, 40),

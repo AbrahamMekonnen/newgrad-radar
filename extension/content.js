@@ -1447,7 +1447,7 @@
                       answerSource: state?.answerSource,
                       retained: results[index]?.accepted === true,
                       category: results[index]?.accepted ? 'accepted' : (state?.lastFailure || 'unresolved'),
-                      attempt: state?.attempt, optionCount: field.options?.length,
+                      attempt: state?.attempt, optionCount: field.options?.length, optionPreview: field.options,
                     });
                   }),
                 }),
@@ -1482,7 +1482,7 @@
                     answerSource: resolutionState.get(fieldKey(field))?.answerSource,
                     category: resolutionState.get(fieldKey(field))?.lastFailure,
                     attempt: resolutionState.get(fieldKey(field))?.attempt,
-                    optionCount: field.options?.length,
+                    optionCount: field.options?.length, optionPreview: field.options,
                   })),
                 }),
               },

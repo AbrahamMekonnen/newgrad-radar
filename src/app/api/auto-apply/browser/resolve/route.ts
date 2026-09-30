@@ -182,6 +182,13 @@ export async function POST(request: NextRequest) {
         : fact('coding_language');
       if (pick(f, language, 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
     }
+    if (/top 3 engineer profile|first engineering preference/.test(q) && pick(f, fact('engineering_preference_1'), 'saved', 'Matched the first confirmed engineering preference')) continue;
+    if (/second engineering preference/.test(q) && pick(f, fact('engineering_preference_2'), 'saved', 'Matched the second confirmed engineering preference')) continue;
+    if (/third engineering preference/.test(q) && pick(f, fact('engineering_preference_3'), 'saved', 'Matched the third confirmed engineering preference')) continue;
+    if (/desired employment/.test(q) && pick(f, fact('desired_employment'), 'saved', 'Matched the confirmed employment-type preference')) continue;
+    if (/interest in finance/.test(q) && pick(f, fact('finance_interest'), 'saved', 'Matched the confirmed finance-interest response')) continue;
+    if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
+    if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/^clearance eligibility$/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
     if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;

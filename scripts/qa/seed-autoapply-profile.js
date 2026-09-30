@@ -25,7 +25,8 @@ const db = createClient(url, key, {
   realtime: { transport: DisabledWebSocket },
 });
 const backupFile = path.join(root, '.qa', 'autoapply-profile-before-seed.json');
-const profileColumns = ['custom_answers', 'education_graduation_date', 'proud_project', 'career_goals', 'writing_sample'];
+const profileColumns = ['custom_answers', 'education_graduation_date', 'proud_project', 'career_goals', 'writing_sample',
+  'current_title', 'current_company', 'country', 'state', 'city', 'location', 'default_source'];
 
 const seedFacts = {
   government_current: 'No',
@@ -64,6 +65,14 @@ const seedFacts = {
   government_access_card: 'No',
   export_control_status: 'Authorized to work in the United States without employer sponsorship',
   internship_availability: 'Available for the full dates listed in the job posting',
+  citizenship_status: 'U.S. citizen',
+  engineering_preference_1: 'Backend',
+  engineering_preference_2: 'Full Stack',
+  engineering_preference_3: 'Infrastructure',
+  desired_employment: 'Full-time',
+  finance_interest: 'Yes',
+  employment_obligations: 'No',
+  other_processes: 'None',
 };
 
 async function activeUserId() {
@@ -105,10 +114,15 @@ async function main() {
   for (const [name, value] of Object.entries(seedFacts)) merged[`__fact:${name}`] = value;
   const { error: updateError } = await db.from('user_profiles').update({
     custom_answers: merged,
-    education_graduation_date: 'May 2027',
+    education_graduation_date: 'May 2028',
     proud_project: 'I built a campus event planner with TypeScript, Next.js, PostgreSQL, and Docker. I designed role-based access, calendar search, email reminders, and automated database migrations, then deployed and tested the complete service.',
     career_goals: 'Build reliable backend and full-stack systems, improve developer tooling, and grow into an engineer who can own services from design through production operations.',
     writing_sample: 'I like engineering work where the result is concrete and useful. On my campus event planner, the interesting part was not only writing features. I had to decide how permissions, scheduling, reminders, and deployment fit together, then test the paths that could fail for real users.',
+    current_title: 'Software Engineering Intern',
+    current_company: 'Northstar Cloud',
+    country: 'United States', state: 'California', city: 'San Francisco',
+    location: 'San Francisco, California, United States',
+    default_source: 'Company Careers Website',
   }).eq('user_id', userId);
   if (updateError) throw updateError;
   console.log(`Seeded ${Object.keys(seedFacts).length} QA facts; previous answers backed up locally.`);
