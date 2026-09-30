@@ -12,6 +12,53 @@ const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 const norm = (v: unknown) => String(v || '').toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
 type LiveField = ResolutionField;
 
+// Safety net for AI prose: strip the tells most likely to survive the prompt
+// (em/en dashes used as asides, the "I am writing to apply" opener). Kept light so
+// a genuinely good answer is never mangled.
+function humanizeProse(text: string): string {
+  let t = String(text || '').trim();
+  t = t.replace(/\s*[—–]\s*/g, ', ');   // — / – asides -> comma
+  t = t.replace(/,\s*,/g, ', ');                   // no doubled commas
+  t = t.replace(/\s+([.,;:!?])/g, '$1');           // no space before punctuation
+  t = t.replace(/,\s*([.!?])/g, '$1');             // ", ." -> "."
+  t = t.replace(/^[,\s]+/, '');                    // no leading comma
+  t = t.replace(/^(i am writing to (?:apply|express)[^.]*\.\s*)/i, '');
+  return t.trim();
+}
+
+// Draft open-ended application answers as JSON text. Tries Gemini first, then Groq,
+// so a quota/rate limit on one provider never silently leaves answers blank. Higher
+// temperature adds natural variation; truthfulness comes from the grounded prompt.
+async function draftJSON(prompt: string): Promise<string | null> {
+  const gk = process.env.GEMINI_API_KEY;
+  if (gk) {
+    const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${gk}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.72, topP: 0.95 } }),
+      signal: AbortSignal.timeout(30000),
+    }).catch(() => null);
+    if (ai?.ok) {
+      const j = await ai.json().catch(() => null);
+      const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    }
+  }
+  const groq = process.env.GROQ_API_KEY;
+  if (groq) {
+    const ai = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groq}` },
+      body: JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0.72, top_p: 0.95, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(30000),
+    }).catch(() => null);
+    if (ai?.ok) {
+      const j = await ai.json().catch(() => null);
+      const text = j?.choices?.[0]?.message?.content;
+      if (text) return text;
+    }
+  }
+  return null;
+}
+
 export async function OPTIONS() { return new NextResponse(null, { status: 204, headers: cors }); }
 
 export async function POST(request: NextRequest) {
@@ -28,7 +75,7 @@ export async function POST(request: NextRequest) {
   if (!job) return NextResponse.json({ error: 'Application not found' }, { status: 404, headers: cors });
   const [{ data: profile }, { data: jobMarket }] = await Promise.all([
     store.from('user_profiles').select('*').eq('user_id', device.user_id).maybeSingle(),
-    store.from('jobs').select('salary_min,salary_max').eq('id', job.job_id).maybeSingle(),
+    store.from('jobs').select('salary_min,salary_max,description,funding_stage,role_types').eq('id', job.job_id).maybeSingle(),
   ]);
   const custom = (profile?.custom_answers || {}) as Record<string, string>;
   const fact = (key: string) => custom['__fact:' + key];
@@ -67,8 +114,19 @@ export async function POST(request: NextRequest) {
     if (/current.*government employee|currently.*government/.test(q) && pick(f, fact('government_current'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/government.*past 10 years|former.*government|within the past 10 years/.test(q) && pick(f, fact('government_past_10_years'), 'saved', 'Matched an explicit reusable government-employment fact')) continue;
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
+    if (/military service|served.*armed forces|current or former.*military/.test(q) && pick(f, fact('military_service'), 'saved', 'Matched confirmed military-service history')) continue;
+    if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
     if (/5 days|five days|full week.*office|office.*full week/.test(q) && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
+    if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
+    if (/relocat/.test(q)) {
+      const relocation = fact('relocation_locations') || (profile?.willing_to_relocate === true ? 'Yes' : profile?.willing_to_relocate === false ? 'No' : null);
+      if (pick(f, relocation, 'saved', 'Matched the confirmed relocation preference')) continue;
+    }
+    if (/travel.*(?:percent|percentage|how much)/.test(q) && pick(f, fact('travel_percentage'), 'saved', 'Matched the confirmed maximum travel percentage')) continue;
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
+    if (/text message|sms/.test(q) && pick(f, fact('sms_consent') || 'No', fact('sms_consent') ? 'saved' : 'policy', 'Used the saved preference or conservative SMS opt-out')) continue;
+    if (/whatsapp/.test(q) && pick(f, fact('whatsapp_consent') || 'No', fact('whatsapp_consent') ? 'saved' : 'policy', 'Used the saved preference or conservative WhatsApp opt-out')) continue;
+    if (/record(?:ing)?.*interview|interview.*record/.test(q) && pick(f, fact('interview_recording_consent') || 'No', fact('interview_recording_consent') ? 'saved' : 'policy', 'Used the saved preference or conservative interview-recording opt-out')) continue;
     if (/receive information|marketing communication|training opportunities|promotional/.test(q) && pick(f, fact('marketing_communications') || 'No', 'policy', 'Used the conservative promotional-communications opt-out')) continue;
     if (/demographic.*consent|consent.*demographic|collecting storing and processing.*demographic/.test(q)
       && pick(f, fact('demographic_data_consent') || 'Yes', fact('demographic_data_consent') ? 'saved' : 'authorization', 'Applied demographic processing consent for this user-authorized application')) continue;
@@ -119,6 +177,8 @@ export async function POST(request: NextRequest) {
       if (pick(f, language, 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
     }
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;
+    if (/export control|u s person|itar|ear/.test(q) && pick(f, fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
       const location = norm([profile?.country, profile?.location].filter(Boolean).join(' '));
       const citizenship = norm(fact('citizenship_status') || profile?.work_authorization);
@@ -181,6 +241,13 @@ export async function POST(request: NextRequest) {
       && pick(f, educationStartYear, 'saved', 'Split the confirmed education start date into its year')) continue;
     if (/\bgpa\b|grade point average/.test(q)
       && pick(f, profile?.education_gpa, 'profile', 'Matched the confirmed cumulative GPA')) continue;
+    if (/\bsat\b/.test(q) && pick(f, fact('sat_score'), 'saved', 'Matched the confirmed SAT response')) continue;
+    if (/\bact\b.*(?:score|test)|(?:score|test).*\bact\b/.test(q) && pick(f, fact('act_score'), 'saved', 'Matched the confirmed ACT response')) continue;
+    if (/\bgre\b/.test(q) && pick(f, fact('gre_score'), 'saved', 'Matched the confirmed GRE response')) continue;
+    if (/internship|co op|co-op/.test(q) && /how many|number of/.test(q)
+      && pick(f, fact('internship_count'), 'saved', 'Matched the confirmed internship or co-op count')) continue;
+    if (/internship|co op|co-op/.test(q) && /availability|available|start|end/.test(q)
+      && pick(f, fact('internship_availability'), 'saved', 'Matched the confirmed internship availability')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
       if (pick(f, graduationYear)) continue;
     }
@@ -201,6 +268,17 @@ export async function POST(request: NextRequest) {
         ? 'Matched the confirmed availability date'
         : 'Matched the role term stated in the user-selected job title')) continue;
     }
+    if (/offer deadline|deadline.*offer|competing offer/.test(q)
+      && pick(f, fact('offer_deadline'), 'saved', 'Matched the confirmed offer deadline')) continue;
+    if (/interviewed|interview process|previously applied|applied (?:to|at)/.test(q)) {
+      const history = norm(fact('prior_interviews'));
+      const company = norm(job.company_name);
+      const companyMentioned = history && company && history.includes(company);
+      const negative = companyMentioned && /never|none| no /.test(` ${history} `);
+      if (pick(f, companyMentioned ? (negative ? 'No' : 'Yes') : null, 'saved', 'Matched company-specific prior application or interview history')) continue;
+    }
+    if (/current title|current job title|most recent title|previous title/.test(q)
+      && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
       && pick(f, `Yes, I am interested in the ${job.job_title} role.`, 'authorization', 'Confirmed interest in the user-authorized application')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
@@ -249,32 +327,64 @@ export async function POST(request: NextRequest) {
   // The browser asks for a deterministic pass first so profile/saved answers
   // can be applied without waiting behind an AI request. Only the later,
   // explicitly deferred pass is allowed to call Gemini.
-  if (!fastOnly && prose.length && process.env.GEMINI_API_KEY) {
-    const context = {
-      current_title: profile?.current_title,
-      proud_project: profile?.proud_project,
-      career_goals: profile?.career_goals,
-      writing_sample: profile?.writing_sample,
-      preferred_tone: profile?.preferred_tone || 'natural',
-    };
-    const prompt = `Return only JSON {"answers":[{"name":"field name","fieldId":"exact supplied fieldId","value":"answer"}]}.
-Draft concise, truthful, human application answers for ${job.job_title} at ${job.company_name}. Use only the supplied non-sensitive context. Never invent facts. If context is insufficient, omit that field. Match the candidate's tone.
-CONTEXT: ${JSON.stringify(context)}
-QUESTIONS: ${JSON.stringify(prose)}`;
-    const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35 } }),
-      signal: AbortSignal.timeout(30000),
-    }).catch(() => null);
-    if (ai?.ok) {
-      const result = await ai.json();
+  if (!fastOnly && prose.length && (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY)) {
+    // Ground the drafter in the candidate's REAL material (resume, their own saved
+    // answers, projects) AND the actual job posting, so "why this company/role"
+    // answers cite specific, true details instead of generic praise.
+    const storyBank = Object.entries(custom)
+      .filter(([k, v]) => !k.startsWith('__fact:') && typeof v === 'string' && v.trim().length > 24)
+      .slice(0, 8).map(([k, v]) => `- ${k}: ${v}`).join('\n');
+    const candidate = [
+      profile?.first_name && `Name: ${[profile.first_name, profile?.last_name].filter(Boolean).join(' ')}`,
+      (profile?.current_title || profile?.current_company) && `Currently: ${[profile?.current_title, profile?.current_company].filter(Boolean).join(' at ')}`,
+      (profile?.education_degree || profile?.education_school) && `Education: ${[profile?.education_degree, profile?.education_major, profile?.education_school].filter(Boolean).join(', ')}`,
+      profile?.years_experience && `Experience: ${profile.years_experience} years`,
+      Array.isArray(profile?.prior_employers) && profile.prior_employers.length && `Prior employers: ${profile.prior_employers.join(', ')}`,
+      profile?.proud_project && `Proud of: ${profile.proud_project}`,
+      profile?.career_goals && `Career goals: ${profile.career_goals}`,
+      storyBank && `Their own words (reuse these facts and voice):\n${storyBank}`,
+      profile?.resume_text && `Resume:\n${String(profile.resume_text).slice(0, 2500)}`,
+      profile?.writing_sample && `Writing sample (match this VOICE and rhythm, not its facts):\n${String(profile.writing_sample).slice(0, 1200)}`,
+    ].filter(Boolean).join('\n') || '(limited background — stay honest and specific to what is given)';
+    const jobContext = [
+      `Role: ${job.job_title} at ${job.company_name}`,
+      Array.isArray(jobMarket?.role_types) && jobMarket.role_types.length && `Role focus: ${jobMarket.role_types.join(', ')}`,
+      jobMarket?.funding_stage && `Company stage: ${jobMarket.funding_stage}`,
+      jobMarket?.description && `Job posting (pull REAL specifics from here for "why this role/company" — the actual product, team, or problem):\n${String(jobMarket.description).slice(0, 1700)}`,
+    ].filter(Boolean).join('\n');
+    const prompt = `You are ${profile?.first_name || 'the candidate'} filling out this job application yourself. Write each open-ended answer in your own voice, from your real background — the way a thoughtful person writes after sitting down for twenty focused minutes, not a template.
+
+HARD RULES
+- Truth only. Use ONLY the facts in CANDIDATE and JOB below. Never invent an employer, title, date, number, metric, tool, or achievement. If a question cannot be answered truthfully from those facts, return "" for it.
+- Be specific. Every answer names at least one concrete, real detail from CANDIDATE (a project, a technology, a result, a moment). For "why this company/role", tie it to something specific and true from the JOB posting (the actual product, team, or problem it describes). Never vague praise like "your commitment to innovation" or "a great opportunity".
+- Sound like a person. First person, contractions, one clear point of view. Vary sentence length on purpose: mix short, plain sentences with the occasional longer one. If a writing sample is given, match its rhythm and vocabulary.
+- Format cleanly. Plain prose. Essays: at most two short paragraphs, about 120-180 words. No headings or bullet lists unless the question explicitly asks for a list. No greeting or sign-off unless it is a cover letter, and then keep it simple.
+
+NEVER USE (these read as AI): the em dash "—"; "not just X but Y" / "not only ... but also"; three-part lists for rhythm; and these words/phrases: leverage, passionate, delve, tapestry, robust, seamless, synergy, spearheaded, results-driven, detail-oriented, proven track record, cutting-edge, game-changer, elevate, streamline, "excited to contribute", "I am writing to apply", "in today's fast-paced world". Do not start two answers the same way.
+
+Before returning, reread every answer and delete anything templated or generic. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
+
+CANDIDATE:
+${candidate}
+
+JOB:
+${jobContext}
+
+QUESTIONS (answer each by its exact fieldId):
+${JSON.stringify(prose.map((f) => ({ fieldId: f.fieldId, name: f.name, label: f.label })))}
+
+Return ONLY JSON: {"answers":[{"fieldId":"...","name":"...","value":"..."}]}.`;
+    // Draft with Gemini, then Groq as a fallback, so quota or rate limits never
+    // leave the application's open answers silently blank.
+    const raw = await draftJSON(prompt);
+    if (raw) {
       try {
-        const parsed = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+        const parsed = JSON.parse(raw);
         for (const item of parsed.answers || []) {
           const field = prose.find((candidate) => candidate.fieldId ? candidate.fieldId === item.fieldId : candidate.name === item.name);
           if (!field || !item.value || isSensitiveFact(field.label)) continue;
-          const value = field.options?.length ? exactSuppliedOption(field, item.value) : String(item.value).trim();
-          if (value) pick(field, value, 'ai', 'Generated from supplied candidate context on the final bounded attempt');
+          const value = field.options?.length ? exactSuppliedOption(field, item.value) : humanizeProse(String(item.value));
+          if (value) pick(field, value, 'ai', 'Drafted in the candidate’s voice from their real background and the job posting');
         }
       } catch { /* unresolved fields remain for the user */ }
     }
