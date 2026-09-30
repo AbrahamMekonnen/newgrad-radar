@@ -95,12 +95,12 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   // On-demand "does this sound like me?" preview of the captured writing voice.
   // One LLM call, only when the user clicks, so there's no token-burning chatbot.
   const [voicePreview, setVoicePreview] = useState<{ loading: boolean; answer?: string; error?: string } | null>(null);
-  const runVoicePreview = useCallback(async (sample: string) => {
+  const runVoicePreview = useCallback(async (sample: string, notes: string) => {
     setVoicePreview({ loading: true });
     try {
       const res = await fetch('/api/auto-apply/voice-preview', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ writing_sample: sample }),
+        body: JSON.stringify({ writing_sample: sample, voice_notes: notes }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setVoicePreview({ loading: false, error: data?.error || 'Preview failed. Try again.' });
@@ -705,23 +705,36 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </label>
             <p className="text-xs text-gray-500 mb-1">
               This is the single most important field for making written answers sound like you and not like AI.
-              Paste a paragraph or two you actually wrote in your normal voice, a Slack message, an email, a Reddit
-              comment, anything unedited. The agent copies your rhythm and word choices, not the facts.
+              Paste <span className="font-medium">two or three</span> things you actually wrote in your normal voice, a Slack message, an
+              email, a Reddit comment, anything unedited. More real writing locks the voice in; one thin paragraph
+              drifts back to generic. The agent copies your rhythm and word choices, not the facts.
             </p>
-            <textarea rows={6} value={formData.writing_sample || ''} onChange={(e) => handleChange('writing_sample', e.target.value)}
+            <textarea rows={7} value={formData.writing_sample || ''} onChange={(e) => handleChange('writing_sample', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder={"e.g. \"honestly I got into building stuff because I hate doing the same thing twice. my first app was a script that renamed my messy download folder. it broke constantly. I kept fixing it anyway...\""} />
-            {(formData.writing_sample || '').trim().length > 0 && (formData.writing_sample || '').trim().length < 200 && (
-              <p className="text-xs text-amber-600 mt-1">Add a bit more, aim for 3+ sentences so the voice is clear to copy.</p>
+              placeholder={"Paste a few real snippets, separated by a blank line. e.g.\n\nhonestly I got into building stuff because I hate doing the same thing twice. my first app renamed my messy download folder. it broke constantly. I kept fixing it anyway.\n\nspent way too long last spring sure a bug was mine when it was the API quietly changing. check the boring explanation first."} />
+            {(formData.writing_sample || '').trim().length > 0 && (formData.writing_sample || '').trim().length < 300 && (
+              <p className="text-xs text-amber-600 mt-1">Add one or two more snippets, the more real writing here, the more it sounds like you (and the less you&apos;ll need to retry).</p>
             )}
-            <div className="mt-2 flex items-center gap-3">
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">How you want to come across <span className="text-gray-400 font-normal">(optional, in your own words)</span></label>
+            <p className="text-xs text-gray-500 mb-1">
+              The most direct way to steer the voice. Say it plainly, this overrides the sample where they differ.
+              e.g. &ldquo;keep it casual but a notch more polished than my texts&rdquo;, &ldquo;direct, no fluff&rdquo;, &ldquo;warm and a little self-deprecating&rdquo;.
+            </p>
+            <input type="text" value={customFact('voice_notes')} onChange={(e) => handleFactChange('voice_notes', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="e.g. friendly and concrete, never salesy" />
+          </div>
+          <div>
+            <div className="flex items-center gap-3">
               <button type="button"
-                onClick={() => runVoicePreview((formData.writing_sample || '').trim())}
-                disabled={voicePreview?.loading || (formData.writing_sample || '').trim().length < 40}
+                onClick={() => runVoicePreview((formData.writing_sample || '').trim(), customFact('voice_notes').trim())}
+                disabled={voicePreview?.loading || ((formData.writing_sample || '').trim().length < 40 && customFact('voice_notes').trim().length < 8)}
                 className="text-sm px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed">
                 {voicePreview?.loading ? 'Writing a sample…' : 'Preview how this sounds'}
               </button>
-              <span className="text-xs text-gray-400">Generates one sample answer in your voice. Tweak the sample and preview again if it doesn&apos;t sound like you.</span>
+              <span className="text-xs text-gray-400">One sample answer in your voice. If it&apos;s off, add another snippet or edit the note above, then preview again, don&apos;t just re-click.</span>
             </div>
             {voicePreview?.error && <p className="text-xs text-red-600 mt-2">{voicePreview.error}</p>}
             {voicePreview?.answer && (

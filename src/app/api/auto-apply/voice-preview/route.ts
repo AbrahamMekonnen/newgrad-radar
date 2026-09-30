@@ -65,15 +65,17 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('first_name,proud_project,career_goals,resume_text,writing_sample,preferred_tone')
+    .select('first_name,proud_project,career_goals,resume_text,writing_sample,preferred_tone,custom_answers')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // Prefer the sample in the request (the textarea the user is actively editing,
+  // Prefer the values in the request (the fields the user is actively editing,
   // possibly unsaved) so the preview reflects what they're tweaking right now.
-  const sample = String(body?.writing_sample ?? profile?.writing_sample ?? '').trim().slice(0, 1400);
-  if (!sample) {
-    return NextResponse.json({ error: 'Add a writing sample first, then preview.' }, { status: 400 });
+  const savedNotes = (profile?.custom_answers as Record<string, string> | null)?.['__fact:voice_notes'];
+  const sample = String(body?.writing_sample ?? profile?.writing_sample ?? '').trim().slice(0, 2500);
+  const voiceNotes = String(body?.voice_notes ?? savedNotes ?? '').trim().slice(0, 500);
+  if (!sample && !voiceNotes) {
+    return NextResponse.json({ error: 'Add a writing sample or a note about your voice first, then preview.' }, { status: 400 });
   }
   const firstName = profile?.first_name || 'the candidate';
   const material = [
@@ -82,13 +84,16 @@ export async function POST(request: NextRequest) {
     profile?.resume_text && `Resume:\n${String(profile.resume_text).slice(0, 2000)}`,
   ].filter(Boolean).join('\n') || '(limited background — stay honest and specific to what is given)';
 
-  const prompt = `You are ${firstName} answering one job-application question yourself, in the voice shown below.
-
-THIS IS HOW ${firstName.toUpperCase()} ACTUALLY WRITES. Study the voice closely: sentence length and rhythm, word choice, how blunt or formal it is, its little habits. Write the answer so it reads like the SAME person wrote it on a focused day. Match the voice, not the facts of the sample.
+  const voiceBlock = `${sample ? `THIS IS HOW ${firstName.toUpperCase()} ACTUALLY WRITES. Study the voice closely: sentence length and rhythm, word choice, how blunt or formal it is, its little habits. Write the answer so it reads like the SAME person wrote it on a focused day. Match the voice, not the facts of the sample.
 """
 ${sample}
 """
+` : ''}${voiceNotes ? `HOW ${firstName.toUpperCase()} WANTS TO COME ACROSS (follow this, it overrides the sample where they differ): ${voiceNotes}
+` : ''}`;
 
+  const prompt = `You are ${firstName} answering one job-application question yourself, in the voice described below.
+
+${voiceBlock}
 RULES
 - Truth only. Use ONLY the facts in YOUR BACKGROUND below. Invent no employer, title, date, number, tool, or achievement. If there isn't enough to answer truthfully, say so plainly in your own voice.
 - Be specific: name at least one concrete real detail from your background.

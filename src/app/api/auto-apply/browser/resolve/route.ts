@@ -98,6 +98,15 @@ export async function POST(request: NextRequest) {
     }
     answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) }); return true;
   };
+  const pickSearchable = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched searchable profile data') => {
+    if (value === null || value === undefined || value === '') return false;
+    const options = optionLabels(f);
+    if (options.length < 75) return pick(f, value, source, reason);
+    const chosen = String(value);
+    answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: 0.98, reason,
+      safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) });
+    return true;
+  };
   for (const f of fields as LiveField[]) {
     const q = norm(f.label);
     const policy = classifyApplicationQuestion(f.label);
@@ -237,6 +246,8 @@ export async function POST(request: NextRequest) {
     const graduationDate = String(profile?.education_graduation_date || '');
     const graduationYear = graduationDate.match(/\b(?:19|20)\d{2}\b/)?.[0];
     const graduationMonth = graduationDate.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    if (/expected graduation (?:month|date)|graduation month year/.test(q)
+      && pick(f, graduationDate, 'profile', 'Matched the confirmed graduation date to the supplied date range')) continue;
     if (/confirm.*graduation date.*(?:fall|spring|summer|winter)/.test(q) && graduationDate) {
       const normalizedGraduation = norm(graduationDate);
       const allowedTerms = [...q.matchAll(/\b(fall|spring|summer|winter)\s+((?:19|20)\d{2})\b/g)]
@@ -277,7 +288,7 @@ export async function POST(request: NextRequest) {
     }
     if ((/^(school|university|college|institution)$/.test(q)
       || (/university|college|school|institution/.test(q) && /attend|education|stud(?:y|ied|ent)|graduate/.test(q)))
-      && pick(f, profile?.education_school)) continue;
+      && pickSearchable(f, profile?.education_school, 'profile', 'Entered the confirmed school into the searchable school directory')) continue;
     if (/how did you hear|where did you hear|heard about/.test(q) && /careers? (website|site)|company website/.test(q)
       && /checkbox/.test(String(f.type || '')) && pick(f, 'Careers Website', 'policy', 'Selected the careers-site source checkbox')) continue;
     if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q))
@@ -394,14 +405,20 @@ export async function POST(request: NextRequest) {
     // sample of how THIS person writes, the model imitates a specific human instead of
     // inventing a generic-competent voice (which is what every rule-only prompt plateaus
     // at). When present it leads the prompt; when absent we fall back to register rules.
-    const voice = String(profile?.writing_sample || '').trim().slice(0, 1400);
+    const voice = String(profile?.writing_sample || '').trim().slice(0, 2500);
+    // Plain-words intent the user typed about how they want to come across. Stored as
+    // a custom fact (no schema change) and used to STEER the voice, especially when the
+    // sample and the desired register differ (e.g. "my texts are casual but keep
+    // applications a notch more polished").
+    const voiceNotes = String(fact('voice_notes') || '').trim().slice(0, 500);
     const firstName = profile?.first_name || 'the candidate';
-    const voiceBlock = voice
-      ? `THIS IS HOW ${firstName.toUpperCase()} ACTUALLY WRITES. Study the voice closely: sentence length and rhythm, word choice, how blunt or formal it is, its little habits. Write every answer so it reads like the SAME person wrote it on a focused day. Match the voice, not the topic or the facts of the sample.
+    const voiceBlock = (voice || voiceNotes)
+      ? `${voice ? `THIS IS HOW ${firstName.toUpperCase()} ACTUALLY WRITES. Study the voice closely: sentence length and rhythm, word choice, how blunt or formal it is, its little habits. Write every answer so it reads like the SAME person wrote it on a focused day. Match the voice, not the topic or the facts of the sample.
 """
 ${voice}
 """
-
+` : ''}${voiceNotes ? `HOW ${firstName.toUpperCase()} WANTS TO COME ACROSS (follow this, it overrides the sample where they differ): ${voiceNotes}
+` : ''}
 `
       : '';
     const jobContext = [
@@ -410,7 +427,7 @@ ${voice}
       jobMarket?.funding_stage && `Company stage: ${jobMarket.funding_stage}`,
       jobMarket?.description && `Job posting (pull REAL specifics from here for "why this role/company" — the actual product, team, or problem):\n${String(jobMarket.description).slice(0, 1700)}`,
     ].filter(Boolean).join('\n');
-    const prompt = `You are ${firstName} filling out this job application yourself. ${voice ? 'Write every answer in the voice shown above.' : 'Write each open-ended answer in your own natural voice, from your real background, the way a real person types after sitting down for twenty focused minutes, not a template.'}
+    const prompt = `You are ${firstName} filling out this job application yourself. ${(voice || voiceNotes) ? 'Write every answer in the voice described above.' : 'Write each open-ended answer in your own natural voice, from your real background, the way a real person types after sitting down for twenty focused minutes, not a template.'}
 
 ${voiceBlock}HARD RULES
 - Truth only. Use ONLY the facts in CANDIDATE and JOB below. Never invent an employer, title, date, number, metric, tool, or achievement. If a question cannot be answered truthfully from those facts, return "" for it.
@@ -423,7 +440,7 @@ ${voiceBlock}HARD RULES
 
 NEVER USE (these read as AI): the em dash "—"; "not just X but Y" / "not only ... but also"; three-part lists for rhythm; and these words/phrases: leverage, passionate, delve, tapestry, robust, seamless, synergy, spearheaded, results-driven, detail-oriented, proven track record, cutting-edge, game-changer, elevate, streamline, "excited to contribute", "I am writing to apply", "in today's fast-paced world". Do not start two answers the same way.
 
-Before returning, reread every answer as the recruiter who reads 300 a day. Delete anything templated, generic, self-impressed, or that sounds generated${voice ? ', and anything that does not sound like the writing sample above' : ''}. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
+Before returning, reread every answer as the recruiter who reads 300 a day. Delete anything templated, generic, self-impressed, or that sounds generated${voice ? ', and anything that does not sound like the writing sample above' : ''}${voiceNotes ? ', and anything that clashes with how they want to come across' : ''}. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
 
 CANDIDATE:
 ${candidate}
