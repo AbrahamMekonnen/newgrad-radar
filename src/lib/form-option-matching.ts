@@ -19,6 +19,32 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
 
   const q = norm(question);
 
+  // Binary controls often use full sentences rather than literal Yes/No.
+  // Prefer an unambiguous leading polarity and never use loose substring
+  // matching ("no" appears inside many unrelated words).
+  if (target === 'yes' || target === 'no') {
+    const polarity = usable.filter((candidate) => {
+      const text = norm(candidate);
+      return target === 'yes'
+        ? /^(yes|i agree|agree|acknowledge|i acknowledge)\b/.test(text)
+        : /^(no|i do not|not currently|never)\b/.test(text);
+    });
+    if (polarity.length === 1) return polarity[0];
+  }
+
+  if (/military|veteran|armed forces/.test(q) && /^(no|none|not a veteran)$/.test(target)) {
+    const option = usable.find((candidate) => /not (?:a )?(?:protected )?veteran|never served|no military/.test(norm(candidate)));
+    if (option) return option;
+  }
+  if (/security clearance|clearance level|active clearance/.test(q) && /^(no|none|no clearance)$/.test(target)) {
+    const option = usable.find((candidate) => /no (?:active )?clearance|do not have|none|not applicable/.test(norm(candidate)));
+    if (option) return option;
+  }
+  if (/\b(sat|act|gre)\b/.test(q) && /not taken|none|not applicable|n a/.test(target)) {
+    const option = usable.find((candidate) => /not taken|did not take|not applicable|prefer not|no score|n a/.test(norm(candidate)));
+    if (option) return option;
+  }
+
   const privacyDecline = /decline|self identify|prefer not|do not wish|don't wish|not wish to answer/.test(target);
   if (privacyDecline) {
     const option = usable.find((candidate) =>

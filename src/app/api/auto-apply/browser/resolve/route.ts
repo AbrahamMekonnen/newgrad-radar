@@ -121,7 +121,8 @@ export async function POST(request: NextRequest) {
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
     if (/military service|served.*armed forces|current or former.*military/.test(q) && pick(f, fact('military_service'), 'saved', 'Matched confirmed military-service history')) continue;
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
-    if (/5 days|five days|full week.*office|office.*full week/.test(q) && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
+    if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
+      && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
     if (/relocat/.test(q)) {
       const relocation = fact('relocation_locations') || (profile?.willing_to_relocate === true ? 'Yes' : profile?.willing_to_relocate === false ? 'No' : null);

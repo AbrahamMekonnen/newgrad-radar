@@ -1,4 +1,5 @@
 import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionSetHash, scopedAnswerKey, validateResolutionAnswer } from '../field-resolution';
+import { matchAvailableOption } from '../form-option-matching';
 describe('field resolution policy', () => {
   it('classifies prose for deferred AI while excluding sensitive facts', () => {
     expect(mayUseAi({ name: 'why', label: 'Why us?', attempt: 1 })).toBe(true);
@@ -41,6 +42,12 @@ describe('field resolution policy', () => {
       name: 'degree', fieldId: field.fieldId, value: 'Bachelor', matchedOption: 'Bachelor',
       optionSignature: normalizedOptionSignature(field),
     })).toBe(false);
+  });
+  it('maps saved binary and absence facts onto verbose ATS options', () => {
+    expect(matchAvailableOption('Have you worked here before?', 'No', ['Yes, I have', 'No, I have not'])).toBe('No, I have not');
+    expect(matchAvailableOption('What is your military status?', 'No', ['I am a protected veteran', 'I am not a protected veteran'])).toBe('I am not a protected veteran');
+    expect(matchAvailableOption('Active security clearance(s)', 'None', ['Top Secret', 'I do not have an active clearance'])).toBe('I do not have an active clearance');
+    expect(matchAvailableOption('SAT score', 'Not taken', ['1400-1600', 'I did not take the SAT'])).toBe('I did not take the SAT');
   });
 });
 

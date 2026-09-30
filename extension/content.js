@@ -790,6 +790,34 @@
   const resolveFieldsBatch = async (fields) => {
     const outcomes = new Map(fields.map((field) => [fieldKey(field), { accepted: false }]));
     let planId = null;
+
+    // A closed React/ARIA combobox exposes no option nodes. Sending it to the
+    // resolver with options=[] makes a valid saved fact look applicable even
+    // when the ATS calls the choice something different ("No clearance" vs
+    // "None", score bands vs "Not taken", month/year terms, etc.). Hydrate the
+    // real scoped option set first so the server can return an exact choice.
+    // Keep this sequential: opening multiple portalled menus at once causes one
+    // control to read another control's listbox.
+    for (const field of fields) {
+      if (field.options?.length) continue;
+      const element = findField(field);
+      if (!element || !(element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete'))) continue;
+      try {
+        const opened = CB ? await CB.openCombobox(element, { settle: 180 }) : (element.click(), await wait(180), true);
+        if (opened) {
+          const labels = (CB ? CB.scopedOptions(element) : visibleOptions(element))
+            .map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
+          field.options = [...new Set(labels)];
+          field.optionSignature = ATS?.optionSignature?.(field.options) || '';
+        }
+      } catch { /* resolver can still use text/profile data when enumeration fails */ }
+      finally {
+        if (CB) CB.closeCombobox(element);
+        else element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await wait(80);
+      }
+    }
     const requestFields = (targets, attempt) => targets.map((field) => ({
       ...field,
       attempt,
