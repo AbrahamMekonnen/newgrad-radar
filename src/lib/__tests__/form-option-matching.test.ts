@@ -82,6 +82,9 @@ describe('matchAvailableOption', () => {
   it('normalizes common country aliases only to available choices', () => {
     expect(matchAvailableOption('Country', 'USA', ['Canada', 'United States', 'Mexico']))
       .toBe('United States');
+    expect(matchAvailableOption('Please select the country where you currently reside', 'United States', [
+      'Canada', 'UK', 'US', 'Other',
+    ])).toBe('US');
   });
 });
 

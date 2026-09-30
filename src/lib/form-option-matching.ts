@@ -78,11 +78,16 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
   if (/country/.test(q)) {
     const aliases: Record<string, string> = {
       us: 'united states', usa: 'united states', 'u s': 'united states',
+      'united states of america': 'united states',
       uk: 'united kingdom', 'u k': 'united kingdom',
+      'great britain': 'united kingdom',
     };
     const country = aliases[target] || target;
-    const option = usable.find((candidate) => norm(candidate) === country
-      || norm(candidate).includes(country) || country.includes(norm(candidate)));
+    const option = usable.find((candidate) => {
+      const normalized = norm(candidate);
+      const canonical = aliases[normalized] || normalized;
+      return canonical === country || canonical.includes(country) || country.includes(canonical);
+    });
     if (option) return option;
   }
 
