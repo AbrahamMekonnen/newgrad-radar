@@ -124,7 +124,11 @@ export async function GET(request: NextRequest) {
         scraped_at,
         created_at
       `,
-        { count: 'planned' }
+        // Exact count so the page shows the true number of available questions.
+        // `planned` returned the Postgres planner ESTIMATE, which under/over-counted
+        // (and skewed the page total + pagination). The client-side English/dedup
+        // pass below only trims ~1%, so the exact DB count is accurate in practice.
+        { count: 'exact' }
       )
       .eq('is_duplicate', false)
       .eq('is_junk', false)
