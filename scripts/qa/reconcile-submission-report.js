@@ -15,6 +15,7 @@ const reportPath = process.argv[2];
 if (!reportPath) throw new Error('Usage: node reconcile-submission-report.js <report> [--apply]');
 const apply = process.argv.includes('--apply');
 const report = JSON.parse(fs.readFileSync(path.resolve(reportPath), 'utf8'));
+class DisabledWebSocket {}
 const rejected = report.results.filter((result) => result.stage === 'submitted'
   && report.ats === 'greenhouse'
   && !/\/confirmation(?:[/?#]|$)/i.test(new URL(result.evidence?.url || 'https://invalid/').pathname));
@@ -22,7 +23,8 @@ const rejected = report.results.filter((result) => result.stage === 'submitted'
 async function main() {
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
-    { auth: { persistSession: false, autoRefreshToken: false } });
+    { auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: DisabledWebSocket } });
   const changes = [];
   for (const result of rejected) {
     const { data: row } = await db.from('autoapply_job_queue').select('id,user_id,job_id').eq('id', result.id).single();
