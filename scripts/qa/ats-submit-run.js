@@ -110,11 +110,18 @@ async function main() {
         const selectedQueueId = explicitQueueIds[index];
         if (!selectedQueueId) break;
         const { data: row, error: rowError } = await db.from('autoapply_job_queue')
-          .select('id,user_id,job_title,company_name,job_url,ats_type,prepared_data,authorization_source,execution_channel')
+          .select('id,user_id,job_title,company_name,job_url,ats_type,status,submitted_at,prepared_data,authorization_source,execution_channel')
           .eq('id', selectedQueueId).eq('user_id', devices[0].user_id).single();
         if (rowError || !row) throw rowError || new Error('Selected queue row not found');
         if (row.authorization_source !== 'standing_rule' && row.authorization_source !== 'direct_click') throw new Error('Selected row is not authorized');
         if (String(row.ats_type).toLowerCase() !== ats) throw new Error(`Selected row is ${row.ats_type}, expected ${ats}`);
+        if (row.status === 'submitted' || row.submitted_at) {
+          results.push({ id: row.id, company: row.company_name, title: row.job_title,
+            stage: 'skipped_already_submitted', progressEvents: [], evidence: {}, networkEvents: [], consoleErrors: [] });
+          saveReport();
+          console.log(`[${index + 1}/${limit}] ${row.company_name} — skipped_already_submitted`);
+          continue;
+        }
         const leaseId = crypto.randomUUID();
         const { error: leaseError } = await db.from('autoapply_job_queue').update({
           status: 'browser_filling', browser_device_id: device.id, browser_lease_id: leaseId,
