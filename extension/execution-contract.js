@@ -56,8 +56,22 @@
     .filter(({ text }) => /^(next|continue|save and continue|review application|review)$/.test(text))
     .sort((a, b) => (/review/.test(b.text) ? 1 : 0) - (/review/.test(a.text) ? 1 : 0))[0]?.element || null;
 
-  const requiredInvalids = (root) => [...(root?.querySelectorAll?.('input, textarea, select, [role=combobox]') || [])]
-    .filter((element) => visible(element) && element.willValidate && !element.checkValidity());
+  const requiredInvalids = (root) => {
+    const controls = [...(root?.querySelectorAll?.('input, textarea, select, [role=combobox]') || [])];
+    return controls.filter((element) => {
+      if (!visible(element) || !element.willValidate || element.checkValidity()) return false;
+      // Greenhouse marks every option in some required checkbox groups as
+      // `required`, even though the question means "choose at least one". Once
+      // any checkbox with the same name is selected, the group is complete and
+      // the remaining alternatives must not block submission.
+      if (String(element.type || '').toLowerCase() === 'checkbox' && element.name) {
+        const group = controls.filter((candidate) =>
+          String(candidate.type || '').toLowerCase() === 'checkbox' && candidate.name === element.name);
+        if (group.length > 1 && group.some((candidate) => candidate.checked)) return false;
+      }
+      return true;
+    });
+  };
   const requiredInvalid = (root) => requiredInvalids(root)[0] || null;
 
   const shouldRetrySubmit = ({ attempts, errors }) => {

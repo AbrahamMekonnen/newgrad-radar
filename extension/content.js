@@ -43,6 +43,25 @@
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  const setNativeChecked = (element, checked) => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    descriptor?.set?.call(element, checked);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return descriptor?.get?.call(element) === checked;
+  };
+  const nativeCheckboxFor = (field, candidate) => {
+    const boxes = [...document.querySelectorAll('input[type="checkbox"]')];
+    if (!boxes.length) return null;
+    if (candidate instanceof HTMLInputElement && boxes.includes(candidate)) return candidate;
+    const exactName = field.name && boxes.find((box) => box.name === field.name);
+    if (exactName) return exactName;
+    const wanted = normalize(field.label);
+    return boxes.find((box) => {
+      const got = normalize(labelTextFor(box));
+      return got === wanted || (wanted.length > 5 && (got.includes(wanted) || wanted.includes(got)));
+    }) || null;
+  };
 
   const setCheckboxValue = async (element, checked) => {
     try {
@@ -850,8 +869,24 @@
         const state = resolutionState.get(key) || { attempt: 0, signatures: new Set(), planId };
         state.attempt = attempt;
         state.planId = planId;
-        const answer = answers.get(field.fieldId || field.name);
-        if (answer && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
+        let answer = answers.get(field.fieldId || field.name);
+        // Source checkboxes are a deterministic policy answer for jobs opened
+        // from HireRadar. Keep this local fallback so a stale resolver deploy
+        // cannot leave an otherwise complete application blocked.
+        if (!answer && field.type === 'checkbox-group'
+          && /how did you hear|where did you hear|heard about/.test(normalize(`${field.section || ''} ${field.label || ''}`))) {
+          const careers = (field.options || []).find((option) =>
+            /careers? (website|site)|company website/.test(normalize(option)));
+          if (careers) answer = {
+            fieldId: field.fieldId,
+            name: field.name,
+            value: careers,
+            source: 'policy',
+            safeToApply: true,
+            localPolicy: true,
+          };
+        }
+        if (answer && !answer.localPolicy && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
           state.lastFailure = 'stale_plan';
           resolutionState.set(key, state);
           continue;
@@ -872,25 +907,46 @@
           continue;
         }
         let applied;
+        let applyStage = 'start';
         try {
           // fill() is internally bounded. Racing it against a timer does not
           // cancel it; the abandoned operation keeps clicking after the next
           // field starts. Keep interactive widgets strictly sequential.
+          applyStage = 'find';
           const live = findField(field);
-          if (live?.type === 'checkbox') {
+          applyStage = 'typecheck';
+          // `findField` can return a page-world wrapper whose `type` getter
+          // throws "Illegal invocation" in the isolated extension world.
+          // The inspected field contract already identified checkbox controls,
+          // so do not read that wrapped DOM property again here.
+          if (field.type === 'checkbox' || field.type === 'checkbox-group') {
+            applyStage = 'nativecontrol';
+            const checkbox = nativeCheckboxFor(field, live);
+            if (!checkbox) throw new Error('Native checkbox not found');
             if (field.type === 'checkbox-group') {
-              const boxes = checkboxGroupFor(live);
+              applyStage = 'group';
+              const boxes = checkboxGroupFor(checkbox);
+              applyStage = 'match';
               const option = bestMatch(boxes, answerLabel({ ...field, value: answer.value }), labelTextFor);
-              applied = option ? await setCheckboxValue(option, true) : false;
+              applyStage = 'nativecheck';
+              if (option) setNativeChecked(option, true);
+              await wait(80);
+              applyStage = 'verify';
+              applied = Boolean(option && Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.get?.call(option));
             } else {
+              applyStage = 'normalize';
               const checked = !['false', 'no', '0', ''].includes(normalize(answer.value));
-              applied = await setCheckboxValue(live, checked);
+              applyStage = 'nativecheck';
+              setNativeChecked(checkbox, checked);
+              await wait(80);
+              applyStage = 'verify';
+              applied = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.get?.call(checkbox) === checked;
             }
           } else {
             applied = await fill({ ...field, value: answer.value, source: answer.source });
           }
         } catch (error) {
-          state.lastFailure = 'apply_error_' + normalize(error?.name || error?.message || 'unknown').slice(0, 24);
+          state.lastFailure = 'apply_error_' + applyStage + '_' + normalize([error?.name, error?.message].filter(Boolean).join(' ')).slice(0, 20);
           resolutionState.set(key, state);
           continue;
         }
@@ -1133,6 +1189,21 @@
     // form on the page (Ashby renders a separate "autofill from resume" mini-form
     // whose validity is unrelated). Name the flagged field so we can see it.
     const form = submit.form || submit.closest('form') || adapter?.validationRoot?.(submit) || document.querySelector('form');
+    // Greenhouse renders some "choose at least one" checkbox groups with the
+    // native `required` attribute on every option. Once an option is selected,
+    // browser constraint validation would still block a real submit click on
+    // every unchecked alternative. Normalize only those completed groups to
+    // the semantics presented by the ATS question.
+    const checkboxGroups = new Map();
+    for (const box of [...(form?.querySelectorAll?.('input[type="checkbox"][name]') || [])]) {
+      if (!checkboxGroups.has(box.name)) checkboxGroups.set(box.name, []);
+      checkboxGroups.get(box.name).push(box);
+    }
+    for (const boxes of checkboxGroups.values()) {
+      if (boxes.length > 1 && boxes.some((box) => box.checked)) {
+        boxes.filter((box) => !box.checked).forEach((box) => { box.required = false; });
+      }
+    }
     const adapterInvalid = adapter?.findInvalid?.(form);
     const invalids = [...new Set([
       ...(adapterInvalid ? [adapterInvalid] : []),

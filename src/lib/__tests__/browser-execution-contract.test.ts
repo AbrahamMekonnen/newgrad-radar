@@ -69,4 +69,13 @@ describe('browser execution contract', () => {
     expect(EXEC.requiredInvalid(root)).toBe(invalid);
     expect(EXEC.requiredInvalids(root)).toEqual([invalid, secondInvalid]);
   });
+
+  it('accepts a required checkbox group when one named option is selected', () => {
+    const unchecked = element('', { type: 'checkbox', name: 'source[]', checked: false,
+      willValidate: true, checkValidity: () => false });
+    const selected = element('', { type: 'checkbox', name: 'source[]', checked: true,
+      willValidate: true, checkValidity: () => true });
+    const root = { querySelectorAll: () => [unchecked, selected] };
+    expect(EXEC.requiredInvalids(root)).toEqual([]);
+  });
 });
