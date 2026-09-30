@@ -808,7 +808,13 @@
           const labels = (CB ? CB.scopedOptions(element) : visibleOptions(element))
             .map((item) => String(item.textContent || '').replace(/\s+/g, ' ').trim())
             .filter(Boolean);
-          field.options = [...new Set(labels)];
+          const unique = [...new Set(labels)];
+          // Search-backed school directories render only the first virtualized
+          // page until the candidate types. Treat that partial page as a search
+          // index, not the complete allowed option set; fillCombo will type the
+          // confirmed school and select the dynamically loaded exact result.
+          field.options = /^(school|university|college|institution)$/i.test(String(field.label || '').trim())
+            && unique.length >= 75 ? [] : unique;
           field.optionSignature = ATS?.optionSignature?.(field.options) || '';
         }
       } catch { /* resolver can still use text/profile data when enumeration fails */ }
@@ -871,8 +877,8 @@
           // cancel it; the abandoned operation keeps clicking after the next
           // field starts. Keep interactive widgets strictly sequential.
           applied = await fill({ ...field, value: answer.value, source: answer.source });
-        } catch {
-          state.lastFailure = 'apply_error';
+        } catch (error) {
+          state.lastFailure = 'apply_error_' + normalize(error?.name || error?.message || 'unknown').slice(0, 24);
           resolutionState.set(key, state);
           continue;
         }

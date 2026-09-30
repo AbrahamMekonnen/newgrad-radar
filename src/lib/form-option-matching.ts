@@ -81,7 +81,8 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
       uk: 'united kingdom', 'u k': 'united kingdom',
     };
     const country = aliases[target] || target;
-    const option = usable.find((candidate) => norm(candidate) === country);
+    const option = usable.find((candidate) => norm(candidate) === country
+      || norm(candidate).includes(country) || country.includes(norm(candidate)));
     if (option) return option;
   }
 

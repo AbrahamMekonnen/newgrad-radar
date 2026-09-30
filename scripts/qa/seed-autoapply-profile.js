@@ -75,9 +75,12 @@ const seedFacts = {
   other_processes: 'None',
   full_time_start_window: 'Q4 2026 (October - December)',
   first_location_preference: 'San Francisco, CA, United States',
+};
+const rawAnswers = {
   'what is your expected graduation month year': 'May 2028',
   'when are you available for a 12 week internship check all that apply': 'Summer 2027',
   'how did you hear about twilio': 'Careers Website',
+  'when are you available to start full time': 'Q4 2026 (October - December)',
 };
 
 async function activeUserId() {
@@ -117,6 +120,7 @@ async function main() {
   }
   const merged = { ...(profile.custom_answers || {}) };
   for (const [name, value] of Object.entries(seedFacts)) merged[`__fact:${name}`] = value;
+  Object.assign(merged, rawAnswers);
   const { error: updateError } = await db.from('user_profiles').update({
     custom_answers: merged,
     education_graduation_date: 'May 2028',
