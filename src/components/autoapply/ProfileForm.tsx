@@ -92,6 +92,23 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   // Result of auto-filling from a resume: which fields we filled (to review) and
   // which important ones a resume can't provide (to prompt the user for).
   const [autofill, setAutofill] = useState<{ filled: { field: string; label: string }[]; missing: { field: string; label: string }[] } | null>(null);
+  // On-demand "does this sound like me?" preview of the captured writing voice.
+  // One LLM call, only when the user clicks, so there's no token-burning chatbot.
+  const [voicePreview, setVoicePreview] = useState<{ loading: boolean; answer?: string; error?: string } | null>(null);
+  const runVoicePreview = useCallback(async (sample: string) => {
+    setVoicePreview({ loading: true });
+    try {
+      const res = await fetch('/api/auto-apply/voice-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ writing_sample: sample }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setVoicePreview({ loading: false, error: data?.error || 'Preview failed. Try again.' });
+      else setVoicePreview({ loading: false, answer: data?.answer || '' });
+    } catch {
+      setVoicePreview({ loading: false, error: 'Preview failed. Try again.' });
+    }
+  }, []);
 
   // Stable callback for field changes (memoized to prevent child re-renders)
   const handleChange = useCallback((field: keyof UserProfile, value: UserProfile[keyof UserProfile]) => {
@@ -696,6 +713,22 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
               placeholder={"e.g. \"honestly I got into building stuff because I hate doing the same thing twice. my first app was a script that renamed my messy download folder. it broke constantly. I kept fixing it anyway...\""} />
             {(formData.writing_sample || '').trim().length > 0 && (formData.writing_sample || '').trim().length < 200 && (
               <p className="text-xs text-amber-600 mt-1">Add a bit more, aim for 3+ sentences so the voice is clear to copy.</p>
+            )}
+            <div className="mt-2 flex items-center gap-3">
+              <button type="button"
+                onClick={() => runVoicePreview((formData.writing_sample || '').trim())}
+                disabled={voicePreview?.loading || (formData.writing_sample || '').trim().length < 40}
+                className="text-sm px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                {voicePreview?.loading ? 'Writing a sample…' : 'Preview how this sounds'}
+              </button>
+              <span className="text-xs text-gray-400">Generates one sample answer in your voice. Tweak the sample and preview again if it doesn&apos;t sound like you.</span>
+            </div>
+            {voicePreview?.error && <p className="text-xs text-red-600 mt-2">{voicePreview.error}</p>}
+            {voicePreview?.answer && (
+              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Sample answer to &ldquo;Tell us about a project you&apos;re proud of&rdquo; &mdash; does this sound like you?</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{voicePreview.answer}</p>
+              </div>
             )}
           </div>
           <div>
