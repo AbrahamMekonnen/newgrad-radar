@@ -35,6 +35,10 @@ class CohortMatchTests(unittest.TestCase):
                       "GRC Engineer", "Marketing Systems Engineer"):
             self.assertFalse(matches(job(title), FILTERS), title)
 
+    def test_rejects_non_engineering_titles_containing_software(self):
+        self.assertFalse(matches(job("Technical Recruiter, Software"), FILTERS))
+        self.assertFalse(matches(job("Software Talent Acquisition Partner"), FILTERS))
+
     def test_rejects_unknown_seniority_and_degree_mismatch(self):
         self.assertFalse(matches(job("Software Engineer", level=None), FILTERS))
         self.assertFalse(matches(job("Systems PhD - Software Engineer", level=None), FILTERS))

@@ -32,7 +32,8 @@ _NON_SWE_TITLE = re.compile(
     r"wastewater|rf|supplier|sourcing|product design|sales|customer|solutions|"
     r"support|technician|marketing|grc|risk management|sensor placement|"
     r"integration and test|mission integration|video content|designer|"
-    r"developer engagement|product application|software installation)\b", re.I)
+    r"developer engagement|product application|software installation|"
+    r"recruiter|recruiting|talent acquisition)\b", re.I)
 _LEVEL_SIGNAL = re.compile(
     r"\b(intern(?:ship)?|new[ -]?grad|entry[ -]?level|junior|associate|"
     r"early career|university grad|recent grad|graduate)\b", re.I)
