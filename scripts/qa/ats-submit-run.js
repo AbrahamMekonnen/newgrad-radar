@@ -26,6 +26,10 @@ const valueAfter = (flag, fallback) => {
 const ats = valueAfter('--ats', 'greenhouse');
 const limit = Math.min(50, Math.max(1, Number(valueAfter('--limit', '1'))));
 const queueId = valueAfter('--queue-id', '');
+const queueIdsFile = valueAfter('--queue-ids-file', '');
+const explicitQueueIds = queueIdsFile
+  ? JSON.parse(fs.readFileSync(path.resolve(queueIdsFile), 'utf8'))
+  : (queueId ? [queueId] : []);
 if (!args.has('--submit') || process.env.HIRERADAR_LIVE_SUBMIT !== 'YES') {
   throw new Error('Real submission requires --submit and HIRERADAR_LIVE_SUBMIT=YES.');
 }
@@ -65,16 +69,25 @@ async function main() {
   }).select('id').single();
   if (error) throw error;
 
+  // Keep the user's installed extension from racing this exact-ID QA cohort.
+  const { data: otherDevices } = await db.from('autoapply_browser_devices')
+    .select('id,paused').eq('user_id', devices[0].user_id).is('revoked_at', null).neq('id', device.id);
+  for (const other of otherDevices || []) {
+    await db.from('autoapply_browser_devices').update({ paused: true }).eq('id', other.id);
+  }
+
   const browser = await chromium.launch({ channel: 'chrome', headless: false });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
   const results = [];
   try {
     for (let index = 0; index < limit; index++) {
       let job;
-      if (queueId && index === 0) {
+      if (explicitQueueIds.length) {
+        const selectedQueueId = explicitQueueIds[index];
+        if (!selectedQueueId) break;
         const { data: row, error: rowError } = await db.from('autoapply_job_queue')
           .select('id,user_id,job_title,company_name,job_url,ats_type,prepared_data,authorization_source,execution_channel')
-          .eq('id', queueId).eq('user_id', devices[0].user_id).single();
+          .eq('id', selectedQueueId).eq('user_id', devices[0].user_id).single();
         if (rowError || !row) throw rowError || new Error('Selected queue row not found');
         if (row.authorization_source !== 'standing_rule' && row.authorization_source !== 'direct_click') throw new Error('Selected row is not authorized');
         if (String(row.ats_type).toLowerCase() !== ats) throw new Error(`Selected row is ${row.ats_type}, expected ${ats}`);
@@ -141,6 +154,9 @@ async function main() {
   } finally {
     await browser.close().catch(() => {});
     await db.from('autoapply_browser_devices').update({ revoked_at: new Date().toISOString() }).eq('id', device.id);
+    for (const other of otherDevices || []) {
+      await db.from('autoapply_browser_devices').update({ paused: other.paused }).eq('id', other.id);
+    }
   }
   const out = path.join(ROOT, '.qa', `submission-e2e-${ats}-${Date.now()}.json`);
   fs.writeFileSync(out, JSON.stringify({ ats, limit, results }, null, 2));
