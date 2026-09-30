@@ -17,11 +17,15 @@ type LiveField = ResolutionField;
 // a genuinely good answer is never mangled.
 function humanizeProse(text: string): string {
   let t = String(text || '').trim();
-  t = t.replace(/\s*[—–]\s*/g, ', ');   // — / – asides -> comma
-  t = t.replace(/,\s*,/g, ', ');                   // no doubled commas
-  t = t.replace(/\s+([.,;:!?])/g, '$1');           // no space before punctuation
-  t = t.replace(/,\s*([.!?])/g, '$1');             // ", ." -> "."
-  t = t.replace(/^[,\s]+/, '');                    // no leading comma
+  // Locale/typography tells a person typing an application wouldn't produce:
+  t = t.replace(/[‘’‛]/g, "'").replace(/[“”]/g, '"'); // curly -> straight quotes
+  t = t.replace(/‑/g, '-').replace(/ /g, ' ');   // non-breaking hyphen/space -> plain
+  t = t.replace(/(\d)\s+%/g, '$1%');                        // "30 %" -> "30%"
+  t = t.replace(/\s*[—–]\s*/g, ', ');             // em/en dash asides -> comma
+  t = t.replace(/,\s*,/g, ', ');                            // no doubled commas
+  t = t.replace(/\s+([.,;:!?])/g, '$1');                    // no space before punctuation
+  t = t.replace(/,\s*([.!?])/g, '$1');                      // ", ." -> "."
+  t = t.replace(/^[,\s]+/, '');                             // no leading comma
   t = t.replace(/^(i am writing to (?:apply|express)[^.]*\.\s*)/i, '');
   return t.trim();
 }
@@ -46,7 +50,8 @@ async function draftJSON(prompt: string): Promise<string | null> {
   const groq = process.env.GROQ_API_KEY;
   if (groq) {
     const ai = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groq}` },
+      // A browser UA avoids Groq's Cloudflare edge returning 403/1010 to bare clients.
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groq}`, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' },
       body: JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0.72, top_p: 0.95, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
       signal: AbortSignal.timeout(30000),
     }).catch(() => null);
@@ -357,8 +362,9 @@ export async function POST(request: NextRequest) {
 HARD RULES
 - Truth only. Use ONLY the facts in CANDIDATE and JOB below. Never invent an employer, title, date, number, metric, tool, or achievement. If a question cannot be answered truthfully from those facts, return "" for it.
 - Be specific. Every answer names at least one concrete, real detail from CANDIDATE (a project, a technology, a result, a moment). For "why this company/role", tie it to something specific and true from the JOB posting (the actual product, team, or problem it describes). Never vague praise like "your commitment to innovation" or "a great opportunity".
-- Sound like a person. First person, contractions, one clear point of view. Vary sentence length on purpose: mix short, plain sentences with the occasional longer one. If a writing sample is given, match its rhythm and vocabulary.
-- Format cleanly. Plain prose. Essays: at most two short paragraphs, about 120-180 words. No headings or bullet lists unless the question explicitly asks for a list. No greeting or sign-off unless it is a cover letter, and then keep it simple.
+- Sound like a person. First person, contractions, one clear point of view. Really vary sentence length: include at least one short sentence (under eight words) in each answer, next to a longer one. If a writing sample is given, match its rhythm and vocabulary.
+- Don't wrap it in a bow. Do not end every answer with a reflective summary like "this taught me...", "what draws me in is...", or "it made a real impact." Let some answers stop on a concrete detail instead. Vary how each one ends, and don't reuse the same closing shape twice.
+- Format cleanly. Plain prose, straight quotes, a normal hyphen in words like "real-time", "%" with no space. Essays: at most two short paragraphs, about 120-180 words, and let their lengths differ. No headings or bullet lists unless the question explicitly asks for a list. No greeting or sign-off unless it is a cover letter, and then keep it simple.
 
 NEVER USE (these read as AI): the em dash "—"; "not just X but Y" / "not only ... but also"; three-part lists for rhythm; and these words/phrases: leverage, passionate, delve, tapestry, robust, seamless, synergy, spearheaded, results-driven, detail-oriented, proven track record, cutting-edge, game-changer, elevate, streamline, "excited to contribute", "I am writing to apply", "in today's fast-paced world". Do not start two answers the same way.
 
