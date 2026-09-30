@@ -78,6 +78,12 @@ async function main() {
 
   const browser = await chromium.launch({ channel: 'chrome', headless: false });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
+  await context.addInitScript(() => {
+    globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
+  });
+  // Init scripts execute in an isolated Playwright bootstrap before page CSP is
+  // enforced, matching how a browser extension content script is installed.
+  for (const file of modules) await context.addInitScript({ path: file });
   const results = [];
   try {
     for (let index = 0; index < limit; index++) {
@@ -133,16 +139,7 @@ async function main() {
         }
         return { ok: false };
       });
-      await page.addInitScript(() => {
-        globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
-      });
-      const injectProductionEngine = async () => {
-        if (await page.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
-        for (const file of modules) await page.addScriptTag({ path: file });
-      };
-      page.on('domcontentloaded', () => { void injectProductionEngine().catch(() => {}); });
       await page.goto(job.jobUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await injectProductionEngine();
       const outcome = await Promise.race([
         terminal,
         new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),
