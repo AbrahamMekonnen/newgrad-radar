@@ -73,6 +73,8 @@ const seedFacts = {
   finance_interest: 'Interested but considering all opportunities',
   employment_obligations: 'No',
   other_processes: 'None',
+  current_country: 'United States',
+  location_preference: 'Any/all',
   full_time_start_window: 'Q4 2026 (October - December)',
   first_location_preference: 'San Francisco, CA, United States',
 };

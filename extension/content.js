@@ -876,7 +876,19 @@
           // fill() is internally bounded. Racing it against a timer does not
           // cancel it; the abandoned operation keeps clicking after the next
           // field starts. Keep interactive widgets strictly sequential.
-          applied = await fill({ ...field, value: answer.value, source: answer.source });
+          const live = findField(field);
+          if (live?.type === 'checkbox') {
+            if (field.type === 'checkbox-group') {
+              const boxes = checkboxGroupFor(live);
+              const option = bestMatch(boxes, answerLabel({ ...field, value: answer.value }), labelTextFor);
+              applied = option ? await setCheckboxValue(option, true) : false;
+            } else {
+              const checked = !['false', 'no', '0', ''].includes(normalize(answer.value));
+              applied = await setCheckboxValue(live, checked);
+            }
+          } else {
+            applied = await fill({ ...field, value: answer.value, source: answer.source });
+          }
         } catch (error) {
           state.lastFailure = 'apply_error_' + normalize(error?.name || error?.message || 'unknown').slice(0, 24);
           resolutionState.set(key, state);

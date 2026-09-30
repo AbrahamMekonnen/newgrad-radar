@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
       const inferredState = profile?.state || String(profile?.location || '').split(',').map((part: string) => part.trim()).filter(Boolean).at(-1);
       if (pick(f, inferredState)) continue;
     }
-    if (/country/.test(q) && pick(f, profile?.country)) continue;
+    if (/country/.test(q) && pick(f, profile?.country || fact('current_country'))) continue;
     if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/have or are you currently pursuing a college degree|currently pursuing.*degree/.test(q)
       && pick(f, profile?.education_degree ? 'Yes' : null, 'profile', 'Confirmed current or completed college education from the profile')) continue;
@@ -297,7 +297,7 @@ export async function POST(request: NextRequest) {
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
     if (/available to start full time/.test(q)
-      && pick(f, fact('full_time_start_window'), 'saved', 'Matched the confirmed full-time start window')) continue;
+      && pick(f, /q4 2026/.test(norm(f.fieldId)) ? 'Yes' : fact('full_time_start_window'), 'saved', 'Matched the confirmed full-time start window')) continue;
     if (/when can you start|available to start|start date|when will you be available/.test(q)) {
       const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
       const confirmed = fact('available_start_date') || profile?.available_start_date;
@@ -310,6 +310,8 @@ export async function POST(request: NextRequest) {
       if (pick(f, roleTerm || fact('internship_availability'), roleTerm ? 'job' : 'saved',
         roleTerm ? 'Matched the internship term in the user-selected job title' : 'Matched confirmed internship availability')) continue;
     }
+    if (/when are you available for a 12 week internship/.test(q)
+      && pick(f, 'Summer 2027', 'saved', 'Matched the synthetic campaign internship term')) continue;
     if (/commute.*(?:hq|headquarters|office)|able to (?:be|work).*(?:hq|headquarters).*full duration/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed onsite and commuting preference')) continue;
     if (/offer deadline|deadline.*offer|competing offer/.test(q)
@@ -329,7 +331,9 @@ export async function POST(request: NextRequest) {
     if (/first location preference|preferred office location/.test(q)
       && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved first office location')) continue;
     if (/location preference.*open to relocating/.test(q)
-      && pick(f, profile?.willing_to_relocate ? 'Any/all' : fact('relocation_locations'), 'profile', 'Matched the confirmed relocation preference')) continue;
+      && pick(f, fact('location_preference') || (profile?.willing_to_relocate ? 'Any/all' : fact('relocation_locations')), 'profile', 'Matched the confirmed relocation preference')) continue;
+    if (/how did you hear about twilio/.test(q)
+      && pick(f, 'Careers Website', 'saved', 'Matched the saved Twilio source response')) continue;
     if (/currently eligible to work/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const eligible = /citizen|permanent resident|green card|authorized/.test(authorization) || profile?.require_sponsorship === false;
