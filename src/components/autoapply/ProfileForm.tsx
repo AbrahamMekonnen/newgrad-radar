@@ -562,8 +562,14 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             ['government_current', 'Current government employee?', ['Yes', 'No']],
             ['government_past_10_years', 'Government employee in the past 10 years?', ['Yes', 'No']],
             ['reserve_or_guard', 'Serving in the Reserves or National Guard?', ['Yes', 'No']],
+            ['military_service', 'Current or former military service?', ['Yes', 'No']],
+            ['foreign_government_service', 'Worked for a foreign government or military?', ['Yes', 'No']],
             ['onsite_five_days', 'Available onsite five days per week?', ['Yes', 'No']],
+            ['remote_work', 'Comfortable working remotely?', ['Yes', 'No']],
             ['travel', 'Willing to travel for work?', ['Yes', 'No']],
+            ['sms_consent', 'Allow recruiting text messages?', ['Yes', 'No']],
+            ['whatsapp_consent', 'Allow recruiting messages on WhatsApp?', ['Yes', 'No']],
+            ['interview_recording_consent', 'Allow interview recording?', ['Yes', 'No']],
             ['marketing_communications', 'Receive optional recruiting or training marketing?', ['Yes', 'No']],
             ['privacy_acknowledgement', 'Acknowledge applicant privacy notices?', ['Yes', 'No']],
             ['demographic_data_consent', 'Consent to processing voluntary demographic responses?', ['Yes', 'No']],
@@ -636,6 +642,30 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             onChange={(e) => handleFactChange('security_clearance', e.target.value)}
             placeholder="Leave blank if none or unknown"
           />
+          <Input label="Maximum travel percentage" value={customFact('travel_percentage')}
+            onChange={(e) => handleFactChange('travel_percentage', e.target.value)} placeholder="e.g., 25%" />
+          <Input label="Relocation locations" value={customFact('relocation_locations')}
+            onChange={(e) => handleFactChange('relocation_locations', e.target.value)} placeholder="e.g., New York, Seattle, anywhere in the U.S." />
+          <Input label="Current or most recent job title" value={customFact('recent_job_title')}
+            onChange={(e) => handleFactChange('recent_job_title', e.target.value)} placeholder="Software Engineer Intern" />
+          <Input label="Number of internships or co-ops" value={customFact('internship_count')}
+            onChange={(e) => handleFactChange('internship_count', e.target.value)} placeholder="e.g., 2" />
+          <Input label="Prior interview history" value={customFact('prior_interviews')}
+            onChange={(e) => handleFactChange('prior_interviews', e.target.value)} placeholder="e.g., Stripe: 2025; Anthropic: never" />
+          <Input label="Current offer deadline" value={customFact('offer_deadline')}
+            onChange={(e) => handleFactChange('offer_deadline', e.target.value)} placeholder="Date, or None" />
+          <Input label="SAT score" value={customFact('sat_score')}
+            onChange={(e) => handleFactChange('sat_score', e.target.value)} placeholder="Score, or Not taken" />
+          <Input label="ACT score" value={customFact('act_score')}
+            onChange={(e) => handleFactChange('act_score', e.target.value)} placeholder="Score, or Not taken" />
+          <Input label="GRE score" value={customFact('gre_score')}
+            onChange={(e) => handleFactChange('gre_score', e.target.value)} placeholder="Score, or Not taken" />
+          <Input label="Export-control / U.S.-person status" value={customFact('export_control_status')}
+            onChange={(e) => handleFactChange('export_control_status', e.target.value)} placeholder="Use the exact status you can truthfully certify" />
+          <Input label="Government access card (CAC/PIV)" value={customFact('government_access_card')}
+            onChange={(e) => handleFactChange('government_access_card', e.target.value)} placeholder="Yes, No, or card type" />
+          <Input label="Standard internship availability" value={customFact('internship_availability')}
+            onChange={(e) => handleFactChange('internship_availability', e.target.value)} placeholder="e.g., May 18–August 21, 2027" />
         </div>
       </section>
       <section>
