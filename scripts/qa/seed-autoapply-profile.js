@@ -25,6 +25,7 @@ const db = createClient(url, key, {
   realtime: { transport: DisabledWebSocket },
 });
 const backupFile = path.join(root, '.qa', 'autoapply-profile-before-seed.json');
+const profileColumns = ['custom_answers', 'education_graduation_date', 'proud_project', 'career_goals', 'writing_sample'];
 
 const seedFacts = {
   government_current: 'No',
@@ -80,21 +81,35 @@ async function main() {
     if (!fs.existsSync(backupFile)) throw new Error('No QA profile backup exists.');
     const backup = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
     if (backup.user_id !== userId) throw new Error('Backup belongs to a different user.');
-    const { error } = await db.from('user_profiles').update({ custom_answers: backup.custom_answers }).eq('user_id', userId);
+    const restored = Object.fromEntries(profileColumns.filter((column) => column in backup).map((column) => [column, backup[column]]));
+    const { error } = await db.from('user_profiles').update(restored).eq('user_id', userId);
     if (error) throw error;
     console.log(`Restored ${Object.keys(backup.custom_answers || {}).length} saved profile answers.`);
     return;
   }
-  const { data: profile, error } = await db.from('user_profiles').select('custom_answers').eq('user_id', userId).single();
+  const { data: profile, error } = await db.from('user_profiles').select(profileColumns.join(',')).eq('user_id', userId).single();
   if (error) throw error;
   fs.mkdirSync(path.dirname(backupFile), { recursive: true });
   // A second seed must never replace the original pre-campaign snapshot.
   if (!fs.existsSync(backupFile)) {
-    fs.writeFileSync(backupFile, JSON.stringify({ user_id: userId, custom_answers: profile.custom_answers || {}, backed_up_at: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(backupFile, JSON.stringify({ user_id: userId, ...profile, custom_answers: profile.custom_answers || {}, backed_up_at: new Date().toISOString() }, null, 2));
+  } else {
+    const backup = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
+    let changed = false;
+    for (const column of profileColumns) {
+      if (!(column in backup)) { backup[column] = profile[column] ?? null; changed = true; }
+    }
+    if (changed) fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2));
   }
   const merged = { ...(profile.custom_answers || {}) };
   for (const [name, value] of Object.entries(seedFacts)) merged[`__fact:${name}`] = value;
-  const { error: updateError } = await db.from('user_profiles').update({ custom_answers: merged }).eq('user_id', userId);
+  const { error: updateError } = await db.from('user_profiles').update({
+    custom_answers: merged,
+    education_graduation_date: 'May 2027',
+    proud_project: 'I built a campus event planner with TypeScript, Next.js, PostgreSQL, and Docker. I designed role-based access, calendar search, email reminders, and automated database migrations, then deployed and tested the complete service.',
+    career_goals: 'Build reliable backend and full-stack systems, improve developer tooling, and grow into an engineer who can own services from design through production operations.',
+    writing_sample: 'I like engineering work where the result is concrete and useful. On my campus event planner, the interesting part was not only writing features. I had to decide how permissions, scheduling, reminders, and deployment fit together, then test the paths that could fail for real users.',
+  }).eq('user_id', userId);
   if (updateError) throw updateError;
   console.log(`Seeded ${Object.keys(seedFacts).length} QA facts; previous answers backed up locally.`);
 }

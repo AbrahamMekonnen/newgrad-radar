@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, language, 'saved', 'Matched the first saved coding-language preference available in this form')) continue;
     }
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/^clearance eligibility$/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
     if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;
     if (/export control|u s person|itar|ear/.test(q) && pick(f, fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
@@ -215,6 +216,8 @@ export async function POST(request: NextRequest) {
     }
     if (/country/.test(q) && pick(f, profile?.country)) continue;
     if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
+    if (/have or are you currently pursuing a college degree|currently pursuing.*degree/.test(q)
+      && pick(f, profile?.education_degree ? 'Yes' : null, 'profile', 'Confirmed current or completed college education from the profile')) continue;
     if (/major|field of study|area of study/.test(q) && pick(f, profile?.education_major)) continue;
     if (/high school.*name|name.*high school/.test(q)
       && pick(f, fact('high_school_name'), 'saved', 'Matched the confirmed high-school name')) continue;
@@ -274,6 +277,13 @@ export async function POST(request: NextRequest) {
         ? 'Matched the confirmed availability date'
         : 'Matched the role term stated in the user-selected job title')) continue;
     }
+    if (/available for a .*week internship|internship.*check all that apply|intern season/.test(q)) {
+      const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
+      if (pick(f, roleTerm || fact('internship_availability'), roleTerm ? 'job' : 'saved',
+        roleTerm ? 'Matched the internship term in the user-selected job title' : 'Matched confirmed internship availability')) continue;
+    }
+    if (/commute.*(?:hq|headquarters|office)|able to (?:be|work).*(?:hq|headquarters).*full duration/.test(q)
+      && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed onsite and commuting preference')) continue;
     if (/offer deadline|deadline.*offer|competing offer/.test(q)
       && pick(f, fact('offer_deadline'), 'saved', 'Matched the confirmed offer deadline')) continue;
     if (/interviewed|interview process|previously applied|applied (?:to|at)/.test(q)) {
