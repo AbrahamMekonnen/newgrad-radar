@@ -11,6 +11,7 @@ function degreeLevel(value: unknown): string {
 }
 
 export function matchAvailableOption(question: unknown, wanted: unknown, options: string[]): string | null {
+  const rawTarget = String(wanted || '').trim().toLowerCase();
   const target = norm(wanted);
   if (!target) return null;
   const usable = options.filter((option) => norm(option) && !/^(select|choose)( an?| one| option)?$/.test(norm(option)));
@@ -51,10 +52,10 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
       if (option) return option;
     }
   }
-  if (/\bgpa\b|grade point average/.test(q) && /^\d(?:\.\d+)?$/.test(target)) {
-    const score = Number(target);
+  if (/\bgpa\b|grade point average/.test(q) && /^\d(?:\.\d+)?$/.test(rawTarget)) {
+    const score = Number(rawTarget);
     const option = usable.find((candidate) => {
-      const text = norm(candidate);
+      const text = String(candidate || '').toLowerCase();
       const nums = [...text.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
       if (/or higher|and above|above/.test(text)) return nums.length > 0 && score >= nums[0];
       if (/or below|and below|below/.test(text)) return nums.length > 0 && score <= nums[0];
