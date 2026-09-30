@@ -541,6 +541,13 @@
 
   const isSuccessPage = (data) => {
     const adapter = ATS?.detect(location.href, data?.atsType);
+    // Greenhouse has a stable, same-origin confirmation route. Generic success
+    // copy is unsafe here because job descriptions and hidden stale DOM can
+    // contain phrases such as "application submitted" after a rejected POST.
+    if (String(data?.atsType || '').toLowerCase() === 'greenhouse') {
+      return (data?.submitAttempts || 0) > 0
+        && /\/confirmation(?:[/?#]|$)/i.test(location.pathname + location.search + location.hash);
+    }
     if ((data?.submitAttempts || 0) > 0 && adapter?.submissionComplete?.(document)) return true;
     // ATS clients often leave the old form mounted but hidden after success.
     // Only a visible, enabled submit control inside a form means the
