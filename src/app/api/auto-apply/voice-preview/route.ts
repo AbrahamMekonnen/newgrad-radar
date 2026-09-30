@@ -78,9 +78,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Add a writing sample or a note about your voice first, then preview.' }, { status: 400 });
   }
   const firstName = profile?.first_name || 'the candidate';
+  // Draw on the STAR stories the user curated, so the preview reflects the same
+  // grounding the live drafter uses (and shows the value of filling the story bank).
+  const { data: stories } = await supabase.from('user_story_bank')
+    .select('title,situation,task,action,result,technologies,strength_rating')
+    .eq('user_id', user.id)
+    .order('strength_rating', { ascending: false })
+    .limit(3);
+  const storyDeck = (stories || []).map((s) => {
+    const star = [s.situation, s.task, s.action, s.result].map((p: unknown) => String(p || '').trim()).filter(Boolean).join(' ');
+    return `- ${s.title}: ${star}`.slice(0, 600);
+  }).join('\n');
   const material = [
     profile?.proud_project && `Proud of: ${profile.proud_project}`,
     profile?.career_goals && `Career goals: ${profile.career_goals}`,
+    storyDeck && `Stories from their experience:\n${storyDeck}`,
     profile?.resume_text && `Resume:\n${String(profile.resume_text).slice(0, 2000)}`,
   ].filter(Boolean).join('\n') || '(limited background — stay honest and specific to what is given)';
 

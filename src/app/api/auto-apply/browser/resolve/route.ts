@@ -390,6 +390,20 @@ export async function POST(request: NextRequest) {
     const storyBank = Object.entries(custom)
       .filter(([k, v]) => !k.startsWith('__fact:') && typeof v === 'string' && v.trim().length > 24)
       .slice(0, 8).map(([k, v]) => `- ${k}: ${v}`).join('\n');
+    // Pull the STAR stories the user curated into their Story Bank so behavioral and
+    // "tell us about a time" answers draw on real experiences they wrote down, not just
+    // the resume. The live drafter otherwise never sees these. Strongest first, bounded
+    // to keep the prompt small. Fetched only on the deferred AI pass, never the fast one.
+    const { data: stories } = await store.from('user_story_bank')
+      .select('title,situation,task,action,result,technologies,strength_rating')
+      .eq('user_id', device.user_id)
+      .order('strength_rating', { ascending: false })
+      .limit(6);
+    const storyDeck = (stories || []).map((s) => {
+      const tech = Array.isArray(s.technologies) && s.technologies.length ? ` [${s.technologies.join(', ')}]` : '';
+      const star = [s.situation, s.task, s.action, s.result].map((p) => String(p || '').trim()).filter(Boolean).join(' ');
+      return `- ${s.title}${tech}: ${star}`.slice(0, 600);
+    }).join('\n');
     const candidate = [
       profile?.first_name && `Name: ${[profile.first_name, profile?.last_name].filter(Boolean).join(' ')}`,
       (profile?.current_title || profile?.current_company) && `Currently: ${[profile?.current_title, profile?.current_company].filter(Boolean).join(' at ')}`,
@@ -399,6 +413,7 @@ export async function POST(request: NextRequest) {
       profile?.proud_project && `Proud of: ${profile.proud_project}`,
       profile?.career_goals && `Career goals: ${profile.career_goals}`,
       storyBank && `Their own words (reuse these facts and voice):\n${storyBank}`,
+      storyDeck && `Stories from their experience (draw on these for behavioral or "tell us about a time" answers; use the real details, keep their voice):\n${storyDeck}`,
       profile?.resume_text && `Resume:\n${String(profile.resume_text).slice(0, 2500)}`,
     ].filter(Boolean).join('\n') || '(limited background — stay honest and specific to what is given)';
     // Voice-matching is the single biggest lever for not reading as AI: given a real
