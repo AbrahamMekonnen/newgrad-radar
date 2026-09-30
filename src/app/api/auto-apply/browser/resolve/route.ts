@@ -108,9 +108,14 @@ export async function POST(request: NextRequest) {
     return true;
   };
   for (const f of fields as LiveField[]) {
-    const q = norm(f.label);
-    const policy = classifyApplicationQuestion(f.label);
-    const saved = findSavedAnswer(custom, f.label, f);
+    // Checkbox/radio controls often expose the option as `label` and the
+    // actual question as `section` (for example "Summer 2027" under "When are
+    // you available?"). Resolve against both or deterministic question rules
+    // never see the question being answered.
+    const question = [f.section, f.label].filter(Boolean).join(' ');
+    const q = norm(question);
+    const policy = classifyApplicationQuestion(question);
+    const saved = findSavedAnswer(custom, question, f) || findSavedAnswer(custom, f.label, f);
     if (pick(f, saved, 'saved', 'Matched a previously confirmed answer')) continue;
     if (/^first name\b/.test(q) && pick(f, profile?.first_name)) continue;
     if (/^last name\b|^surname\b|^family name\b/.test(q) && pick(f, profile?.last_name)) continue;
