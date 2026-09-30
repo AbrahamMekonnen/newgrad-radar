@@ -27,6 +27,9 @@ const ats = valueAfter('--ats', 'greenhouse');
 const limit = Math.min(50, Math.max(1, Number(valueAfter('--limit', '1'))));
 const queueId = valueAfter('--queue-id', '');
 const queueIdsFile = valueAfter('--queue-ids-file', '');
+const resumeOverrideArg = valueAfter('--resume-override', '');
+const resumeOverride = resumeOverrideArg ? path.resolve(resumeOverrideArg) : '';
+if (resumeOverride && !fs.existsSync(resumeOverride)) throw new Error(`Resume override not found: ${resumeOverride}`);
 const explicitQueueIds = queueIdsFile
   ? JSON.parse(fs.readFileSync(path.resolve(queueIdsFile), 'utf8'))
   : (queueId ? [queueId] : []);
@@ -148,6 +151,10 @@ async function main() {
       await page.exposeBinding('__hrMessage', async (_, message) => {
         if (message.type === 'PAGE_READY') return { job };
         if (message.type === 'FETCH_FILE') {
+          if (resumeOverride) {
+            const bytes = fs.readFileSync(resumeOverride);
+            return { data: bytes.toString('base64'), type: 'application/pdf', name: path.basename(resumeOverride) };
+          }
           const response = await fetch(message.url);
           if (!response.ok) throw new Error('Could not fetch resume');
           const bytes = Buffer.from(await response.arrayBuffer());
