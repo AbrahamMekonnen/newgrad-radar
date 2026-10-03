@@ -186,13 +186,17 @@ async function main() {
       await page.addInitScript(() => {
         globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
       });
-      const injectProductionEngine = async () => {
-        if (await page.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
-        for (const file of modules) await page.addScriptTag({ path: file });
+      const injectProductionEngine = async (frame = page.mainFrame()) => {
+        if (await frame.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
+        for (const file of modules) await frame.addScriptTag({ path: file });
       };
-      page.on('domcontentloaded', () => { void injectProductionEngine().catch(() => {}); });
+      page.on('domcontentloaded', () => {
+        for (const frame of page.frames()) void injectProductionEngine(frame).catch(() => {});
+      });
+      page.on('frameattached', (frame) => { void injectProductionEngine(frame).catch(() => {}); });
+      page.on('framenavigated', (frame) => { void injectProductionEngine(frame).catch(() => {}); });
       await page.goto(job.jobUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await injectProductionEngine();
+      for (const frame of page.frames()) await injectProductionEngine(frame).catch(() => {});
       const outcome = await Promise.race([
         terminal,
         new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),

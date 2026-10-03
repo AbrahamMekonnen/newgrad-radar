@@ -210,7 +210,12 @@ export async function POST(request: NextRequest) {
         'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
     }
     if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;
-    if (/export control|u s person|itar|ear/.test(q) && pick(f, fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
+    if (/export (?:control|compliance)|u s person|itar|ear/.test(q)) {
+      const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
+      if (pick(f, usPerson ? 'I am currently a U.S. Person' : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
+    }
+    if (/currently on an? f ?1.*(?:opt|cpt)|(?:opt|cpt).*status/.test(q)
+      && pick(f, /f ?1|student visa|opt|cpt/.test(norm(profile?.work_authorization)) ? 'Yes' : 'No', 'profile', 'Matched the confirmed current immigration status')) continue;
     if (/citizen or resident of any of the following countries|citizen.*resident.*cuba|cuba.*iran.*north korea/.test(q)) {
       const location = norm([profile?.country, profile?.location].filter(Boolean).join(' '));
       const citizenship = norm(fact('citizenship_status') || profile?.work_authorization);
@@ -233,7 +238,7 @@ export async function POST(request: NextRequest) {
     }
     if (/preferred(?: first)? name/.test(q) && pick(f, profile?.preferred_name || profile?.first_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
-    if (/zip|postal/.test(q) && pick(f, profile?.zip_code)) continue;
+    if (/zip|postal/.test(q) && pick(f, profile?.zip_code || fact('zip_code'))) continue;
     if (/location/.test(q) && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '))) continue;
     if (/city/.test(q) && pick(f, profile?.city || profile?.location)) continue;
     if (/state|province|region/.test(q)) {
@@ -297,7 +302,7 @@ export async function POST(request: NextRequest) {
       && pickSearchable(f, profile?.education_school, 'profile', 'Entered the confirmed school into the searchable school directory')) continue;
     if (/how did you hear|where did you hear|heard about/.test(q) && /careers? (website|site)|company website/.test(q)
       && /checkbox/.test(String(f.type || '')) && pick(f, 'Careers Website', 'policy', 'Selected the careers-site source checkbox')) continue;
-    if ((policy?.id === 'source' || /hear about|heard about|learn about|source/.test(q))
+    if ((policy?.id === 'source' || /hear about|heard about|learn(?:ed)? about|source/.test(q))
       && pick(f, profile?.default_source || 'Careers Website', profile?.default_source ? 'profile' : 'policy',
         'Used the saved source or the company careers-site source for a job selected in HireRadar')) continue;
     if (/where are you spending summer|summer \d{4}.*location/.test(q)
@@ -340,6 +345,8 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('location_preference') || (profile?.willing_to_relocate ? 'Any/all' : fact('relocation_locations')), 'profile', 'Matched the confirmed relocation preference')) continue;
     if (/how did you hear about twilio/.test(q)
       && pick(f, 'Careers Website', 'saved', 'Matched the saved Twilio source response')) continue;
+    if (/ai policy for interviewers/.test(q)
+      && pick(f, 'Yes', 'authorization', 'Acknowledged the employer interview policy for this authorized application')) continue;
     if (/currently eligible to work/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const eligible = /citizen|permanent resident|green card|authorized/.test(authorization) || profile?.require_sponsorship === false;
@@ -354,6 +361,8 @@ export async function POST(request: NextRequest) {
     if (/salary|compensation/.test(q)
       && pick(f, salaryAnswerForField(f.label, f.type, jobMarket, profile), 'market_evidence',
         'Used the posted salary range or an explicit candidate salary preference')) continue;
+    if (/^website\b|personal website/.test(q)
+      && pick(f, profile?.portfolio_url || profile?.github_url || profile?.linkedin_url, 'profile', 'Used the saved candidate website')) continue;
     if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const inferred = /us citizen|permanent resident|green card/.test(authorization) ? 'No'

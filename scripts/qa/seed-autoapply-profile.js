@@ -74,6 +74,7 @@ const seedFacts = {
   employment_obligations: 'No',
   other_processes: 'None',
   current_country: 'United States',
+  zip_code: '94105',
   location_preference: 'Any/all',
   full_time_start_window: 'Q4 2026 (October - December)',
   first_location_preference: 'San Francisco, CA, United States',
@@ -131,7 +132,7 @@ async function main() {
     writing_sample: 'I like engineering work where the result is concrete and useful. On my campus event planner, the interesting part was not only writing features. I had to decide how permissions, scheduling, reminders, and deployment fit together, then test the paths that could fail for real users.',
     current_title: 'Software Engineering Intern',
     current_company: 'Northstar Cloud',
-    country: 'United States', state: 'California', city: 'San Francisco',
+    country: 'United States', state: 'California', city: 'San Francisco', zip_code: '94105',
     location: 'San Francisco, California, United States',
     default_source: 'Company Careers Website',
   }).eq('user_id', userId);

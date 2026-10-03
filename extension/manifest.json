@@ -32,6 +32,8 @@
     "https://careers.withwaymo.com/*",
     "https://www.samsara.com/*",
     "https://www.mongodb.com/careers/*",
+    "https://ionq.com/*",
+    "https://careers.datadoghq.com/*",
     "https://jmrbyubrrpxxvotsljms.supabase.co/*"
   ],
   "background": {
@@ -62,6 +64,8 @@
         "https://careers.withwaymo.com/*",
         "https://www.samsara.com/*",
         "https://www.mongodb.com/careers/*"
+        ,"https://ionq.com/*"
+        ,"https://careers.datadoghq.com/*"
       ],
       "js": [
         "ats-recipes.js",

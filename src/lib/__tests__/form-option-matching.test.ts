@@ -77,6 +77,9 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Please provide the state/region where you reside', 'CA', [
       'California', 'Colorado', 'New York',
     ])).toBe('California');
+    expect(matchAvailableOption('State/region where you currently reside', 'California', [
+      'New York', 'Illinois', 'Another State in the US', 'Other',
+    ])).toBe('Another State in the US');
   });
 
   it('normalizes common country aliases only to available choices', () => {

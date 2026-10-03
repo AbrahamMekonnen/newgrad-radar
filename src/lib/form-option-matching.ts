@@ -100,6 +100,8 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     const state = states[target] || target;
     const option = usable.find((candidate) => norm(candidate) === state);
     if (option) return option;
+    const otherUsState = usable.find((candidate) => /another state in (?:the )?us|other u s state/.test(norm(candidate)));
+    if (otherUsState && Object.values(states).includes(state)) return otherUsState;
   }
 
   if (/work authori[sz]ation|authori[sz]ed to work|eligible to work|employment authori[sz]ation/.test(q)) {
