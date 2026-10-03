@@ -138,9 +138,18 @@ export async function POST(request: NextRequest) {
     if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
-    if (/relocat/.test(q)) {
-      const relocation = fact('relocation_locations') || (profile?.willing_to_relocate === true ? 'Yes' : profile?.willing_to_relocate === false ? 'No' : null);
+    if (/relocat|commutable proximity/.test(q)) {
+      const binary = optionLabels(f).map(norm).some((option) => option === 'yes');
+      const relocation = binary
+        ? (profile?.willing_to_relocate === false ? 'No' : fact('relocation_locations') || profile?.willing_to_relocate === true ? 'Yes' : null)
+        : fact('relocation_locations') || (profile?.willing_to_relocate === true ? 'Yes' : profile?.willing_to_relocate === false ? 'No' : null);
       if (pick(f, relocation, 'saved', 'Matched the confirmed relocation preference')) continue;
+    }
+    if (/perform.*essential functions.*reasonable accommodation|essential functions.*accommodation/.test(q)
+      && pick(f, fact('can_perform_essential_functions'), 'saved', 'Matched the confirmed ability to perform the essential job functions')) continue;
+    if (/review the linked document|reviewed? the .*document/.test(q)) {
+      const acknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : fact('document_acknowledgement');
+      if (pick(f, acknowledgement, 'authorization', 'Applied the required document-review acknowledgement')) continue;
     }
     if (/travel.*(?:percent|percentage|how much)/.test(q) && pick(f, fact('travel_percentage'), 'saved', 'Matched the confirmed maximum travel percentage')) continue;
     if (/travel/.test(q) && pick(f, fact('travel'), 'saved', 'Matched an explicit reusable travel preference')) continue;
@@ -253,7 +262,7 @@ export async function POST(request: NextRequest) {
     if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/have or are you currently pursuing a college degree|currently pursuing.*degree/.test(q)
       && pick(f, profile?.education_degree ? 'Yes' : null, 'profile', 'Confirmed current or completed college education from the profile')) continue;
-    if (/major|field of study|area of study/.test(q) && pick(f, profile?.education_major)) continue;
+    if (/major|field of study|area of study|^discipline$/.test(q) && pick(f, profile?.education_major)) continue;
     if (/high school.*name|name.*high school/.test(q)
       && pick(f, fact('high_school_name'), 'saved', 'Matched the confirmed high-school name')) continue;
     if (/high school.*graduat.*year|year of high school graduation/.test(q)
@@ -298,6 +307,8 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('internship_count'), 'saved', 'Matched the confirmed internship or co-op count')) continue;
     if (/internship|co op|co-op/.test(q) && /availability|available|start|end/.test(q)
       && pick(f, fact('internship_availability'), 'saved', 'Matched the confirmed internship availability')) continue;
+    if (/months? you are available.*internship|available.*internship.*months?/.test(q)
+      && pick(f, fact('internship_months') || fact('internship_availability'), 'saved', 'Matched the confirmed internship months')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
       if (pick(f, graduationYear)) continue;
     }
@@ -340,7 +351,7 @@ export async function POST(request: NextRequest) {
       const negative = companyMentioned && /never|none| no /.test(` ${history} `);
       if (pick(f, companyMentioned ? (negative ? 'No' : 'Yes') : null, 'saved', 'Matched company-specific prior application or interview history')) continue;
     }
-    if (/current title|current job title|most recent title|previous title/.test(q)
+    if (/current title|current job title|most recent (?:job )?title|previous title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
     if (/current or previous job title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or previous job title')) continue;
@@ -376,6 +387,16 @@ export async function POST(request: NextRequest) {
     }
     if (/exceptional work/.test(q)
       && pick(f, profile?.proud_project || profile?.writing_sample, 'profile', 'Used the candidate-confirmed project and accomplishment context')) continue;
+    if (/experience building deploying managing or scaling ai agent|experience.*ai agent.*production/.test(q)
+      && pick(f, fact('production_ai_agent_experience'), 'saved', 'Matched the confirmed production AI-agent experience')) continue;
+    if (/experience.*full stack application.*agent logic|full stack.*agent logic/.test(q)
+      && pick(f, fact('agent_full_stack_experience') || profile?.proud_project, 'profile', 'Used confirmed project experience relevant to the question')) continue;
+    if (/restrictions on post government employment|post government employment restriction/.test(q)
+      && pick(f, fact('post_government_employment_restrictions'), 'saved', 'Matched the confirmed post-government employment restriction status')) continue;
+    if (/please enter your relevant employment|employment and military service above/.test(q)
+      && pick(f, optionLabels(f).length === 1 ? optionLabels(f)[0] : 'Yes', 'authorization', 'Confirmed the completed employment-history section')) continue;
+    if (/^company name$/.test(q) && pick(f, profile?.current_company, 'profile', 'Matched the confirmed current employer')) continue;
+    if (/^title$/.test(q) && pick(f, profile?.current_title, 'profile', 'Matched the confirmed current job title')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
