@@ -244,6 +244,11 @@ async function main() {
         const label = (element) => {
           const byFor = element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null;
           const group = element.closest('fieldset,[role="group"],[role="radiogroup"],[class*="question"],[class*="field"]');
+          if (element.type === 'radio' || element.type === 'checkbox') {
+            const heading = group?.querySelector('legend,[class*="question-label"],[class*="application-label"],[class*="heading"],[class*="title"]');
+            const headingText = String(heading?.textContent || '').replace(/\s+/g, ' ').trim();
+            if (headingText) return headingText.slice(0, 300);
+          }
           return String(byFor?.textContent || element.labels?.[0]?.textContent || element.getAttribute('aria-label')
             || group?.querySelector('legend,[class*="label"],[class*="heading"]')?.textContent
             || element.getAttribute('placeholder') || element.name || '').replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -279,7 +284,8 @@ async function main() {
       const browserControls = frameCoverage.flatMap((frame) => frame.controls || []);
       const norm = (value) => String(value || '').toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
       const scannerControls = extensionAudits.flatMap((audit) => audit.controls || []);
-      const scannerSignatures = new Set(scannerControls.map((field) => `${norm(field.label)}|${norm(field.type)}`));
+      const scannerLabels = new Set(scannerControls.map((field) => norm(field.label)).filter(Boolean));
+      const scannerByLabel = new Map(scannerControls.map((field) => [norm(field.label), norm(field.type)]));
       const dedupe = new Set();
       const browserLogical = browserControls.filter((field) => {
         const signature = `${norm(field.label)}|${field.name}|${norm(field.type).replace(/radio|checkbox/, 'choice')}`;
@@ -294,7 +300,10 @@ async function main() {
         extensionSnapshots: extensionAudits,
         latestExtensionAudit,
         browserControlsMissingFromScanner: extensionAudits.length ? browserLogical.filter((field) =>
-          !scannerSignatures.has(`${norm(field.label)}|${norm(field.type)}`)).slice(0, 100) : [],
+          norm(field.label) && !scannerLabels.has(norm(field.label))).slice(0, 100) : [],
+        scannerTypeMismatches: extensionAudits.length ? browserLogical.filter((field) =>
+          scannerByLabel.has(norm(field.label)) && scannerByLabel.get(norm(field.label)) !== norm(field.type))
+          .map((field) => ({ label: field.label, browserType: field.type, scannerType: scannerByLabel.get(norm(field.label)) })).slice(0, 100) : [],
         lifecycleDiagnostics: [...new Map(parsedProgress.flatMap((item) => item.diagnostics || [])
           .map((item) => [JSON.stringify(item), item])).values()].slice(0, 300),
       };

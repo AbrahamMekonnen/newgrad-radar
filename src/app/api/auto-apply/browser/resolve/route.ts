@@ -137,6 +137,8 @@ export async function POST(request: NextRequest) {
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
     if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
+    if (/working in person.*(?:%|percent)|in person.*offices.*(?:%|percent)/.test(q)
+      && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed in-person work preference')) continue;
     if (/based in the united states.*work onsite|currently based.*able to work onsite/.test(q)) {
       const inUs = /united states|u s/.test(norm(profile?.country));
       if (pick(f, inUs && norm(fact('onsite_five_days')) === 'yes' ? 'Yes' : 'No', 'profile', 'Combined the confirmed country and onsite preference')) continue;
@@ -170,7 +172,7 @@ export async function POST(request: NextRequest) {
         fact('privacy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required privacy acknowledgement')) continue;
     }
-    if (/arbitration/.test(q)) {
+    if (/arbitrat/.test(q)) {
       const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('arbitration_acknowledgement') || soleAcknowledgement,
         fact('arbitration_acknowledgement') ? 'saved' : 'authorization',
@@ -192,6 +194,8 @@ export async function POST(request: NextRequest) {
         fact('ai_use_policy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required employer AI-use policy acknowledgement')) continue;
     }
+    if (/ai policy for application/.test(q)
+      && pick(f, fact('ai_use_policy_acknowledgement'), 'saved', 'Matched the confirmed application AI-policy acknowledgement')) continue;
     if (/employer may use ai tools|may use ai tools to assist.*application|understand.*use ai tools.*application/.test(q)) {
       const acknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : 'Yes';
       if (pick(f, acknowledgement, 'authorization', 'Applied the required employer AI-use acknowledgement')) continue;
@@ -228,6 +232,12 @@ export async function POST(request: NextRequest) {
     if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/if yes.*level of security clearance|which level of security clearance/.test(q)
+      && pick(f, /no -|none/.test(norm(fact('security_clearance'))) ? 'None' : fact('security_clearance'), 'saved', 'Matched the confirmed clearance level')) continue;
+    if (/polygraph level/.test(q)
+      && pick(f, fact('polygraph_level') || 'None', 'saved', 'Matched the confirmed polygraph level')) continue;
+    if (/clearance from the md agency/.test(q)
+      && pick(f, fact('md_agency_clearance') || 'No', 'saved', 'Matched the confirmed clearance agency')) continue;
     if (/held a u s security clearance in the past|past.*clearance level/.test(q)
       && pick(f, fact('past_security_clearance'), 'saved', 'Matched the confirmed past-clearance history')) continue;
     if (/^clearance eligibility$/.test(q)) {
@@ -262,6 +272,8 @@ export async function POST(request: NextRequest) {
       const suppliedLocation = norm([profile?.location, profile?.city, profile?.state, profile?.country].filter(Boolean).join(' '));
       if (requested && pick(f, suppliedLocation.includes(requested) ? 'Yes' : 'No', 'profile', 'Compared the requested location with the saved candidate location')) continue;
     }
+    if (/confirm whether any of the below applies.*sanctions|compliance with u s sanctions/.test(q)
+      && pick(f, 'None of the above', 'profile', 'Compared confirmed residence and citizenship with the sanctions list')) continue;
     if (/preferred(?: first)? name/.test(q) && pick(f, profile?.preferred_name || profile?.first_name)) continue;
     if (/pronoun/.test(q) && pick(f, profile?.pronouns)) continue;
     if (/zip|postal/.test(q) && pick(f, profile?.zip_code || fact('zip_code'))) continue;
@@ -272,7 +284,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, inferredState)) continue;
     }
     if (/countr(?:y|ies)/.test(q) && pick(f, profile?.country || fact('current_country'))) continue;
-    if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
+    if ((policy?.id === 'degree' || /degree|education level|level of education|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/have or are you currently pursuing a college degree|currently pursuing.*degree/.test(q)
       && pick(f, profile?.education_degree ? 'Yes' : null, 'profile', 'Confirmed current or completed college education from the profile')) continue;
     if (/major|field of study|area of study|^discipline$/.test(q) && pick(f, profile?.education_major)) continue;
@@ -362,7 +374,8 @@ export async function POST(request: NextRequest) {
       const company = norm(job.company_name);
       const companyMentioned = history && company && history.includes(company);
       const negative = companyMentioned && /never|none| no /.test(` ${history} `);
-      if (pick(f, companyMentioned ? (negative ? 'No' : 'Yes') : null, 'saved', 'Matched company-specific prior application or interview history')) continue;
+      const globallyNone = /^(none|never)|none unless/.test(history);
+      if (pick(f, companyMentioned ? (negative ? 'No' : 'Yes') : globallyNone ? 'No' : null, 'saved', 'Matched confirmed prior application or interview history')) continue;
     }
     if (/current title|current job title|current or (?:more |most )?recent (?:job )?title|most recent (?:job )?title|previous title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
@@ -422,6 +435,14 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('company_history'), 'saved', 'Matched the confirmed prior company history')) continue;
     if (/conflict of interest/.test(q)
       && pick(f, fact('conflict_of_interest'), 'saved', 'Matched the confirmed conflict-of-interest response')) continue;
+    if (/years experience.*(?:platform|commerce) products/.test(q)
+      && pick(f, fact('platform_commerce_experience_years') || profile?.years_experience, 'saved', 'Matched confirmed platform or commerce experience')) continue;
+    if (/legally entitled to work in canada/.test(q)) {
+      const canadaAuthorization = fact('canada_work_authorization');
+      if (pick(f, canadaAuthorization || (/canada/.test(norm(profile?.country)) ? 'Yes' : 'No'), 'profile', 'Matched the confirmed Canadian work-authorization status')) continue;
+    }
+    if (/member of the lgbt|lgbt2qia/.test(q)
+      && pick(f, fact('sexual_orientation_preference') || privacyDecline, fact('sexual_orientation_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
@@ -553,7 +574,7 @@ ${jobContext}
 QUESTIONS (answer each by its exact fieldId):
 ${JSON.stringify(prose.map((f) => ({ fieldId: f.fieldId, name: f.name, label: f.label })))}
 
-Return ONLY JSON: {"answers":[{"fieldId":"...","name":"...","value":"..."}]}.`;
+Return only valid json in this exact shape: {"answers":[{"fieldId":"...","name":"...","value":"..."}]}.`;
     // Draft with Gemini, then Groq as a fallback, so quota or rate limits never
     // leave the application's open answers silently blank.
     const raw = await draftJSON(prompt);

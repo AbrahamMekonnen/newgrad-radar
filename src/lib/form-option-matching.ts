@@ -129,7 +129,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     const option = usable.find((candidate) => /^(no|never worked|not previously)/.test(norm(candidate)));
     if (option) return option;
   }
-  if (/degree|education level|qualification/.test(q)) {
+  if (/degree|education level|level of education|qualification/.test(q)) {
     const level = degreeLevel(target);
     if (level) {
       const semantic = usable.find((option) => degreeLevel(option) === level);
