@@ -125,7 +125,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (other) return other;
   }
 
-  if (/previously worked|previously been employed|ever worked at|worked at .* before|employed by .* in the past|former employee|current or former/.test(q) && target === 'no') {
+  if (/previously worked|previously been employed|ever been employed|ever worked at|worked at .* before|employed by .* in the past|former employee|current or former/.test(q) && target === 'no') {
     const option = usable.find((candidate) => /^(no|never worked|not previously)/.test(norm(candidate)));
     if (option) return option;
   }

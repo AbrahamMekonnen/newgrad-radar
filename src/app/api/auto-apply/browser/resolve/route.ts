@@ -456,7 +456,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
         'profile', 'Compared confirmed employment history with the employer')) continue;
     }
-    if (policy?.id === 'previous_employment' || /previously worked|previously been employed|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|previously been employed|ever been employed|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
