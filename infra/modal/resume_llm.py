@@ -48,8 +48,8 @@ def _download_model() -> None:
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install(
-        "vllm==0.6.6",
-        "huggingface_hub[hf_transfer]==0.26.2",
+        "vllm>=0.6.6",
+        "huggingface_hub[hf_transfer]",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
     .run_function(_download_model)  # weights baked into the image layer

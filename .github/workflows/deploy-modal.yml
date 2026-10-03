@@ -1,0 +1,39 @@
+name: Deploy Modal LLM
+
+# Deploys the owned last-resort LLM endpoint (infra/modal/resume_llm.py) to Modal
+# from CI, so no local machine is needed. Modal builds the image + bakes the model
+# on its own builders; this job just authenticates (token env) and triggers it.
+# Re-run this whenever infra/modal/resume_llm.py changes.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install modal
+
+      - name: Deploy to Modal
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          LLM_API_KEY: ${{ secrets.MODAL_LLM_SECRET }}
+        run: |
+          # The endpoint's bearer secret, read by the app via Secret.from_name.
+          modal secret create resume-llm-secret LLM_API_KEY="$LLM_API_KEY" --force \
+            || echo "::warning::could not (re)create resume-llm-secret; it may already exist"
+          modal deploy infra/modal/resume_llm.py 2>&1 | tee deploy.log
+          echo "## Modal deploy" >> "$GITHUB_STEP_SUMMARY"
+          URL=$(grep -oE "https://[a-z0-9._-]+\.modal\.run" deploy.log | sort -u | head -1)
+          if [ -n "$URL" ]; then
+            echo "Endpoint base: $URL" >> "$GITHUB_STEP_SUMMARY"
+            echo "Set MODAL_LLM_URL=$URL/v1/chat/completions" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No modal.run URL found in output — check the log above." >> "$GITHUB_STEP_SUMMARY"
+          fi
