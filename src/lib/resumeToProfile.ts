@@ -132,6 +132,48 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     set('education_gpa', edu.gpa || null, 'GPA');
   }
 
+  // Sensitive/legal facts ONLY when the résumé explicitly stated them — the parser
+  // returns null for anything it can't read verbatim (it never infers citizenship,
+  // work auth, etc. from school/name/employer). Normalize the enum ones to the
+  // profile's dropdown options so they render; store the rest as reusable facts.
+  const sf = resume.stated_facts;
+  if (sf) {
+    const WORK_AUTH = ['US Citizen', 'Permanent Resident', 'Visa Holder (H1B, L1, etc.)', 'Student Visa (F1, OPT, CPT)', 'Other'];
+    const CITIZEN = ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other'];
+    const ENGLISH = ['A1 (Beginner)', 'A2 (Pre-Intermediate)', 'B1 (Intermediate)', 'B2 (Upper-Intermediate)', 'C1 (Advanced)', 'C2 (Native)'];
+
+    if (sf.work_authorization && WORK_AUTH.includes(sf.work_authorization)) {
+      set('work_authorization', sf.work_authorization, 'Work authorization');
+    }
+    // Models sometimes return the boolean as the string "true"/"false" — accept both.
+    const rawSponsor = sf.requires_sponsorship as unknown;
+    const sponsor = typeof rawSponsor === 'boolean' ? rawSponsor
+      : rawSponsor === 'true' ? true
+      : rawSponsor === 'false' ? false : null;
+    if (sponsor !== null && isEmpty(existing.require_sponsorship)) {
+      updates.require_sponsorship = sponsor;
+      filled.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
+    }
+
+    // Reusable facts live in custom_answers under __fact:<key> (same keys the
+    // resolver reads). Only add a fact the user hasn't already set.
+    const factAdds: Record<string, string> = {};
+    const addFact = (key: string, value: string | null | undefined, label: string) => {
+      if (!value || !value.trim()) return;
+      if (!isEmpty((existing.custom_answers || {})['__fact:' + key])) return;
+      factAdds['__fact:' + key] = value.trim();
+      filled.push({ field: 'fact:' + key, label });
+    };
+    addFact('citizenship_status', sf.citizenship_status && CITIZEN.includes(sf.citizenship_status) ? sf.citizenship_status : null, 'Citizenship status');
+    addFact('security_clearance', sf.security_clearance, 'Security clearance');
+    addFact('military_service', sf.military_service, 'Military service');
+    addFact('other_languages', sf.languages, 'Other languages');
+    addFact('english_level', sf.english_proficiency && ENGLISH.includes(sf.english_proficiency) ? sf.english_proficiency : null, 'English proficiency');
+    if (Object.keys(factAdds).length) {
+      updates.custom_answers = { ...(existing.custom_answers || {}), ...factAdds };
+    }
+  }
+
   const missing = MANUAL_FIELDS.filter((m) => isEmpty(existing[m.field]) && isEmpty(updates[m.field]));
 
   return { updates, filled, missing };

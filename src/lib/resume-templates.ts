@@ -38,6 +38,22 @@ export interface ResumeData {
     category: string;
     items: string[];
   }[];
+
+  // Sensitive/legal facts ONLY when the résumé explicitly states them (never
+  // inferred). Each is null/absent unless the text actually says it. Values for
+  // work_authorization / citizenship_status / english_proficiency are normalized
+  // to the profile's dropdown options; the rest are the résumé's own wording.
+  stated_facts?: ResumeStatedFacts;
+}
+
+export interface ResumeStatedFacts {
+  work_authorization?: string | null;   // 'US Citizen' | 'Permanent Resident' | 'Visa Holder (H1B, L1, etc.)' | 'Student Visa (F1, OPT, CPT)' | 'Other'
+  requires_sponsorship?: boolean | null; // true/false only if the résumé says so
+  citizenship_status?: string | null;    // 'U.S. citizen' | 'Lawful U.S. permanent resident' | 'Other'
+  security_clearance?: string | null;    // e.g. 'Active Secret'
+  military_service?: string | null;      // e.g. 'U.S. Army, 2018-2022'
+  languages?: string | null;             // e.g. 'Spanish (fluent), French (basic)'
+  english_proficiency?: string | null;   // 'A1 (Beginner)'..'C2 (Native)'
 }
 
 export interface JobContext {

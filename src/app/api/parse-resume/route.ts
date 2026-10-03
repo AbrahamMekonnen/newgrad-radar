@@ -256,7 +256,16 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
       "category": "Frameworks",
       "items": ["React", "Node.js", "etc"]
     }
-  ]
+  ],
+  "stated_facts": {
+    "work_authorization": "one of: US Citizen | Permanent Resident | Visa Holder (H1B, L1, etc.) | Student Visa (F1, OPT, CPT) | Other  — or null",
+    "requires_sponsorship": "true or false, or null",
+    "citizenship_status": "one of: U.S. citizen | Lawful U.S. permanent resident | Other — or null",
+    "security_clearance": "the clearance text, or null",
+    "military_service": "branch/dates text, or null",
+    "languages": "languages with proficiency, or null",
+    "english_proficiency": "one of: A1 (Beginner) | A2 (Pre-Intermediate) | B1 (Intermediate) | B2 (Upper-Intermediate) | C1 (Advanced) | C2 (Native) — or null"
+  }
 }
 
 Rules:
@@ -264,7 +273,8 @@ Rules:
 - If a section is missing, use empty array []
 - Parse bullet points from experience/projects
 - Group skills by category if possible
-- Keep dates in original format`;
+- Keep dates in original format
+- stated_facts: fill a field ONLY if the resume EXPLICITLY states it in words (e.g. "U.S. Citizen", "Authorized to work in the US", "Active Secret clearance", "U.S. Army veteran", "Fluent in Spanish"). If it is not written plainly in the text, use null. NEVER infer or guess citizenship, work authorization, or any of these from the school, names, locations, or employers — absence means null.`;
 
   let lastError: Error | null = null;
 
@@ -397,6 +407,7 @@ async function callGeminiAPI(model: string, prompt: string): Promise<ResumeData>
     experience: parsed.experience || [],
     projects: parsed.projects || [],
     skills: parsed.skills || [],
+    stated_facts: parsed.stated_facts || undefined,
   };
 }
 
@@ -459,6 +470,7 @@ async function callOpenAICompatibleAPI(provider: OAProvider, model: string, prom
     experience: parsed.experience || [],
     projects: parsed.projects || [],
     skills: parsed.skills || [],
+    stated_facts: parsed.stated_facts || undefined,
   };
 }
 
