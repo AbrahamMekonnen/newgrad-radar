@@ -22,7 +22,7 @@ export const optionSetHash = (field: ResolutionField) => createHash('sha256')
   .update(optionLabels(field).map((value) => value.trim().toLowerCase()).join('\n'))
   .digest('hex').slice(0, 16);
 
-export const isSensitiveFact = (label: unknown) => /citizen|citizenship|visa|sponsor|work authori[sz]ation|legally authori[sz]ed|veteran|disab|gender|sex|race|ethni|relig|age|18|criminal|convict|security clearance|export control|government official|background check/.test(String(label || '').toLowerCase());
+export const isSensitiveFact = (label: unknown) => /citizen|citizenship|visa|sponsor|work authori[sz]ation|legally authori[sz]ed|veteran|disab|gender|sex|race|ethni|relig|age|18|criminal|convict|security clearance|security code|verification code|one.time code|\botp\b|export control|government official|background check/.test(String(label || '').toLowerCase());
 
 export const mayUseAi = (field: ResolutionField) => {
   if (isSensitiveFact(field.label)) return false;

@@ -1620,6 +1620,26 @@
           const unresolvedLive = [...unresolvedByKey.values()].filter((field) => field.required);
           data.liveNeedsUser = unresolvedLive.map((field) => field.name);
           persist(data);
+          const verificationFields = unresolvedLive.filter((field) =>
+            /verification code|security code|confirm you re a human|one time code|\botp\b/.test(normalize(`${field.section || ''} ${field.label || ''}`)));
+          if (verificationFields.length) {
+            stopExecution();
+            if (data.browserWorker) await send({
+              type: 'PROGRESS', stage: 'waiting_for_user',
+              detail: {
+                filled: completed.size, total: fields.length,
+                detail: JSON.stringify({
+                  message: 'The ATS accepted the application details and requires the email verification code to finish submission.',
+                  challenge: 'email_verification',
+                  diagnostic: EXEC?.safeDiagnostic?.({ code: 'email_verification_required', ats: data.atsType,
+                    fieldKey: fieldKey(verificationFields[0]), controlType: 'verification_code', category: 'user_challenge' }),
+                  coverageAudit: coverageAudit(fields, 'email_verification'),
+                }),
+              },
+            });
+            banner('Check your email for the Greenhouse verification code to finish this application.', true);
+            return;
+          }
           if (unresolvedLive.length) {
             stopExecution();
             if (data.browserWorker) await send({

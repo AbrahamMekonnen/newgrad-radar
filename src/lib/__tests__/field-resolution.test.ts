@@ -9,6 +9,8 @@ describe('field resolution policy', () => {
   it('never allows AI to infer sensitive facts', () => {
     expect(isSensitiveFact('Will you require visa sponsorship?')).toBe(true);
     expect(mayUseAi({ name: 'visa', label: 'Will you require visa sponsorship?', attempt: 3, options: ['Yes', 'No'] })).toBe(false);
+    expect(isSensitiveFact('Enter the 8-character verification code')).toBe(true);
+    expect(mayUseAi({ name: 'otp', label: 'Security code', attempt: 2 })).toBe(false);
   });
   it('constrains categorical AI output to a supplied option', () => {
     const field = { name: 'source', label: 'How did you hear?', options: ['LinkedIn', 'Referral'] };
