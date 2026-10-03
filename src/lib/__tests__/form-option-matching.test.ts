@@ -24,6 +24,9 @@ describe('matchAvailableOption', () => {
   it('maps confirmed authorization to a binary ATS choice', () => {
     expect(matchAvailableOption('Are you legally authorized to work in this country?', 'us_citizen', ['Yes', 'No']))
       .toBe('Yes');
+    expect(matchAvailableOption('Are you legally authorised to work full time?', 'us_citizen', [
+      'Yes, no restriction.', 'Yes, but I will need sponsorship in the future.', 'No, I need sponsorship now.',
+    ])).toBe('Yes, no restriction.');
   });
 
   it('maps internal work authorization values to an offered ATS choice', () => {
@@ -48,6 +51,9 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Please tell us how you heard about this opportunity.', 'Company careers page', [
       'LinkedIn', 'Palantir Website', 'Other',
     ])).toBe('Palantir Website');
+    expect(matchAvailableOption('Where have you learned about Samsara?', 'Company careers page', [
+      'LinkedIn', 'Samsara blog or website', 'Podcast',
+    ])).toBe('Samsara blog or website');
   });
 
   it('uses Other when a company-careers source has no website choice', () => {

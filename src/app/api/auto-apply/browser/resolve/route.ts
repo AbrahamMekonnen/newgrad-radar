@@ -188,7 +188,11 @@ export async function POST(request: NextRequest) {
     if (/^english(?: eng)?$/.test(q) && fact('english_level') && pick(f, 'Yes', 'saved', 'Matched the confirmed English-language fact')) continue;
     if (/language skill/.test(q) && fact('english_level') && pick(f, 'English', 'saved', 'Selected English from the confirmed language profile')) continue;
     if (/other languages|languages do you speak|additional languages/.test(q) && pick(f, fact('other_languages'), 'saved', 'Matched explicit language proficiency facts')) continue;
+    if (/languages?.*speak fluently|fluent languages?/.test(q) && fact('english_level')
+      && pick(f, 'English', 'saved', 'Selected a confirmed fluent language')) continue;
     if (/have you ever worked on similar projects|worked on similar projects|experience with similar projects/.test(q) && pick(f, 'No', 'resume_absence', 'No matching experience was supplied by the candidate profile or saved answers')) continue;
+    if (/professional experience.*(?:physical hardware|real world devices)|software.*interfaces with physical hardware/.test(q)
+      && pick(f, 'No', 'resume_absence', 'No professional hardware-interface experience was supplied in the candidate profile')) continue;
     if (/coding language|programming language/.test(q)) {
       const options = optionLabels(f);
       const language = options.length
@@ -341,6 +345,8 @@ export async function POST(request: NextRequest) {
     if (/proudest accomplishment/.test(q) && pick(f, profile?.proud_project, 'profile', 'Used the candidate-confirmed accomplishment')) continue;
     if (/first location preference|preferred office location/.test(q)
       && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved first office location')) continue;
+    if (/cities.*available to work|available to work.*cities/.test(q)
+      && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved work location')) continue;
     if (/location preference.*open to relocating/.test(q)
       && pick(f, fact('location_preference') || (profile?.willing_to_relocate ? 'Any/all' : fact('relocation_locations')), 'profile', 'Matched the confirmed relocation preference')) continue;
     if (/how did you hear about twilio/.test(q)
