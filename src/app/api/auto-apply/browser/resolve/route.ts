@@ -137,6 +137,10 @@ export async function POST(request: NextRequest) {
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
     if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
+    if (/based in the united states.*work onsite|currently based.*able to work onsite/.test(q)) {
+      const inUs = /united states|u s/.test(norm(profile?.country));
+      if (pick(f, inUs && norm(fact('onsite_five_days')) === 'yes' ? 'Yes' : 'No', 'profile', 'Combined the confirmed country and onsite preference')) continue;
+    }
     if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
     if (/relocat|commutable proximity/.test(q)) {
       const binary = optionLabels(f).map(norm).some((option) => option === 'yes');
@@ -188,6 +192,12 @@ export async function POST(request: NextRequest) {
         fact('ai_use_policy_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required employer AI-use policy acknowledgement')) continue;
     }
+    if (/employer may use ai tools|may use ai tools to assist.*application|understand.*use ai tools.*application/.test(q)) {
+      const acknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : 'Yes';
+      if (pick(f, acknowledgement, 'authorization', 'Applied the required employer AI-use acknowledgement')) continue;
+    }
+    if (/best describes how you use ai tools|how you use ai tools today/.test(q)
+      && pick(f, fact('ai_tool_usage'), 'saved', 'Matched the confirmed AI-tool usage')) continue;
     if (/certif|truthful|information.*(true|accurate|complete)/.test(q)) {
       const soleCertification = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
       if (pick(f, fact('truthfulness_certification') || soleCertification,
@@ -218,6 +228,8 @@ export async function POST(request: NextRequest) {
     if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/held a u s security clearance in the past|past.*clearance level/.test(q)
+      && pick(f, fact('past_security_clearance'), 'saved', 'Matched the confirmed past-clearance history')) continue;
     if (/^clearance eligibility$/.test(q)) {
       const citizenship = norm(fact('citizenship_status'));
       if (pick(f, /u s citizen|united states citizen/.test(citizenship) ? 'Yes' : citizenship ? 'No' : null,
@@ -398,6 +410,18 @@ export async function POST(request: NextRequest) {
       && pick(f, optionLabels(f).length === 1 ? optionLabels(f)[0] : 'Yes', 'authorization', 'Confirmed the completed employment-history section')) continue;
     if (/^company name$/.test(q) && pick(f, profile?.current_company, 'profile', 'Matched the confirmed current employer')) continue;
     if (/^title$/.test(q) && pick(f, profile?.current_title, 'profile', 'Matched the confirmed current job title')) continue;
+    if (/close relative of a government official/.test(q)
+      && pick(f, fact('government_official_relative'), 'saved', 'Matched the confirmed government-official relationship fact')) continue;
+    if (/close relative.*financial interest|close personal relationship.*senior|institutional client.*business partner/.test(q)
+      && pick(f, fact('institutional_conflict_relationship'), 'saved', 'Matched the confirmed institutional relationship fact')) continue;
+    if (/referred.*senior leader|referred.*decision maker/.test(q)
+      && pick(f, fact('senior_leader_referral'), 'saved', 'Matched the confirmed referral fact')) continue;
+    if (/willing to share.*academic transcript/.test(q)
+      && pick(f, fact('share_academic_transcripts'), 'saved', 'Matched the confirmed transcript-sharing preference')) continue;
+    if (/history with anduril/.test(q)
+      && pick(f, fact('company_history'), 'saved', 'Matched the confirmed prior company history')) continue;
+    if (/conflict of interest/.test(q)
+      && pick(f, fact('conflict_of_interest'), 'saved', 'Matched the confirmed conflict-of-interest response')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;
@@ -432,7 +456,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
         'profile', 'Compared confirmed employment history with the employer')) continue;
     }
-    if (policy?.id === 'previous_employment' || /previously worked|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|previously been employed|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;
