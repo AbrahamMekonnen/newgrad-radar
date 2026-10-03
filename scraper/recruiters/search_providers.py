@@ -21,6 +21,30 @@ from typing import List, Dict, Callable
 
 logger = logging.getLogger(__name__)
 
+# Tracks whether a KEYED provider failed with an auth/credit/rate error during
+# the current work (as opposed to simply returning no results). Lets callers tell
+# "the provider is exhausted, retry later" apart from "genuinely no recruiters
+# exist", so a credit outage neither looks like a clean empty run nor burns the
+# user request queue to 'failed'. Coarse by design; _process_requests resets it
+# per request (it runs sequentially).
+_degraded = {"hit": False}
+
+
+def reset_degraded() -> None:
+    _degraded["hit"] = False
+
+
+def degraded() -> bool:
+    """True if a keyed search provider was unavailable (auth/credit/rate) since
+    the last reset. A True here with zero results means 'retry later', not 'none found'."""
+    return _degraded["hit"]
+
+
+def _note_provider_down(name: str, status: int, body: str) -> None:
+    _degraded["hit"] = True
+    logger.warning(f"{name} unavailable ({status}): {body[:120]} — add another "
+                   f"search key (BRAVE_API_KEY) or top up; recruiter sourcing is degraded")
+
 
 def _google(query: str, num: int) -> List[Dict]:
     key, cx = os.environ.get("GOOGLE_CSE_KEY"), os.environ.get("GOOGLE_CSE_ID")
@@ -51,7 +75,11 @@ def _serper(query: str, num: int) -> List[Dict]:
                           headers={"X-API-KEY": key, "Content-Type": "application/json"},
                           json={"q": query, "num": min(num, 10)}, timeout=20)
         if r.status_code != 200:
-            logger.debug(f"serper {r.status_code}: {r.text[:120]}")
+            # "Not enough credits" comes back as 400; auth/rate as 401/402/403/429.
+            if r.status_code in (401, 402, 403, 429) or "credit" in r.text.lower():
+                _note_provider_down("serper", r.status_code, r.text)
+            else:
+                logger.debug(f"serper {r.status_code}: {r.text[:120]}")
             return []
         return [{"title": it.get("title", ""), "link": it.get("link", ""),
                  "snippet": it.get("snippet", "")} for it in r.json().get("organic", []) or []]
@@ -70,7 +98,10 @@ def _brave(query: str, num: int) -> List[Dict]:
                          headers={"X-Subscription-Token": key, "Accept": "application/json"},
                          params={"q": query, "count": min(num, 20)}, timeout=20)
         if r.status_code != 200:
-            logger.debug(f"brave {r.status_code}: {r.text[:120]}")
+            if r.status_code in (401, 402, 403, 429):
+                _note_provider_down("brave", r.status_code, r.text)
+            else:
+                logger.debug(f"brave {r.status_code}: {r.text[:120]}")
             return []
         results = (r.json().get("web", {}) or {}).get("results", []) or []
         return [{"title": it.get("title", ""), "link": it.get("url", ""),

@@ -43,6 +43,25 @@ jobs:
           cd scraper
           pip install -r requirements-scrape.txt
 
+      # Fail FAST and loud if no search provider actually works (the real failure
+      # mode: a green 37-min run that sourced nothing because Serper ran out of
+      # credits). A canary query that returns nothing while a keyed provider is
+      # degraded stops the run here with an explicit reason, instead of hiding it.
+      - name: Preflight search provider
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
+          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          PYTHONUTF8: "1"
+        run: |
+          cd scraper
+          python -c "import sys; sys.path.insert(0, 'recruiters'); \
+          from search_providers import web_search, degraded, available_providers; \
+          print('providers:', available_providers()); \
+          res = web_search('site:linkedin.com/in \"Google\" (\"technical recruiter\")', 5); \
+          sys.exit('::error::No working search provider: it is out of credits or unavailable. Add BRAVE_API_KEY (2k/mo free) or top up SERPER_API_KEY. Skipping the run so it does not silently source nothing.') if (not res and degraded()) else print(f'preflight ok: {len(res)} results')"
+
       - name: Enrich recruiters
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

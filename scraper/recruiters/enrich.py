@@ -208,7 +208,7 @@ def main() -> None:
     from supabase import create_client
     client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
-    from search_providers import available_providers
+    from search_providers import available_providers, degraded
     logger.info(f"search providers: {available_providers()}")
 
     if args.from_requests:
@@ -234,6 +234,15 @@ def main() -> None:
 
     total = _enrich_many(client, companies, refresh=args.refresh)
     logger.info(f"DONE: {total} recruiters across {len(companies)} companies")
+    # A green run that sourced NOTHING because the search provider is exhausted is
+    # the failure mode that hid this for days. Make it loud (GitHub annotation +
+    # non-zero exit) so it surfaces instead of looking like a clean empty run.
+    if companies and total == 0 and degraded():
+        msg = ("recruiter sourcing produced 0 results: the search provider is out of "
+               "credits / unavailable. Add BRAVE_API_KEY (2k/mo free) or top up SERPER_API_KEY.")
+        print(f"::error::{msg}")
+        logger.error(msg)
+        sys.exit(1)
 
 
 def _enrich_many(client, companies: list, refresh: bool = False) -> int:
@@ -274,8 +283,10 @@ def _process_requests(client, limit: int) -> None:
         logger.warning(f"could not read recruiter_requests (run migration 036?): {e}")
         return
     logger.info(f"processing {len(reqs)} pending recruiter request(s)")
+    from search_providers import degraded, reset_degraded
     import datetime as _dt
     done = 0
+    deferred = 0
     for req in reqs:
         slug = req.get("company_slug")
         name = req.get("company_name") or slug
@@ -288,25 +299,42 @@ def _process_requests(client, limit: int) -> None:
         if company is None:
             company = {"slug": slug or re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-"),
                        "name": name, "logo_url": None}
+        reset_degraded()  # per-request: tell "none found" apart from "provider down"
         status = "done"
         try:
             n = enrich_company(client, company, refresh=True)
             logger.info(f"request {company['slug']}: +{n} recruiters")
-            if n == 0:
-                status = "failed"
-            else:
+            if n > 0:
                 done += 1
+            elif degraded():
+                # Provider was exhausted/unavailable — this isn't "no recruiters
+                # exist", so DON'T burn the request. Leave it pending to retry once
+                # credits are back (or another provider key is added).
+                status = None
+                deferred += 1
+                logger.warning(f"request {company['slug']}: deferred (search provider unavailable)")
+            else:
+                status = "failed"
         except Exception as e:
             logger.warning(f"request {company.get('slug')} failed: {e}")
             status = "failed"
-        try:
-            client.table("recruiter_requests").update(
-                {"status": status, "processed_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
-            ).eq("id", req["id"]).execute()
-        except Exception as e:
-            logger.debug(f"could not mark request {req.get('id')}: {e}")
+        if status is not None:
+            try:
+                client.table("recruiter_requests").update(
+                    {"status": status, "processed_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+                ).eq("id", req["id"]).execute()
+            except Exception as e:
+                logger.debug(f"could not mark request {req.get('id')}: {e}")
         time.sleep(0.5)
-    logger.info(f"DONE: filled {done}/{len(reqs)} requested companies")
+    logger.info(f"DONE: filled {done}/{len(reqs)} requested companies"
+                + (f" ({deferred} deferred: search provider unavailable)" if deferred else ""))
+    if deferred and done == 0:
+        msg = ("recruiter requests could not be processed: search provider out of "
+               "credits / unavailable. Requests kept pending for retry. Add "
+               "BRAVE_API_KEY (2k/mo free) or top up SERPER_API_KEY.")
+        print(f"::error::{msg}")
+        logger.error(msg)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
