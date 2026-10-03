@@ -930,7 +930,7 @@
         }
         if (!answer) {
           state.lastFailure = response
-            ? (deferred.has(field.name) ? 'deferred_to_ai' : 'no_safe_answer')
+            ? (deferred.has(field.name) ? 'deferred_to_ai' : response.providerTrace?.length ? 'ai_no_usable_answer' : 'no_safe_answer')
             : 'resolver_timeout';
           resolutionState.set(key, state);
           if (deferred.has(field.name)) aiTargets.push(field);

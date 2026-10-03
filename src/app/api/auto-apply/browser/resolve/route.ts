@@ -33,7 +33,7 @@ function humanizeProse(text: string): string {
 // Draft open-ended application answers as JSON text. Tries Gemini first, then Groq,
 // so a quota/rate limit on one provider never silently leaves answers blank. Higher
 // temperature adds natural variation; truthfulness comes from the grounded prompt.
-async function draftJSON(prompt: string): Promise<string | null> {
+async function draftJSON(prompt: string, trace: Array<{ provider: string; status: number | null; ok: boolean }> = []): Promise<string | null> {
   const gk = process.env.GEMINI_API_KEY;
   if (gk) {
     const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${gk}`, {
@@ -41,6 +41,7 @@ async function draftJSON(prompt: string): Promise<string | null> {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.72, topP: 0.95 } }),
       signal: AbortSignal.timeout(30000),
     }).catch(() => null);
+    trace.push({ provider: 'gemini', status: ai?.status ?? null, ok: Boolean(ai?.ok) });
     if (ai?.ok) {
       const j = await ai.json().catch(() => null);
       const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -55,6 +56,7 @@ async function draftJSON(prompt: string): Promise<string | null> {
       body: JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0.72, top_p: 0.95, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
       signal: AbortSignal.timeout(30000),
     }).catch(() => null);
+    trace.push({ provider: 'groq', status: ai?.status ?? null, ok: Boolean(ai?.ok) });
     if (ai?.ok) {
       const j = await ai.json().catch(() => null);
       const text = j?.choices?.[0]?.message?.content;
@@ -137,7 +139,7 @@ export async function POST(request: NextRequest) {
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
     if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
-    if (/working in person.*(?:%|percent)|in person.*offices.*(?:%|percent)/.test(q)
+    if (/working in person.*25|in person.*offices.*25/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed in-person work preference')) continue;
     if (/based in the united states.*work onsite|currently based.*able to work onsite/.test(q)) {
       const inUs = /united states|u s/.test(norm(profile?.country));
@@ -174,7 +176,7 @@ export async function POST(request: NextRequest) {
     }
     if (/arbitrat/.test(q)) {
       const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : f.type === 'checkbox' ? 'Yes' : null;
-      if (pick(f, fact('arbitration_acknowledgement') || soleAcknowledgement,
+      if (pick(f, soleAcknowledgement || fact('arbitration_acknowledgement'),
         fact('arbitration_acknowledgement') ? 'saved' : 'authorization',
         'Applied the saved or sole required arbitration acknowledgement')) continue;
     }
@@ -233,7 +235,7 @@ export async function POST(request: NextRequest) {
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
     if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/if yes.*level of security clearance|which level of security clearance/.test(q)
-      && pick(f, /no -|none/.test(norm(fact('security_clearance'))) ? 'None' : fact('security_clearance'), 'saved', 'Matched the confirmed clearance level')) continue;
+      && pick(f, /^(no|none)\b/.test(norm(fact('security_clearance'))) ? 'None' : fact('security_clearance'), 'saved', 'Matched the confirmed clearance level')) continue;
     if (/polygraph level/.test(q)
       && pick(f, fact('polygraph_level') || 'None', 'saved', 'Matched the confirmed polygraph level')) continue;
     if (/clearance from the md agency/.test(q)
@@ -491,6 +493,7 @@ export async function POST(request: NextRequest) {
   // The browser asks for a deterministic pass first so profile/saved answers
   // can be applied without waiting behind an AI request. Only the later,
   // explicitly deferred pass is allowed to call Gemini.
+  const providerTrace: Array<{ provider: string; status: number | null; ok: boolean }> = [];
   if (!fastOnly && prose.length && (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY)) {
     // Ground the drafter in the candidate's REAL material (resume, their own saved
     // answers, projects) AND the actual job posting, so "why this company/role"
@@ -577,7 +580,7 @@ ${JSON.stringify(prose.map((f) => ({ fieldId: f.fieldId, name: f.name, label: f.
 Return only valid json in this exact shape: {"answers":[{"fieldId":"...","name":"...","value":"..."}]}.`;
     // Draft with Gemini, then Groq as a fallback, so quota or rate limits never
     // leave the application's open answers silently blank.
-    const raw = await draftJSON(prompt);
+    const raw = await draftJSON(prompt, providerTrace);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
@@ -598,5 +601,6 @@ Return only valid json in this exact shape: {"answers":[{"fieldId":"...","name":
     needsContext,
     needsUser: needsContext.map((f) => f.name),
     deferredAi: fastOnly ? prose.map((f) => f.name) : [],
+    providerTrace,
   }, { headers: cors });
 }
