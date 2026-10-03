@@ -234,6 +234,70 @@ async function main() {
           unresolvedRequired: controls.filter((c) => c.required && (!c.valid || !c.value) && !c.checked),
           visibleErrors: [...new Set(errorText)] };
       }).catch((error) => ({ captureError: String(error) }));
+      // Independently inventory every frame. This deliberately does not reuse
+      // the extension scanner, so disagreements expose discovery defects.
+      const frameCoverage = await Promise.all(page.frames().map(async (frame, frameIndex) => frame.evaluate(({ frameIndex }) => {
+        const visible = (element) => {
+          const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const label = (element) => {
+          const byFor = element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null;
+          const group = element.closest('fieldset,[role="group"],[role="radiogroup"],[class*="question"],[class*="field"]');
+          return String(byFor?.textContent || element.labels?.[0]?.textContent || element.getAttribute('aria-label')
+            || group?.querySelector('legend,[class*="label"],[class*="heading"]')?.textContent
+            || element.getAttribute('placeholder') || element.name || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+        };
+        const nodes = [...document.querySelectorAll('input,select,textarea,[role="combobox"],[contenteditable="true"]')]
+          .filter((element) => visible(element) && !['hidden', 'submit', 'button'].includes(String(element.type || '').toLowerCase()));
+        return { frameIndex, url: location.href, controls: nodes.map((element, index) => {
+          const isCombo = element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete');
+          let committedCombo = false;
+          if (isCombo) {
+            for (let container = element.parentElement, depth = 0; container && depth < 6; container = container.parentElement, depth++) {
+              const selected = container.querySelector(':scope > [class*=singleValue], :scope > [class*=single-value], [aria-selected="true"]');
+              if (selected && !/^select|^choose/i.test(String(selected.textContent || '').trim())) { committedCombo = true; break; }
+            }
+          }
+          return {
+            browserKey: `${frameIndex}|${index}|${String(element.name || element.id || '')}`,
+            label: label(element), name: element.name || '',
+            type: String(isCombo ? 'combobox' : element.type || element.getAttribute('role') || element.tagName).toLowerCase(),
+            required: Boolean(element.required || element.getAttribute('aria-required') === 'true'
+              || /(?:\*|✱)\s*$/.test(label(element))),
+            filled: element.type === 'checkbox' || element.type === 'radio' ? Boolean(element.checked)
+              : Boolean(String(element.value || '').trim()) || committedCombo,
+            valid: element.checkValidity?.() ?? null, ariaInvalid: element.getAttribute('aria-invalid') || '', disabled: Boolean(element.disabled),
+          };
+        }).slice(0, 250) };
+      }, { frameIndex }).catch((error) => ({ frameIndex, url: frame.url(), captureError: String(error), controls: [] }))));
+      const parsedProgress = progressEvents.map((event) => {
+        try { return JSON.parse(event.detail?.detail || ''); } catch { return null; }
+      }).filter(Boolean);
+      const extensionAudits = parsedProgress.map((item) => item.coverageAudit).filter(Boolean);
+      const latestExtensionAudit = extensionAudits.at(-1) || null;
+      const browserControls = frameCoverage.flatMap((frame) => frame.controls || []);
+      const norm = (value) => String(value || '').toLowerCase().match(/[a-z0-9]+/g)?.join(' ') || '';
+      const scannerControls = extensionAudits.flatMap((audit) => audit.controls || []);
+      const scannerSignatures = new Set(scannerControls.map((field) => `${norm(field.label)}|${norm(field.type)}`));
+      const dedupe = new Set();
+      const browserLogical = browserControls.filter((field) => {
+        const signature = `${norm(field.label)}|${field.name}|${norm(field.type).replace(/radio|checkbox/, 'choice')}`;
+        if (dedupe.has(signature)) return false;
+        dedupe.add(signature); return true;
+      });
+      evidence.coverageAudit = {
+        frameCount: frameCoverage.length, frameCoverage,
+        browserCandidateCount: browserControls.length, browserLogicalCount: browserLogical.length,
+        browserRequiredCount: browserLogical.filter((field) => field.required).length,
+        browserInvalidRequiredCount: browserLogical.filter((field) => field.required && (!field.filled || field.valid === false || field.ariaInvalid === 'true')).length,
+        extensionSnapshots: extensionAudits,
+        latestExtensionAudit,
+        browserControlsMissingFromScanner: extensionAudits.length ? browserLogical.filter((field) =>
+          !scannerSignatures.has(`${norm(field.label)}|${norm(field.type)}`)).slice(0, 100) : [],
+        lifecycleDiagnostics: [...new Map(parsedProgress.flatMap((item) => item.diagnostics || [])
+          .map((item) => [JSON.stringify(item), item])).values()].slice(0, 300),
+      };
       const screenshot = path.join(evidenceDir, `${String(index + 1).padStart(2, '0')}-${job.id}.png`);
       await page.screenshot({ path: screenshot, fullPage: true }).catch((error) => { evidence.screenshotError = String(error); });
       results.push({ id: job.id, company: job.companyName, title: job.jobTitle, ...outcome,

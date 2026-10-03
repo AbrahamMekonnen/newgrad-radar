@@ -769,6 +769,41 @@
       return [descriptor];
     }).filter((field) => field.label);
   };
+  // A value-free field inventory used by QA to distinguish discovery misses
+  // from resolution, interaction, retention, and submission failures.
+  const coverageAudit = (preparedFields = [], phase = 'unknown') => {
+    const adapter = ATS?.detect(location.href);
+    const submit = adapter?.findSubmit?.(document)
+      || [...document.querySelectorAll('button, input[type="submit"]')].find((item) => /submit|apply/i.test(String(item.textContent || item.value || '')));
+    const root = adapter?.validationRoot?.(submit) || submit?.form || submit?.closest('form')
+      || adapter?.formSelectors?.map((selector) => document.querySelector(selector)).find(Boolean)
+      || document.querySelector('form');
+    if (!root) return { phase, formFound: false, frameUrl: location.href, controls: [], preparedMissing: preparedFields.map(fieldKey) };
+    const candidates = [...root.querySelectorAll('input, textarea, select, [role="combobox"], [contenteditable="true"]')]
+      .filter((element) => element.getClientRects().length > 0 && element.getAttribute('aria-hidden') !== 'true'
+        && !['hidden', 'submit', 'button'].includes(String(element.type || '').toLowerCase()));
+    const seen = new Set();
+    const controls = [];
+    for (const [index, element] of candidates.entries()) {
+      const descriptor = liveFieldFor(element, index);
+      const key = fieldKey(descriptor);
+      // Radios and grouped checkboxes are one logical question.
+      const groupKey = ['radio', 'checkbox'].includes(String(element.type || ''))
+        ? `${normalize(descriptor.section || descriptor.label)}|${element.name || key}` : key;
+      if (seen.has(groupKey)) continue;
+      seen.add(groupKey);
+      const state = resolutionState.get(key) || {};
+      controls.push({ fieldKey: key, label: descriptor.label.slice(0, 300), type: descriptor.type,
+        required: descriptor.required, accepted: controlHasValue(element, descriptor), valid: element.checkValidity?.() ?? null,
+        ariaInvalid: element.getAttribute('aria-invalid') || '', answerSource: state.answerSource || '',
+        attempt: state.attempt || 0, failure: state.lastFailure || '', exhausted: Boolean(state.exhausted) });
+    }
+    const preparedMissing = preparedFields.filter((field) => !findField(field)).map(fieldKey);
+    return { phase, formFound: true, frameUrl: location.href, candidateCount: candidates.length,
+      logicalControlCount: controls.length, requiredCount: controls.filter((field) => field.required).length,
+      unresolvedRequiredCount: controls.filter((field) => field.required && !field.accepted).length,
+      preparedCount: preparedFields.length, preparedMissing, controls: controls.slice(0, 120) };
+  };
   const fieldAccepted = (field) => {
     const element = findField(field);
     if (!element) return false;
@@ -1369,7 +1404,8 @@
       const preparedLedger = ATS?.createFieldLedger?.(1);
       if (data.browserWorker) await send({
         type: 'PROGRESS', stage: 'filling',
-        detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length }) },
+        detail: { total: fields.length, detail: JSON.stringify({ message: 'Form planning started.', fields: fields.length,
+          coverageAudit: coverageAudit(fields, 'planning') }) },
       });
       const plannedAnswers = planChoiceAnswers(fields);
       if (data.browserWorker) void send({
@@ -1575,6 +1611,7 @@
                     attempt: resolutionState.get(fieldKey(field))?.attempt,
                     optionCount: field.options?.length, optionPreview: field.options,
                   })),
+                  coverageAudit: coverageAudit(fields, 'blocked_preflight'),
                 }),
               },
             });
@@ -1589,7 +1626,9 @@
               detail: {
                 filled: completed.size,
                 total: fields.length,
-                detail: remaining ? JSON.stringify({ message: remaining + ' prepared fields were not found; complete-form preflight found no required blockers.', diagnostics: fields.filter((field) => !completed.has(field.name)).map((field) => EXEC?.safeDiagnostic?.({ code: 'optional_prepared_field_unresolved', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts })) }) : 'All prepared fields and required live controls passed preflight.',
+                detail: JSON.stringify({ message: remaining ? remaining + ' prepared fields were not found; complete-form preflight found no required blockers.' : 'All prepared fields and required live controls passed preflight.',
+                  diagnostics: remaining ? fields.filter((field) => !completed.has(field.name)).map((field) => EXEC?.safeDiagnostic?.({ code: 'optional_prepared_field_unresolved', ats: data.atsType, fieldKey: fieldKey(field), controlType: field.type, answerSource: field.source, attempt: preparedLedger?.get(field)?.attempts })) : [],
+                  coverageAudit: coverageAudit(fields, 'passed_preflight') }),
               },
             });
           }
