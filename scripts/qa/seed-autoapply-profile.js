@@ -134,6 +134,7 @@ async function main() {
     current_company: 'Northstar Cloud',
     country: 'United States', state: 'California', city: 'San Francisco', zip_code: '94105',
     location: 'San Francisco, California, United States',
+    work_authorization: 'us_citizen', require_sponsorship: false,
     default_source: 'Company Careers Website',
   }).eq('user_id', userId);
   if (updateError) throw updateError;
