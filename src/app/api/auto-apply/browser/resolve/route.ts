@@ -313,6 +313,8 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('summer_location'), 'saved', 'Matched the confirmed summer location')) continue;
     if (/available to start full time/.test(q)
       && pick(f, /q4 2026/.test(norm(f.fieldId)) ? 'Yes' : fact('full_time_start_window'), 'saved', 'Matched the confirmed full-time start window')) continue;
+    if (/dedicate 6 months.*full time|6 months working full time/.test(q)
+      && pick(f, fact('six_month_full_time_program'), 'saved', 'Matched the confirmed full-time program availability')) continue;
     if (/when can you start|available to start|start date|when will you be available/.test(q)) {
       const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
       const confirmed = fact('available_start_date') || profile?.available_start_date;
@@ -360,6 +362,20 @@ export async function POST(request: NextRequest) {
     }
     if (/confirm.*interested|interested in the .* role|role as opposed to/.test(q)
       && pick(f, `Yes, I am interested in the ${job.job_title} role.`, 'authorization', 'Confirmed interest in the user-authorized application')) continue;
+    if (/do you live in one of the following states/.test(q)) {
+      const state = norm(profile?.state);
+      if (pick(f, state && q.includes(state) ? 'Yes' : state ? 'No' : null, 'profile', 'Compared the saved residence state with the employer list')) continue;
+    }
+    if (/double check.*information|accuracy.*errors or omissions/.test(q)) {
+      const soleAcknowledgement = optionLabels(f).length === 1 ? optionLabels(f)[0] : 'Yes';
+      if (pick(f, soleAcknowledgement, 'authorization', 'Confirmed the required application accuracy acknowledgement')) continue;
+    }
+    if (/spacexai employment history|spacex.*employment history/.test(q)) {
+      const neverWorked = optionLabels(f).find((option) => /never worked/.test(norm(option)));
+      if (pick(f, neverWorked, 'resume_absence', 'No matching employer appeared in the candidate employment history')) continue;
+    }
+    if (/exceptional work/.test(q)
+      && pick(f, profile?.proud_project || profile?.writing_sample, 'profile', 'Used the candidate-confirmed project and accomplishment context')) continue;
     if (/careers? website|careers? site/.test(q) && /company careers|company website|careers page/i.test(String(profile?.default_source || ''))
       && pick(f, 'Yes', 'profile', 'Matched the saved company-careers source')) continue;
     if (/18|adult/.test(q) && pick(f, profile?.is_adult === true ? 'Yes' : profile?.is_adult === false ? 'No' : null)) continue;

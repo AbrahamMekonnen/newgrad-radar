@@ -75,7 +75,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (option) return option;
   }
 
-  if (/country/.test(q)) {
+  if (/countr(?:y|ies)/.test(q)) {
     const aliases: Record<string, string> = {
       us: 'united states', usa: 'united states', 'u s': 'united states',
       'united states of america': 'united states',
@@ -108,7 +108,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     const noSponsor = ['us citizen', 'permanent resident', 'green card', 'authorized without employer sponsorship'];
     const futureSponsor = ['visa holder', 'student visa', 'f1', 'opt', 'cpt', 'authorized now but will require employer sponsorship'];
     if (noSponsor.some((intent) => target.includes(intent))) {
-      const option = usable.find((candidate) => /authorized.*without.*sponsor|citizen|permanent resident|green card|^yes no restriction/.test(norm(candidate)));
+      const option = usable.find((candidate) => /authorized.*without.*sponsor|citizen|permanent resident|green card|^yes no restriction|due to my nationality/.test(norm(candidate)));
       if (option) return option;
       const yes = usable.find((candidate) => norm(candidate) === 'yes');
       if (yes) return yes;

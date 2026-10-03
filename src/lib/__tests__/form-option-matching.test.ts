@@ -27,6 +27,10 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Are you legally authorised to work full time?', 'us_citizen', [
       'Yes, no restriction.', 'Yes, but I will need sponsorship in the future.', 'No, I need sponsorship now.',
     ])).toBe('Yes, no restriction.');
+    expect(matchAvailableOption('Your authorization to work in the country where you live', 'us_citizen', [
+      'I am authorized to work in the country due to my nationality',
+      'I am authorized based on a work permit which needs sponsorship',
+    ])).toBe('I am authorized to work in the country due to my nationality');
   });
 
   it('maps internal work authorization values to an offered ATS choice', () => {
@@ -94,6 +98,9 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Please select the country where you currently reside', 'United States', [
       'Canada', 'UK', 'US', 'Other',
     ])).toBe('US');
+    expect(matchAvailableOption('Are you based in any of these countries?', 'United States', [
+      'Germany', 'United States', 'Other',
+    ])).toBe('United States');
   });
 });
 

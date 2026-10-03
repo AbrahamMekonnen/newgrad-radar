@@ -53,7 +53,8 @@ const seedFacts = {
   english_level: 'C2 (Native)',
   other_languages: 'English and Amharic',
   coding_language: 'Python 3',
-  available_start_date: 'Two weeks after accepting an offer',
+  available_start_date: 'Available to Start Immediately',
+  six_month_full_time_program: 'Yes',
   education_start_date: 'September 2022',
   internship_count: '2',
   prior_interviews: 'None unless recorded in a saved company-specific answer',
@@ -135,6 +136,7 @@ async function main() {
     country: 'United States', state: 'California', city: 'San Francisco', zip_code: '94105',
     location: 'San Francisco, California, United States',
     work_authorization: 'us_citizen', require_sponsorship: false,
+    is_adult: true,
     default_source: 'Company Careers Website',
   }).eq('user_id', userId);
   if (updateError) throw updateError;
