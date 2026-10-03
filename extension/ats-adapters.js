@@ -176,6 +176,14 @@
       hosts: ['boards.greenhouse.io', 'job-boards.greenhouse.io'],
       formSelectors: ['form'],
       phoneCountryProxy: '.phone-input__country input:required, .phone-input__country .requiredInput',
+      isRequired(element) {
+        if (element?.id !== 'country' && !element?.closest?.('.phone-input__country')) return false;
+        // Greenhouse advertises aria-required=false until a phone number is
+        // entered, then rejects submission without the associated country.
+        const phoneGroup = element.closest('fieldset, .phone-input') || element.ownerDocument;
+        const phone = phoneGroup?.querySelector?.('input[type="tel"], input[autocomplete="tel"], input[name*="phone" i]');
+        return Boolean(String(phone?.value || '').trim());
+      },
       uploadReadyOverride(doc, waitedMs) {
         if (waitedMs < 5000) return false;
         const files = [...doc.querySelectorAll('input[type="file"]')];

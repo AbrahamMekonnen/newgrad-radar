@@ -383,9 +383,21 @@ export async function POST(request: NextRequest) {
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
     if (/current or previous job title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or previous job title')) continue;
+    if (/best describes your current or most recent engineering role|engineering role.*consistent with.*(?:title|level).*resume/.test(q)) {
+      const title = norm(profile?.current_title || fact('recent_job_title'));
+      const level = /staff|principal|distinguished|fellow/.test(title) ? 'Staff+ Engineer'
+        : /senior|sr\b|lead/.test(title) ? 'Senior Engineer'
+          : title ? 'Early-career or mid-level engineer' : null;
+      if (pick(f, level, 'profile', 'Mapped the confirmed current or recent title to the employer engineering-level choices')) continue;
+    }
     if (/proudest accomplishment/.test(q) && pick(f, profile?.proud_project, 'profile', 'Used the candidate-confirmed accomplishment')) continue;
-    if (/first location preference|preferred office location/.test(q)
-      && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved first office location')) continue;
+    if (/first location preference|preferred office location/.test(q)) {
+      const preferred = fact('preferred_office_locations') || fact('first_location_preference')
+        || profile?.city || profile?.location;
+      const selected = optionLabels(f).length
+        ? matchFirstAvailablePreference(question, preferred, optionLabels(f)) : preferred;
+      if (pick(f, selected, 'profile', 'Matched the saved ordered office preference')) continue;
+    }
     if (/cities.*available to work|available to work.*cities/.test(q)
       && pick(f, profile?.city || profile?.location, 'profile', 'Matched the saved work location')) continue;
     if (/location preference.*open to relocating/.test(q)

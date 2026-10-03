@@ -47,6 +47,10 @@ const db = createClient(supabaseUrl, serviceKey, {
 });
 const modules = ['ats-recipes.js', 'ats-adapters.js', 'execution-contract.js',
   'combobox-interaction.js', 'content.js'].map((name) => path.join(ROOT, 'extension', name));
+const bounded = (promise, timeoutMs, fallback) => Promise.race([
+  promise,
+  new Promise((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+]);
 
 async function api(token, route, options = {}) {
   const response = await fetch(origin + route, {
@@ -94,10 +98,26 @@ async function main() {
     await db.from('autoapply_browser_devices').update({ paused: true }).eq('id', other.id);
   }
 
-  const browser = await chromium.launch({ channel: 'chrome', headless: false });
-  // Real extension content scripts are not blocked by a page's script-src CSP.
-  // bypassCSP gives the QA injection harness the same privilege boundary.
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', bypassCSP: true });
+  let browser;
+  let context;
+  const newPage = async () => {
+    if (!browser?.isConnected()) {
+      browser = await chromium.launch({ channel: 'chrome', headless: false });
+      // Real extension content scripts are not blocked by a page's script-src
+      // CSP. bypassCSP gives the QA injection harness the same privilege.
+      context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', bypassCSP: true });
+    }
+    try {
+      return await context.newPage();
+    } catch (error) {
+      // A single ATS tab can crash or close Chrome while it is loading. Rebuild
+      // the isolated QA browser so the remaining cohort is still exercised.
+      await browser?.close().catch(() => {});
+      browser = await chromium.launch({ channel: 'chrome', headless: false });
+      context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', bypassCSP: true });
+      return context.newPage();
+    }
+  };
   const results = [];
   const runStamp = `${Date.now()}`;
   const evidenceDir = path.join(ROOT, '.qa', `submission-evidence-${ats}-${runStamp}`);
@@ -142,14 +162,36 @@ async function main() {
       job.autoSubmitRequested = true;
       let finish;
       const terminal = new Promise((resolve) => { finish = resolve; });
-      const page = await context.newPage();
+      const page = await newPage();
+      console.log(`[${index + 1}/${limit}] ${job.companyName} — page_opened`);
+      let jobFinished = false;
+      const finishOnce = (outcome) => {
+        if (jobFinished) return;
+        jobFinished = true;
+        finish(outcome);
+      };
+      // Playwright's page.evaluate() has no operation timeout. A malformed or
+      // wedged ATS page must never hold the rest of a cohort indefinitely.
+      const hardPageDeadline = setTimeout(() => {
+        finishOnce({ stage: 'page_deadline', detail: 'ATS page exceeded the QA job deadline.' });
+        void page.close({ runBeforeUnload: false }).catch(() => {});
+      }, 180000);
+      page.once('close', () => finishOnce({ stage: 'page_closed', detail: 'ATS page closed before a terminal event.' }));
       const progressEvents = [];
       const resolverEvents = [];
       const networkEvents = [];
       const consoleErrors = [];
       let trustedProbeStarted = false;
       page.on('console', (message) => {
-        if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 1000));
+        if (message.type() === 'error' && consoleErrors.length < 50) {
+          const value = message.text().slice(0, 2000);
+          if (!consoleErrors.includes(value)) consoleErrors.push(value);
+        }
+      });
+      page.on('pageerror', (error) => {
+        if (consoleErrors.length >= 50) return;
+        const value = `Page error: ${String(error?.stack || error).slice(0, 4000)}`;
+        if (!consoleErrors.includes(value)) consoleErrors.push(value);
       });
       page.on('response', (response) => {
         const request = response.request();
@@ -196,13 +238,25 @@ async function main() {
                 .click({ timeout: 5000 }).catch((error) => consoleErrors.push(`Trusted submit probe failed: ${String(error).slice(0, 500)}`));
             }, 700);
           }
-          if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) finish({ stage: message.stage, result, detail: message.detail });
+          if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) finishOnce({ stage: message.stage, result, detail: message.detail });
           return result;
         }
         return { ok: false };
       });
       await page.addInitScript(() => {
-        globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
+        const runtime = { sendMessage: (message) => globalThis.__hrMessage(message) };
+        // Branded Chrome already exposes a non-replaceable window.chrome.
+        // Install the QA message bridge on that object instead of attempting to
+        // replace it (which can fail silently and leave runtime undefined).
+        const chromeObject = globalThis.chrome || {};
+        try {
+          Object.defineProperty(chromeObject, 'runtime', { configurable: true, value: runtime });
+        } catch {
+          try { chromeObject.runtime = runtime; } catch { /* diagnosed below */ }
+        }
+        if (!globalThis.chrome) {
+          try { Object.defineProperty(globalThis, 'chrome', { configurable: true, value: chromeObject }); } catch { /* diagnosed below */ }
+        }
         globalThis.__hireRadarDomEvents = [];
         const record = (type, event) => {
           const target = event.target;
@@ -210,7 +264,10 @@ async function main() {
           globalThis.__hireRadarDomEvents.push({ at: Date.now(), type, trusted: Boolean(event.isTrusted),
             target: String(target?.tagName || '').toLowerCase(), targetType: String(target?.type || ''),
             text: String(target?.textContent || target?.value || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-            defaultPrevented: Boolean(event.defaultPrevented), formValid: form?.checkValidity?.() ?? null });
+            defaultPrevented: Boolean(event.defaultPrevented),
+            // checkValidity() emits `invalid`, which would recursively call this
+            // audit listener. Query validity without dispatching another event.
+            formValid: form ? !form.querySelector(':invalid') : null });
           if (globalThis.__hireRadarDomEvents.length > 100) globalThis.__hireRadarDomEvents.shift();
         };
         addEventListener('click', (event) => {
@@ -229,7 +286,11 @@ async function main() {
           else setTimeout(resolve, 300);
         })).catch(() => {});
         if (await frame.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
-        for (const file of modules) await frame.addScriptTag({ path: file });
+        for (const file of modules) {
+          await frame.addScriptTag({ path: file });
+          const responsive = await bounded(frame.evaluate(() => true).catch(() => false), 2000, false);
+          if (!responsive) throw new Error(`Page event loop stopped responding after ${path.basename(file)}`);
+        }
       };
       page.on('domcontentloaded', () => {
         for (const frame of page.frames()) void injectProductionEngine(frame).catch(() => {});
@@ -237,13 +298,30 @@ async function main() {
       page.on('frameattached', (frame) => { void injectProductionEngine(frame).catch(() => {}); });
       page.on('framenavigated', (frame) => { void injectProductionEngine(frame).catch(() => {}); });
       await page.goto(job.jobUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      for (const frame of page.frames()) await injectProductionEngine(frame).catch(() => {});
-      const outcome = await Promise.race([
-        terminal,
-        new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),
-      ]);
+      console.log(`[${index + 1}/${limit}] ${job.companyName} — navigated`);
+      const applicationFrames = page.frames().filter((frame) => {
+        try {
+          const host = new URL(frame.url()).hostname;
+          return frame === page.mainFrame() || /greenhouse\.io$|lever\.co$|ashbyhq\.com$|myworkdayjobs\.com$|smartrecruiters\.com$|smartr\.me$|icims\.com$|taleo\.net$|bamboohr\.com$|breezy\.hr$|applytojob\.com$|recruitee\.com$|jobvite\.com$/.test(host);
+        } catch { return frame === page.mainFrame(); }
+      });
+      for (const frame of applicationFrames) {
+        console.log(`[${index + 1}/${limit}] ${job.companyName} — injecting ${frame.url().slice(0, 120)}`);
+        await injectProductionEngine(frame).catch((error) => {
+          consoleErrors.push(`Injection failed in ${frame.url().slice(0, 300)}: ${String(error).slice(0, 700)}`);
+        });
+        console.log(`[${index + 1}/${limit}] ${job.companyName} — injected`);
+      }
+      await page.waitForTimeout(7000).catch(() => {});
+      console.log(`[${index + 1}/${limit}] ${job.companyName} — startup events=${progressEvents.length}/${resolverEvents.length}`);
+      const outcome = progressEvents.length || resolverEvents.length
+        ? await Promise.race([
+          terminal,
+          new Promise((resolve) => setTimeout(() => resolve({ stage: 'timeout' }), 150000)),
+        ])
+        : { stage: 'engine_start_failed', detail: 'Production content script emitted no worker events within 7 seconds.' };
       await page.waitForTimeout(750).catch(() => {});
-      const evidence = await page.evaluate(() => {
+      const evidence = await bounded(page.evaluate(() => {
         const visible = (element) => {
           const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
           return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
@@ -274,10 +352,11 @@ async function main() {
         return { url: location.href, title: document.title, controls,
           unresolvedRequired: controls.filter((c) => c.required && (!c.valid || !c.value) && !c.checked),
           visibleErrors: [...new Set(errorText)] };
-      }).catch((error) => ({ captureError: String(error) }));
+      }).catch((error) => ({ captureError: String(error) })), 5000,
+      { captureError: 'Evidence capture timed out because the ATS page stopped responding.' });
       // Independently inventory every frame. This deliberately does not reuse
       // the extension scanner, so disagreements expose discovery defects.
-      const frameCoverage = await Promise.all(page.frames().map(async (frame, frameIndex) => frame.evaluate(({ frameIndex }) => {
+      const frameCoverage = await Promise.all(page.frames().map(async (frame, frameIndex) => bounded(frame.evaluate(({ frameIndex }) => {
         const visible = (element) => {
           const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
           return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
@@ -316,7 +395,8 @@ async function main() {
             valid: element.checkValidity?.() ?? null, ariaInvalid: element.getAttribute('aria-invalid') || '', disabled: Boolean(element.disabled),
           };
         }).slice(0, 250) };
-      }, { frameIndex }).catch((error) => ({ frameIndex, url: frame.url(), captureError: String(error), controls: [] }))));
+      }, { frameIndex }).catch((error) => ({ frameIndex, url: frame.url(), captureError: String(error), controls: [] })),
+      5000, { frameIndex, url: frame.url(), captureError: 'Frame evidence capture timed out.', controls: [] })));
       const parsedProgress = progressEvents.map((event) => {
         try { return JSON.parse(event.detail?.detail || ''); } catch { return null; }
       }).filter(Boolean);
@@ -351,8 +431,17 @@ async function main() {
       const domEvents = frameCoverage.flatMap((frame) => frame.domEvents || []);
       const submitClicks = domEvents.filter((event) => event.type === 'click' && /submit|apply/.test(String(event.text || '').toLowerCase()));
       const submitEvents = domEvents.filter((event) => event.type === 'submit');
-      const applicationPosts = networkEvents.filter((event) => event.method === 'POST'
-        && !/snowplow|spl\.greenhouse|amazonaws\.com|recaptcha|google-analytics|segment|rudderstack/.test(event.url));
+      const applicationPosts = networkEvents.filter((event) => {
+        if (event.method !== 'POST') return false;
+        if (ats === 'greenhouse') {
+          try {
+            const url = new URL(event.url);
+            return url.hostname === 'boards.greenhouse.io'
+              && /\/(?:embed\/[^/]+\/)?jobs\/\d+\/?$/.test(url.pathname);
+          } catch { return false; }
+        }
+        return !/snowplow|spl\.greenhouse|amazonaws\.com|recaptcha|google-analytics|analytics|doubleclick|datadog|segment|rudderstack|zoominfo|linkedin\.com\/wa/.test(event.url);
+      });
       const verificationResponses = applicationPosts.filter((event) => event.status === 428);
       const successResponses = applicationPosts.filter((event) => event.status >= 200 && event.status < 400 && event.status !== 202);
       evidence.submissionAudit = {
@@ -366,15 +455,16 @@ async function main() {
                 : submitClicks.length ? 'click_without_submit_event' : 'submit_not_attempted',
       };
       const screenshot = path.join(evidenceDir, `${String(index + 1).padStart(2, '0')}-${job.id}.png`);
-      await page.screenshot({ path: screenshot, fullPage: true }).catch((error) => { evidence.screenshotError = String(error); });
+      await page.screenshot({ path: screenshot, fullPage: true, timeout: 10000 }).catch((error) => { evidence.screenshotError = String(error); });
       results.push({ id: job.id, company: job.companyName, title: job.jobTitle, ...outcome,
         progressEvents, resolverEvents, evidence, networkEvents, consoleErrors, screenshot });
       saveReport();
       console.log(`[${index + 1}/${limit}] ${job.companyName} — ${outcome.stage}`);
-      await page.close().catch(() => {});
+      clearTimeout(hardPageDeadline);
+      await bounded(page.close({ runBeforeUnload: false }).catch(() => {}), 5000, null);
     }
   } finally {
-    await browser.close().catch(() => {});
+    await bounded(browser?.close().catch(() => {}), 5000, null);
     await db.from('autoapply_browser_devices').update({ revoked_at: new Date().toISOString() }).eq('id', device.id);
     for (const other of otherDevices || []) {
       await db.from('autoapply_browser_devices').update({ paused: other.paused }).eq('id', other.id);

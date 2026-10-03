@@ -97,6 +97,7 @@ const seedFacts = {
   location_preference: 'Any/all',
   full_time_start_window: 'Q4 2026 (October - December)',
   first_location_preference: 'San Francisco, CA, United States',
+  preferred_office_locations: 'Menlo Park, CA | New York, NY | Bellevue, WA',
 };
 const rawAnswers = {
   'what is your expected graduation month year': 'May 2028',

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.19.4",
+  "version": "0.19.5",
   "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
   "permissions": [
     "storage",
@@ -34,6 +34,7 @@
     "https://www.mongodb.com/careers/*",
     "https://ionq.com/*",
     "https://careers.datadoghq.com/*",
+    "https://*.brex.com/*",
     "https://jmrbyubrrpxxvotsljms.supabase.co/*"
   ],
   "background": {
@@ -66,6 +67,7 @@
         "https://www.mongodb.com/careers/*"
         ,"https://ionq.com/*"
         ,"https://careers.datadoghq.com/*"
+        ,"https://*.brex.com/*"
       ],
       "js": [
         "ats-recipes.js",

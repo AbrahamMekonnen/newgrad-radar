@@ -73,6 +73,11 @@ describe('matchAvailableOption', () => {
     expect(matchAvailableOption('Have you ever worked at MongoDB before?', 'No', [
       'Yes', 'No',
     ])).toBe('No');
+    expect(matchAvailableOption('Have you ever worked for Robinhood as an employee, intern or contractor?', 'No', [
+      'I currently work at Robinhood as a full-time employee or intern',
+      'I have previously worked at Robinhood as a full-time employee or intern',
+      'I have never worked at Robinhood',
+    ])).toBe('I have never worked at Robinhood');
   });
   it('maps privacy-preserving decline wording across ATS variants', () => {
     expect(matchAvailableOption('Gender', 'Decline to self-identify', [

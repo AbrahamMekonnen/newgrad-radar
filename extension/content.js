@@ -669,7 +669,16 @@
     const marker = question?.querySelector(
       '[data-required="true"], [aria-label*="required" i], .required-indicator, .field-required, [class~="required"]'
     );
-    return Boolean(marker || /(?:\*|\u2731)\s*$/.test(String(label || '').trim()));
+    // Greenhouse's phone-country combobox exposes aria-label="Country" while
+    // rendering the required asterisk in a nearby label, outside its generic
+    // question container. Include that small local widget shell in the check.
+    const widget = element.closest('[class*="country" i], [class*="phone" i]');
+    const widgetLabel = String(widget?.querySelector('label, [class*="label" i]')?.textContent || '').trim();
+    const widgetMarker = widget?.querySelector(
+      '[data-required="true"], [aria-label*="required" i], .required-indicator, .field-required, [class~="required"]'
+    );
+    return Boolean(marker || widgetMarker || /(?:\*|\u2731)\s*$/.test(String(label || '').trim())
+      || /(?:\*|\u2731)\s*$/.test(widgetLabel));
   };
   const liveFieldFor = (element, index = 0) => {
     let name = element.name || element.id || element.dataset.hireradarField;
@@ -966,18 +975,18 @@
               applyStage = 'match';
               const option = bestMatch(boxes, answerLabel({ ...field, value: answer.value }), labelTextFor);
               applyStage = 'nativecheck';
-              if (option) setNativeChecked(option, true);
-              await wait(80);
+              if (option) await setCheckboxValue(option, true);
               applyStage = 'verify';
               applied = Boolean(option && Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.get?.call(option));
             } else {
               applyStage = 'normalize';
               const checked = !['false', 'no', '0', ''].includes(normalize(answer.value));
               applyStage = 'nativecheck';
-              setNativeChecked(checkbox, checked);
-              await wait(80);
+              applied = await setCheckboxValue(checkbox, checked);
               applyStage = 'verify';
-              applied = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.get?.call(checkbox) === checked;
+              const current = nativeCheckboxFor(field, findField(field));
+              applied = Boolean(applied && current
+                && Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.get?.call(current) === checked);
             }
           } else {
             applied = await fill({ ...field, value: answer.value, source: answer.source });
@@ -1057,7 +1066,7 @@
       if (item.getClientRects().length === 0 || item.getAttribute('aria-hidden') === 'true') return false;
       const text = normalize(item.textContent).replace(/\s+/g, '');
       return [
-        'applynow', 'applyforthisjob', 'startapplication', 'applytothisjob',
+        'apply', 'applynow', 'applyforthisjob', 'startapplication', 'applytothisjob',
         'iminterested', 'interested',
       ].includes(text);
     });
