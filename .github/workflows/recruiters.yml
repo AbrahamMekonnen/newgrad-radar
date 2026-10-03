@@ -50,6 +50,7 @@ jobs:
       - name: Preflight search provider
         env:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          SERPER_API_KEY_2: ${{ secrets.SERPER_API_KEY_2 }}
           GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
@@ -67,6 +68,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          SERPER_API_KEY_2: ${{ secrets.SERPER_API_KEY_2 }}
           GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}

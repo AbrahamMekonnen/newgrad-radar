@@ -65,27 +65,53 @@ def _google(query: str, num: int) -> List[Dict]:
         return []
 
 
+def _serper_keys() -> List[str]:
+    """All configured Serper keys, primary first. Lets a run fail over to a
+    fresh key when the primary's one-time free credits run out mid-fill, instead
+    of stalling. Add SERPER_API_KEY_2 (and _3...) for extra credit pools."""
+    keys: List[str] = []
+    for name in ("SERPER_API_KEY", "SERPER_API_KEY_2", "SERPER_API_KEY_3",
+                 "SERPER_API_KEY_FALLBACK"):
+        v = os.environ.get(name)
+        if v and v not in keys:
+            keys.append(v)
+    return keys
+
+
 def _serper(query: str, num: int) -> List[Dict]:
-    key = os.environ.get("SERPER_API_KEY")
-    if not key:
+    keys = _serper_keys()
+    if not keys:
         return []
     try:
         import requests
-        r = requests.post("https://google.serper.dev/search",
-                          headers={"X-API-KEY": key, "Content-Type": "application/json"},
-                          json={"q": query, "num": min(num, 10)}, timeout=20)
-        if r.status_code != 200:
-            # "Not enough credits" comes back as 400; auth/rate as 401/402/403/429.
-            if r.status_code in (401, 402, 403, 429) or "credit" in r.text.lower():
-                _note_provider_down("serper", r.status_code, r.text)
-            else:
-                logger.debug(f"serper {r.status_code}: {r.text[:120]}")
-            return []
-        return [{"title": it.get("title", ""), "link": it.get("link", ""),
-                 "snippet": it.get("snippet", "")} for it in r.json().get("organic", []) or []]
     except Exception as e:
-        logger.debug(f"serper failed: {e}")
+        logger.debug(f"serper import failed: {e}")
         return []
+    exhausted = 0
+    for i, key in enumerate(keys):
+        try:
+            r = requests.post("https://google.serper.dev/search",
+                              headers={"X-API-KEY": key, "Content-Type": "application/json"},
+                              json={"q": query, "num": min(num, 10)}, timeout=20)
+            if r.status_code == 200:
+                return [{"title": it.get("title", ""), "link": it.get("link", ""),
+                         "snippet": it.get("snippet", "")} for it in r.json().get("organic", []) or []]
+            # "Not enough credits" comes back as 400; auth/rate as 401/402/403/429.
+            # On a credit/auth error, fail over to the NEXT key before giving up.
+            if r.status_code in (401, 402, 403, 429) or "credit" in r.text.lower():
+                exhausted += 1
+                if i + 1 < len(keys):
+                    logger.info(f"serper key #{i + 1} unavailable ({r.status_code}) — failing over to the next key")
+                continue
+            logger.debug(f"serper {r.status_code}: {r.text[:120]}")
+            return []  # a non-credit error: don't thrash the other keys
+        except Exception as e:
+            logger.debug(f"serper key #{i + 1} failed: {e}")
+            continue
+    # Every configured Serper key is out of credits / unavailable.
+    if exhausted:
+        _note_provider_down("serper", 0, f"all {len(keys)} serper key(s) exhausted/unavailable")
+    return []
 
 
 def _brave(query: str, num: int) -> List[Dict]:
@@ -159,8 +185,8 @@ def available_providers() -> List[str]:
     names = []
     if os.environ.get("GOOGLE_CSE_KEY") and os.environ.get("GOOGLE_CSE_ID"):
         names.append("google")
-    if os.environ.get("SERPER_API_KEY"):
-        names.append("serper")
+    if _serper_keys():
+        names.append(f"serper(x{len(_serper_keys())})")
     if os.environ.get("BRAVE_API_KEY"):
         names.append("brave")
     names.append("duckduckgo")  # always available (no key)
