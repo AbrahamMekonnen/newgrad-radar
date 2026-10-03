@@ -886,7 +886,9 @@
             localPolicy: true,
           };
         }
-        if (answer && !answer.localPolicy && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
+        const searchableSchool = /^(school|university|college|institution)$/i.test(String(field.label || '').trim())
+          && answer?.source === 'profile';
+        if (answer && !answer.localPolicy && !searchableSchool && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
           state.lastFailure = 'stale_plan';
           resolutionState.set(key, state);
           continue;

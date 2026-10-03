@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     let chosen = String(value);
     const options = optionLabels(f);
     if (options.length) {
-      chosen = matchAvailableOption(f.label, chosen, options) || '';
+      chosen = matchAvailableOption([f.section, f.label].filter(Boolean).join(' '), chosen, options) || '';
       if (!chosen) return false;
     }
     answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) }); return true;
@@ -140,7 +140,8 @@ export async function POST(request: NextRequest) {
     if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
     if (/relocat|commutable proximity/.test(q)) {
       const binary = optionLabels(f).map(norm).some((option) => option === 'yes');
-      const relocation = binary
+      const willingOption = optionLabels(f).find((option) => /willing to relocate/.test(norm(option)) && !/not willing/.test(norm(option)));
+      const relocation = willingOption && profile?.willing_to_relocate !== false ? willingOption : binary
         ? (profile?.willing_to_relocate === false ? 'No' : fact('relocation_locations') || profile?.willing_to_relocate === true ? 'Yes' : null)
         : fact('relocation_locations') || (profile?.willing_to_relocate === true ? 'Yes' : profile?.willing_to_relocate === false ? 'No' : null);
       if (pick(f, relocation, 'saved', 'Matched the confirmed relocation preference')) continue;
@@ -305,10 +306,10 @@ export async function POST(request: NextRequest) {
     if (/\bgre\b/.test(q) && pick(f, fact('gre_score'), 'saved', 'Matched the confirmed GRE response')) continue;
     if (/internship|co op|co-op/.test(q) && /how many|number of/.test(q)
       && pick(f, fact('internship_count'), 'saved', 'Matched the confirmed internship or co-op count')) continue;
+    if (/months? you are available.*internship|available.*internship.*months?/.test(q)
+      && pick(f, optionLabels(f).find((option) => /required/.test(norm(option))) || fact('internship_months') || fact('internship_availability'), 'saved', 'Matched a confirmed required internship month')) continue;
     if (/internship|co op|co-op/.test(q) && /availability|available|start|end/.test(q)
       && pick(f, fact('internship_availability'), 'saved', 'Matched the confirmed internship availability')) continue;
-    if (/months? you are available.*internship|available.*internship.*months?/.test(q)
-      && pick(f, fact('internship_months') || fact('internship_availability'), 'saved', 'Matched the confirmed internship months')) continue;
     if (/graduat.*year|year.*degree|degree.*year/.test(q)) {
       if (pick(f, graduationYear)) continue;
     }
@@ -351,7 +352,7 @@ export async function POST(request: NextRequest) {
       const negative = companyMentioned && /never|none| no /.test(` ${history} `);
       if (pick(f, companyMentioned ? (negative ? 'No' : 'Yes') : null, 'saved', 'Matched company-specific prior application or interview history')) continue;
     }
-    if (/current title|current job title|most recent (?:job )?title|previous title/.test(q)
+    if (/current title|current job title|current or (?:more |most )?recent (?:job )?title|most recent (?:job )?title|previous title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or recent job title')) continue;
     if (/current or previous job title/.test(q)
       && pick(f, profile?.current_title || fact('recent_job_title'), 'profile', 'Matched the confirmed current or previous job title')) continue;
@@ -431,7 +432,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
         'profile', 'Compared confirmed employment history with the employer')) continue;
     }
-    if (policy?.id === 'previous_employment' || /previously worked|ever worked (?:at|for)|worked at .* before|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;

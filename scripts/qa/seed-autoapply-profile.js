@@ -62,7 +62,7 @@ const seedFacts = {
   sat_score: 'Not taken',
   act_score: 'Not taken',
   gre_score: 'Not taken',
-  security_clearance: 'None',
+  security_clearance: 'No - I am interested in obtaining one.',
   government_access_card: 'No',
   export_control_status: 'Authorized to work in the United States without employer sponsorship',
   internship_availability: 'Available for the full dates listed in the job posting',
