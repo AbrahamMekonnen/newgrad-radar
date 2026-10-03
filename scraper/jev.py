@@ -140,7 +140,11 @@ def _evaluate_openjev(key: str, state: Any, questions: dict, timeout: float, ret
         tq[qid] = q
     r = _request_with_retries(
         f"{_openjev_base()}/v1/systemone",
-        {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        # A browser User-Agent is required: codiv.ai is behind Cloudflare, which
+        # 403s (error 1010) the default python-requests agent.
+        {"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"},
         {"model": OPENJEV_MODEL, "state": state, "questions": tq},
         timeout, retries,
     )
@@ -170,7 +174,13 @@ def _normalize_openjev(raw: dict) -> dict:
             continue
         conf = a.get("confidence")
         if "noul" in a:
-            out[k] = {"type": "boolean", "probability": a.get("noul"), "confidence": conf}
+            p = a.get("noul")
+            # OpenJev/Codiv doesn't return a separate confidence, but a calibrated
+            # probability IS the certainty: near 0 or 1 = decisive, near 0.5 = unsure.
+            # Derive confidence from decisiveness so the "only act when sure" gate works.
+            if conf is None and isinstance(p, (int, float)):
+                conf = 2 * abs(float(p) - 0.5)
+            out[k] = {"type": "boolean", "probability": p, "confidence": conf}
         elif "choice" in a:
             out[k] = {"type": "choice", "choice": a.get("choice"),
                       "probabilities": a.get("probabilities") or {}, "confidence": conf}
