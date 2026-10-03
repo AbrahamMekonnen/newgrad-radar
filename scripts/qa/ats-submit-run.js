@@ -143,6 +143,7 @@ async function main() {
       const terminal = new Promise((resolve) => { finish = resolve; });
       const page = await context.newPage();
       const progressEvents = [];
+      const resolverEvents = [];
       const networkEvents = [];
       const consoleErrors = [];
       page.on('console', (message) => {
@@ -167,9 +168,17 @@ async function main() {
           const bytes = Buffer.from(await response.arrayBuffer());
           return { data: bytes.toString('base64'), type: response.headers.get('content-type') || 'application/pdf', name: path.basename(new URL(message.url).pathname) || 'resume.pdf' };
         }
-        if (message.type === 'RESOLVE_FIELDS') return api(token, '/api/auto-apply/browser/resolve', {
-          method: 'POST', body: JSON.stringify({ jobId: job.id, planId: message.planId, fields: message.fields, fastOnly: message.fastOnly === true }),
-        });
+        if (message.type === 'RESOLVE_FIELDS') {
+          const resolved = await api(token, '/api/auto-apply/browser/resolve', {
+            method: 'POST', body: JSON.stringify({ jobId: job.id, planId: message.planId, fields: message.fields, fastOnly: message.fastOnly === true }),
+          });
+          resolverEvents.push({ at: new Date().toISOString(), fastOnly: message.fastOnly === true,
+            fieldCount: message.fields?.length || 0, answerCount: resolved.answers?.length || 0,
+            answerSources: [...new Set((resolved.answers || []).map((answer) => answer.source).filter(Boolean))],
+            deferredAiCount: resolved.deferredAi?.length || 0, needsContext: (resolved.needsContext || []).map((item) => ({ fieldId: item.fieldId, reason: item.reason })),
+            providerTrace: resolved.providerTrace || [] });
+          return resolved;
+        }
         if (message.type === 'PROGRESS') {
           progressEvents.push({ at: new Date().toISOString(), stage: message.stage,
             detail: message.detail, filled: message.filled, total: message.total });
@@ -310,7 +319,7 @@ async function main() {
       const screenshot = path.join(evidenceDir, `${String(index + 1).padStart(2, '0')}-${job.id}.png`);
       await page.screenshot({ path: screenshot, fullPage: true }).catch((error) => { evidence.screenshotError = String(error); });
       results.push({ id: job.id, company: job.companyName, title: job.jobTitle, ...outcome,
-        progressEvents, evidence, networkEvents, consoleErrors, screenshot });
+        progressEvents, resolverEvents, evidence, networkEvents, consoleErrors, screenshot });
       saveReport();
       console.log(`[${index + 1}/${limit}] ${job.companyName} — ${outcome.stage}`);
       await page.close().catch(() => {});
