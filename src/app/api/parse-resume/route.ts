@@ -28,7 +28,7 @@ const OA_PROVIDERS: OAProvider[] = [
     models: ['openai/gpt-oss-20b'], trainsOnData: false },
   { name: 'cloudflare', baseUrl: CF_ACCOUNT ? `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/v1/chat/completions` : '',
     apiKey: process.env.CLOUDFLARE_AI_TOKEN,
-    models: ['@cf/qwen/qwen2.5-7b-instruct', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'], trainsOnData: false },
+    models: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/openai/gpt-oss-120b'], trainsOnData: false },
   { name: 'groq', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY,
     models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], trainsOnData: false },
   { name: 'together', baseUrl: 'https://api.together.xyz/v1/chat/completions', apiKey: process.env.TOGETHER_API_KEY,
