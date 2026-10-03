@@ -28,6 +28,7 @@ const limit = Math.min(50, Math.max(1, Number(valueAfter('--limit', '1'))));
 const queueId = valueAfter('--queue-id', '');
 const queueIdsFile = valueAfter('--queue-ids-file', '');
 const resumeOverrideArg = valueAfter('--resume-override', '');
+const trustedSubmitProbe = args.has('--trusted-submit-probe');
 const resumeOverride = resumeOverrideArg ? path.resolve(resumeOverrideArg) : '';
 if (resumeOverride && !fs.existsSync(resumeOverride)) throw new Error(`Resume override not found: ${resumeOverride}`);
 const explicitQueueIds = queueIdsFile
@@ -146,6 +147,7 @@ async function main() {
       const resolverEvents = [];
       const networkEvents = [];
       const consoleErrors = [];
+      let trustedProbeStarted = false;
       page.on('console', (message) => {
         if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 1000));
       });
@@ -187,6 +189,13 @@ async function main() {
               detail: message.detail, filled: message.filled, total: message.total,
               extensionVersion: 'playwright-e2e-1', runId: crypto.randomUUID() }),
           });
+          if (trustedSubmitProbe && message.stage === 'submit_started' && !trustedProbeStarted) {
+            trustedProbeStarted = true;
+            setTimeout(() => {
+              void page.getByRole('button', { name: /submit( your)? application/i }).last()
+                .click({ timeout: 5000 }).catch((error) => consoleErrors.push(`Trusted submit probe failed: ${String(error).slice(0, 500)}`));
+            }, 700);
+          }
           if (['submitted', 'waiting_for_user', 'failed'].includes(message.stage)) finish({ stage: message.stage, result, detail: message.detail });
           return result;
         }
@@ -338,6 +347,23 @@ async function main() {
           .map((field) => ({ label: field.label, browserType: field.type, scannerType: scannerByLabel.get(norm(field.label)) })).slice(0, 100) : [],
         lifecycleDiagnostics: [...new Map(parsedProgress.flatMap((item) => item.diagnostics || [])
           .map((item) => [JSON.stringify(item), item])).values()].slice(0, 300),
+      };
+      const domEvents = frameCoverage.flatMap((frame) => frame.domEvents || []);
+      const submitClicks = domEvents.filter((event) => event.type === 'click' && /submit|apply/.test(String(event.text || '').toLowerCase()));
+      const submitEvents = domEvents.filter((event) => event.type === 'submit');
+      const applicationPosts = networkEvents.filter((event) => event.method === 'POST'
+        && !/snowplow|spl\.greenhouse|amazonaws\.com|recaptcha|google-analytics|segment|rudderstack/.test(event.url));
+      const verificationResponses = applicationPosts.filter((event) => event.status === 428);
+      const successResponses = applicationPosts.filter((event) => event.status >= 200 && event.status < 400 && event.status !== 202);
+      evidence.submissionAudit = {
+        clickCount: submitClicks.length, trustedClickCount: submitClicks.filter((event) => event.trusted).length,
+        submitEventCount: submitEvents.length, applicationPosts, verificationResponses, successResponses,
+        reactHydrationError: consoleErrors.some((message) => /react error #418|invariant=418/i.test(message)),
+        classification: verificationResponses.length ? 'email_verification_requested'
+          : successResponses.length ? 'application_request_accepted'
+            : applicationPosts.length ? 'application_request_rejected'
+              : submitEvents.length ? 'submit_event_without_application_request'
+                : submitClicks.length ? 'click_without_submit_event' : 'submit_not_attempted',
       };
       const screenshot = path.join(evidenceDir, `${String(index + 1).padStart(2, '0')}-${job.id}.png`);
       await page.screenshot({ path: screenshot, fullPage: true }).catch((error) => { evidence.screenshotError = String(error); });

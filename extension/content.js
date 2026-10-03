@@ -1100,7 +1100,8 @@
           type: 'PROGRESS', stage: 'waiting_for_user',
           detail: { detail: JSON.stringify({
             message: 'The ATS did not confirm the submission; the application was not marked submitted.',
-            diagnostic: EXEC?.safeDiagnostic?.({ code: 'submit_unconfirmed', ats: data.atsType, category: decision.category, attempt: data.submitAttempts }),
+            diagnostic: EXEC?.safeDiagnostic?.({ code: 'submit_unconfirmed', ats: data.atsType,
+              category: data.submitDispatchMode || decision.category, attempt: data.submitAttempts }),
           }) },
         });
         data.stopAutomation = true;
