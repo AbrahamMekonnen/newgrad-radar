@@ -62,6 +62,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="max rows to process (0 = all)")
     ap.add_argument("--threshold", type=float, default=0.30, help="drop rows scoring below this")
+    ap.add_argument("--min-confidence", type=float, default=0.55,
+                    help="when the backend reports confidence (OpenJev/Codiv), only demote "
+                         "when confidence >= this; if the model is unsure, keep the question")
     ap.add_argument("--batch", type=int, default=12, help="questions packed into one Jev call")
     ap.add_argument("--workers", type=int, default=3, help="concurrent Jev calls (low, to respect rate limits)")
     ap.add_argument("--dry-run", action="store_true")
@@ -69,7 +72,8 @@ def main() -> None:
 
     import jev
     if not jev.jev_available():
-        print("Jev unavailable (AI_GATEWAY_API_KEY missing). Aborting.")
+        print("Jev unavailable (set OPENJEV_API_KEY/CODIV_API_KEY for the free OpenJev tier, "
+              "or AI_GATEWAY_API_KEY for the Vercel gateway). Aborting.")
         return
 
     from supabase import create_client
@@ -102,12 +106,13 @@ def main() -> None:
     # batching cuts calls ~batch-fold, which is the main lever against 429s.
     def verify_batch(chunk: list):
         # Very short rows are junk without spending a call.
+        # Each result is (probability_is_real, confidence|None).
         results: dict = {}
         askable = []
         for r in chunk:
             t = (r.get("question_text") or "").strip()
             if len(t) < 8:
-                results[r["id"]] = 0.0
+                results[r["id"]] = (0.0, 1.0)  # too short to be a question; certain
             else:
                 askable.append((r["id"], t[:600]))
         if not askable:
@@ -123,7 +128,7 @@ def main() -> None:
         if ans is None:
             return None  # signal rate-limit/failure for this chunk
         for i, (qid, _) in enumerate(askable):
-            results[qid] = jev.boolean(ans, f"q{i}")
+            results[qid] = (jev.boolean(ans, f"q{i}"), jev.confidence(ans, f"q{i}"))
         return results
 
     import datetime as _dt
@@ -163,11 +168,15 @@ def main() -> None:
                     break
                 continue
             drop_ids, keep_ids = [], []
-            for qid, p in res.items():
+            for qid, (p, conf) in res.items():
                 if p is None:
                     continue  # couldn't judge -> leave unchecked, retry next run
                 checked += 1
-                (drop_ids if p < args.threshold else keep_ids).append(qid)
+                # Demote only when confidently junk: low probability AND (if the
+                # backend gave one) high enough confidence. If the model is unsure,
+                # keep the question (and mark it checked so we don't re-ask).
+                demote = p < args.threshold and (conf is None or conf >= args.min_confidence)
+                (drop_ids if demote else keep_ids).append(qid)
             _apply(drop_ids, keep_ids)  # write this chunk NOW
             total_drop += len(drop_ids)
             total_keep += len(keep_ids)

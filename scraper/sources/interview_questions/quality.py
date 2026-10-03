@@ -118,7 +118,10 @@ def classify_question_smart(text: str, question_type: str | None = None) -> Qual
             }},
         )
         p = jev.boolean(answers, "is_real")
-        if p is not None and p < 0.35:
+        conf = jev.confidence(answers, "is_real")
+        # Demote only when confidently not-a-question: low probability AND (if the
+        # backend reports it, e.g. OpenJev/Codiv) high enough confidence. Unsure -> keep.
+        if p is not None and p < 0.35 and (conf is None or conf >= 0.55):
             return QualityDecision(True, "jev_not_a_question")
     except Exception:
         pass

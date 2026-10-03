@@ -43,6 +43,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # OpenJev/Codiv (free, un-gated, 100M tokens) is preferred when set;
+          # the Vercel gateway key is the paid fallback. jev.py picks whichever
+          # is present, OpenJev first.
+          CODIV_API_KEY: ${{ secrets.CODIV_API_KEY }}
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           PYTHONUTF8: "1"
         run: |
