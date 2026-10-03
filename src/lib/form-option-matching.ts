@@ -104,7 +104,7 @@ export function matchAvailableOption(question: unknown, wanted: unknown, options
     if (otherUsState && Object.values(states).includes(state)) return otherUsState;
   }
 
-  if (/work authori[sz]ation|authori[sz]ed to work|eligible to work|employment authori[sz]ation/.test(q)) {
+  if (/work authori[sz]ation|authori[sz]ation to work|authori[sz]ed to work|eligible to work|employment authori[sz]ation/.test(q)) {
     const noSponsor = ['us citizen', 'permanent resident', 'green card', 'authorized without employer sponsorship'];
     const futureSponsor = ['visa holder', 'student visa', 'f1', 'opt', 'cpt', 'authorized now but will require employer sponsorship'];
     if (noSponsor.some((intent) => target.includes(intent))) {
