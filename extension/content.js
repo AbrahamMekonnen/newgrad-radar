@@ -832,7 +832,7 @@
           // page until the candidate types. Treat that partial page as a search
           // index, not the complete allowed option set; fillCombo will type the
           // confirmed school and select the dynamically loaded exact result.
-          field.options = /^(school|university|college|institution)$/i.test(String(field.label || '').trim())
+          field.options = /^(school|university|college|institution)$/.test(normalize(field.label))
             && unique.length >= 75 ? [] : unique;
           field.optionSignature = ATS?.optionSignature?.(field.options) || '';
         }
@@ -886,7 +886,7 @@
             localPolicy: true,
           };
         }
-        const searchableSchool = /^(school|university|college|institution)$/i.test(String(field.label || '').trim())
+        const searchableSchool = /^(school|university|college|institution)$/.test(normalize(field.label))
           && answer?.source === 'profile';
         if (answer && !answer.localPolicy && !searchableSchool && ATS?.answerMatchesField && !ATS.answerMatchesField(field, answer)) {
           state.lastFailure = 'stale_plan';
