@@ -378,7 +378,7 @@ export async function POST(request: NextRequest) {
       'profile',
       profile?.require_sponsorship == null ? 'Derived from the confirmed work-authorization status' : 'Matched the confirmed sponsorship preference')) continue;
     }
-    if (policy?.id === 'work_authorization' || /work authorization|authorized to work|eligible to work/.test(q)) {
+    if (policy?.id === 'work_authorization' || /work authori[sz]ation|authori[sz]ed to work|eligible to work/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const options = optionLabels(f).map(norm);
       const binary = options.some((option) => option === 'yes') && options.some((option) => option === 'no');
