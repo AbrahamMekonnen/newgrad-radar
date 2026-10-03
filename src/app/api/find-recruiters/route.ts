@@ -16,13 +16,6 @@ interface RecruiterInfo {
   confidence: number;
 }
 
-// Response shape from AI-generated recruiter data
-interface AIRecruiterResponse {
-  name: string;
-  title?: string;
-  linkedin?: string;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { companySlug, companyName, jobId } = await request.json();
@@ -33,11 +26,7 @@ export async function POST(request: NextRequest) {
 
     const recruiters: RecruiterInfo[] = [];
 
-    // Method 1: Use AI to find recruiters
-    const aiRecruiters = await findRecruitersWithAI(companyName);
-    recruiters.push(...aiRecruiters);
-
-    // Method 2: Search web for recruiter info
+    // Source real recruiters via LinkedIn X-Ray (Serper) — never LLM-generated.
     const webRecruiters = await searchWebForRecruiters(companyName);
     recruiters.push(...webRecruiters);
 
@@ -151,167 +140,62 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function findRecruitersWithAI(companyName: string): Promise<RecruiterInfo[]> {
-  // DISABLED: LLMs hallucinate recruiter names + fake LinkedIn URLs. Real
-  // recruiters are now sourced by the Python pipeline (recruiters/enrich.py:
-  // LinkedIn X-Ray via Serper -> learned-pattern emails) and written to the
-  // recruiters table, which the app reads directly. Never fabricate people.
-  return [];
-  // eslint-disable-next-line no-unreachable
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
+// Source REAL recruiters via a LinkedIn X-Ray on Serper — the same provider and
+// query the Python pipeline (recruiters/enrich.py) uses. Every result is a real
+// public LinkedIn profile from the search index; no names are ever LLM-generated.
+// Requires SERPER_API_KEY in the app env (same key as the scraper's GitHub secret).
+async function searchWebForRecruiters(companyName: string): Promise<RecruiterInfo[]> {
+  const key = process.env.SERPER_API_KEY;
+  if (!key) return [];
+
+  const terms = ['"university recruiter"', '"campus recruiter"', '"early career recruiter"',
+                 '"technical recruiter"', '"talent acquisition"', '"recruiter"'];
+  const query = `site:linkedin.com/in "${companyName}" (${terms.join(' OR ')})`;
+  const recruiterTitle = /\b(recruiter|recruiting|talent acquisition|talent partner|talent sourcer|sourcer|university recruit|campus recruit|early career|early talent|technical recruit|tech recruit|people ops|head of talent|talent lead)\b/i;
+  const companyKey = companyName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   try {
-    const prompt = `Find recruiters, talent acquisition specialists, and hiring managers at ${companyName} who hire for software engineering roles.
-
-For each person, provide:
-- Full name (must be unique - if there are multiple people with similar names, include middle initial or full middle name)
-- EXACT job title (must contain words like Recruiter, Talent, Hiring, HR, People)
-- LinkedIn URL (REQUIRED - only include people whose LinkedIn you can verify)
-
-Return ONLY a JSON array, no other text. Example format:
-[
-  {"name": "John A. Smith", "title": "Technical Recruiter", "linkedin": "linkedin.com/in/johnasmith-recruiter"},
-  {"name": "Jane Doe", "title": "Senior Talent Acquisition Partner", "linkedin": "linkedin.com/in/janedoe-talent"}
-]
-
-CRITICAL RULES:
-1. Only include people you are 100% certain are recruiters at ${companyName}
-2. LinkedIn URL is REQUIRED - skip anyone without a verifiable LinkedIn
-3. The LinkedIn profile MUST show they work at ${companyName} in a recruiting role
-4. Do NOT guess - if unsure, return fewer results or empty array []
-5. Include full names to avoid confusion with non-recruiters who share the same name
-
-If you cannot verify any recruiters with LinkedIn profiles, return: []`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1000,
-          },
-        }),
-      }
-    );
-
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: query, num: 10 }),
+      signal: AbortSignal.timeout(15000),
+    });
     if (!response.ok) return [];
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-
-    // Extract JSON from response
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    return (parsed as AIRecruiterResponse[]).map((r) => ({
-      name: r.name,
-      title: r.title,
-      linkedin_url: r.linkedin ? (r.linkedin.startsWith('http') ? r.linkedin : `https://${r.linkedin}`) : undefined,
-      source: 'ai',
-      confidence: 0.7,
-    }));
-
+    const recruiters: RecruiterInfo[] = [];
+    const seen = new Set<string>();
+    for (const it of (data.organic || []) as { title?: string; link?: string; snippet?: string }[]) {
+      const link = it.link || '';
+      if (!link.includes('linkedin.com/in/')) continue;
+      const title = it.title || '';
+      const hay = `${title} ${it.snippet || ''}`;
+      // Must look like a recruiter AND mention the company (avoid wrong-company hits).
+      if (!recruiterTitle.test(hay)) continue;
+      if (companyKey && !hay.toLowerCase().replace(/[^a-z0-9]/g, '').includes(companyKey)) continue;
+      // LinkedIn titles look like "Jane Doe - Technical Recruiter - Stripe | LinkedIn".
+      const segs = title.split(/\s[-|–]\s/);
+      const name = (segs[0] || '').trim();
+      const parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length < 2 || parts.length > 4) continue;
+      if (!/^[A-Z][A-Za-z.'-]+$/.test(parts[0]) || !/^[A-Z][A-Za-z.'-]+$/.test(parts[1])) continue;
+      const dedupeKey = name.toLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      recruiters.push({
+        name,
+        title: segs.length > 1 ? segs[1].trim() : undefined,
+        linkedin_url: link.split('?')[0],
+        source: 'linkedin_xray',
+        confidence: 0.7,
+      });
+    }
+    return recruiters;
   } catch (error) {
-    console.error('AI recruiter search error:', error);
+    console.error('Recruiter X-Ray search error:', error);
     return [];
   }
-}
-
-async function verifyLinkedInProfile(linkedinUrl: string, companyName: string): Promise<boolean> {
-  // Use AI to verify the LinkedIn profile belongs to a recruiter at this company
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) return true; // If no AI, assume valid
-
-  try {
-    const prompt = `I have a LinkedIn URL: ${linkedinUrl}
-And a company name: ${companyName}
-
-Based on the LinkedIn URL pattern, does this appear to be a recruiter/HR/talent acquisition person at ${companyName}?
-
-Reply with ONLY "YES" or "NO".
-- YES if the URL contains recruiter-related keywords AND company name hints
-- NO if it seems unrelated or you're unsure`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 10 },
-        }),
-      }
-    );
-
-    if (!response.ok) return true;
-
-    const data = await response.json();
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
-    return answer === 'YES';
-  } catch {
-    return true; // Assume valid on error
-  }
-}
-
-async function searchWebForRecruiters(companyName: string): Promise<RecruiterInfo[]> {
-  const recruiters: RecruiterInfo[] = [];
-
-  try {
-    // Use DuckDuckGo to search for recruiters
-    const searchQuery = `${companyName} recruiter OR "talent acquisition" site:linkedin.com`;
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json&no_html=1`;
-
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'NewGradRadar/1.0' },
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!response.ok) return [];
-
-    // DuckDuckGo's instant-answer API frequently returns an empty body for
-    // these queries, which makes response.json() throw. Parse defensively.
-    const raw = await response.text();
-    if (!raw || !raw.trim().startsWith('{')) return [];
-    let data: { RelatedTopics?: { Text?: string; FirstURL?: string }[] };
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return [];
-    }
-
-    // Parse related topics for recruiter names
-    const topics = data.RelatedTopics || [];
-    for (const topic of topics) {
-      const text = topic.Text || '';
-      const firstUrl = topic.FirstURL || '';
-
-      // Look for LinkedIn profiles
-      if (firstUrl.includes('linkedin.com/in/')) {
-        const nameMatch = text.match(/^([A-Z][a-z]+ [A-Z][a-z]+)/);
-        if (nameMatch) {
-          recruiters.push({
-            name: nameMatch[1],
-            linkedin_url: firstUrl,
-            source: 'web_search',
-            confidence: 0.5,
-          });
-        }
-      }
-    }
-
-  } catch (error) {
-    console.error('Web search error:', error);
-  }
-
-  return recruiters;
 }
 
 async function guessCompanyDomain(companyName: string): Promise<string | null> {
