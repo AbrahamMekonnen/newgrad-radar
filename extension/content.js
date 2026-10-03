@@ -1325,7 +1325,32 @@
       });
     }
     banner('HireRadar filled every required field and is submitting the application...');
+    let submitEventObserved = false;
+    const observeSubmit = () => { submitEventObserved = true; };
+    form?.addEventListener?.('submit', observeSubmit, { capture: true, once: true });
     submit.click();
+    // Some React ATS forms render a valid native submit button but fail to
+    // dispatch the form submit event from an untrusted programmatic click. If
+    // the click did not start any visible processing, use the standards-based
+    // requestSubmit path. It reruns native constraint validation and invokes
+    // the form's submit handlers; it does not bypass validation.
+    await wait(350);
+    const processing = submit.disabled || submit.getAttribute('aria-busy') === 'true'
+      || /loading|submitting|processing/.test(normalize(submit.textContent || submit.value || ''));
+    if (!submitEventObserved && !processing && form?.requestSubmit) {
+      data.submitDispatchMode = 'requestSubmit';
+      persist(data);
+      if (data.browserWorker) await send({
+        type: 'PROGRESS', stage: 'submit_started',
+        detail: { filled: (data.fields || []).length, total: (data.fields || []).length,
+          detail: JSON.stringify({ message: 'The ATS click did not dispatch submit; retrying through form.requestSubmit().',
+            diagnostic: EXEC?.safeDiagnostic?.({ code: 'submit_dispatch_fallback', ats: data.atsType, category: 'requestSubmit', attempt: data.submitAttempts }) }) },
+      });
+      form.requestSubmit(submit);
+    } else {
+      data.submitDispatchMode = submitEventObserved ? 'click_submit_event' : 'click_processing';
+      persist(data);
+    }
     return true;
   };
 
