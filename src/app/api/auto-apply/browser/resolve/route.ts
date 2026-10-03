@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
       const inferredState = profile?.state || String(profile?.location || '').split(',').map((part: string) => part.trim()).filter(Boolean).at(-1);
       if (pick(f, inferredState)) continue;
     }
-    if (/country/.test(q) && pick(f, profile?.country || fact('current_country'))) continue;
+    if (/countr(?:y|ies)/.test(q) && pick(f, profile?.country || fact('current_country'))) continue;
     if ((policy?.id === 'degree' || /degree|education level|qualification/.test(q)) && pick(f, profile?.education_degree)) continue;
     if (/have or are you currently pursuing a college degree|currently pursuing.*degree/.test(q)
       && pick(f, profile?.education_degree ? 'Yes' : null, 'profile', 'Confirmed current or completed college education from the profile')) continue;
