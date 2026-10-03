@@ -194,8 +194,31 @@ async function main() {
       });
       await page.addInitScript(() => {
         globalThis.chrome = { runtime: { sendMessage: (message) => globalThis.__hrMessage(message) } };
+        globalThis.__hireRadarDomEvents = [];
+        const record = (type, event) => {
+          const target = event.target;
+          const form = target?.form || target?.closest?.('form');
+          globalThis.__hireRadarDomEvents.push({ at: Date.now(), type, trusted: Boolean(event.isTrusted),
+            target: String(target?.tagName || '').toLowerCase(), targetType: String(target?.type || ''),
+            text: String(target?.textContent || target?.value || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+            defaultPrevented: Boolean(event.defaultPrevented), formValid: form?.checkValidity?.() ?? null });
+          if (globalThis.__hireRadarDomEvents.length > 100) globalThis.__hireRadarDomEvents.shift();
+        };
+        addEventListener('click', (event) => {
+          if (event.target?.closest?.('button,input[type="submit"],input[type="button"]')) record('click', event);
+        }, true);
+        addEventListener('submit', (event) => record('submit', event), true);
+        addEventListener('invalid', (event) => record('invalid', event), true);
       });
       const injectProductionEngine = async (frame = page.mainFrame()) => {
+        if (await frame.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
+        // Manifest content scripts run at document_idle. Match that timing so
+        // QA never mutates a React form while the ATS is still hydrating.
+        await frame.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+        await frame.evaluate(() => new Promise((resolve) => {
+          if ('requestIdleCallback' in globalThis) requestIdleCallback(() => resolve(), { timeout: 1500 });
+          else setTimeout(resolve, 300);
+        })).catch(() => {});
         if (await frame.evaluate(() => Boolean(globalThis.__hireRadarAutoApplyLoaded)).catch(() => true)) return;
         for (const file of modules) await frame.addScriptTag({ path: file });
       };
@@ -264,7 +287,7 @@ async function main() {
         };
         const nodes = [...document.querySelectorAll('input,select,textarea,[role="combobox"],[contenteditable="true"]')]
           .filter((element) => visible(element) && !['hidden', 'submit', 'button'].includes(String(element.type || '').toLowerCase()));
-        return { frameIndex, url: location.href, controls: nodes.map((element, index) => {
+        return { frameIndex, url: location.href, domEvents: globalThis.__hireRadarDomEvents || [], controls: nodes.map((element, index) => {
           const isCombo = element.getAttribute('role') === 'combobox' || element.getAttribute('aria-autocomplete');
           let committedCombo = false;
           if (isCombo) {
