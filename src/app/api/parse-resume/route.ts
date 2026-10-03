@@ -5,28 +5,40 @@ import crypto from 'crypto';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// Gemini models to try in order of preference (current, non-deprecated).
+// Gemini models to try in order of preference. gemini-flash-latest is the live
+// alias that works on current keys; gemini-2.5-flash is NOT available to new API
+// keys (404 "no longer available to new users"), so it must not lead or every
+// request wastes a guaranteed-failing first call.
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',
   'gemini-flash-latest',
   'gemini-2.5-flash-lite',
 ];
 
-// OpenAI-compatible free providers, tried in order after Gemini. The resume
-// parser falls through these as each hits its quota, so extraction stays
-// reliable for free — the same backup chain used across the app.
-interface OAProvider { name: string; baseUrl: string; apiKey?: string; models: string[] }
+// A resume is PERSONAL data, so it must only ever go to providers that DO NOT
+// train on their inputs. That rules out the free Gemini tier and Mistral's
+// Experiment tier (both train) — those are reserved for public-data crons, never
+// here. These are all OpenAI-compatible and no-train, tried in order; each is
+// skipped when its key isn't set, so the chain works with whatever is configured.
+// Order = fastest/most-generous hosted first, with a self-owned Modal endpoint
+// LAST as a scale-to-zero floor (idle = $0) that only runs if all hosted ones are down.
+interface OAProvider { name: string; baseUrl: string; apiKey?: string; models: string[]; trainsOnData: boolean }
+const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 const OA_PROVIDERS: OAProvider[] = [
+  { name: 'nvidia', baseUrl: 'https://integrate.api.nvidia.com/v1/chat/completions', apiKey: process.env.NVIDIA_API_KEY,
+    models: ['qwen/qwen2.5-7b-instruct', 'meta/llama-3.1-8b-instruct'], trainsOnData: false },
+  { name: 'cloudflare', baseUrl: CF_ACCOUNT ? `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/v1/chat/completions` : '',
+    apiKey: process.env.CLOUDFLARE_AI_TOKEN,
+    models: ['@cf/qwen/qwen2.5-7b-instruct', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'], trainsOnData: false },
   { name: 'groq', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY,
-    models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'] },
-  { name: 'cerebras', baseUrl: 'https://api.cerebras.ai/v1/chat/completions', apiKey: process.env.CEREBRAS_API_KEY,
-    models: ['llama-3.3-70b', 'gpt-oss-120b'] },
-  { name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/chat/completions', apiKey: process.env.OPENROUTER_API_KEY,
-    models: ['meta-llama/llama-3.3-70b-instruct:free'] },
-  { name: 'mistral', baseUrl: 'https://api.mistral.ai/v1/chat/completions', apiKey: process.env.MISTRAL_API_KEY,
-    models: ['mistral-small-latest'] },
+    models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], trainsOnData: false },
   { name: 'together', baseUrl: 'https://api.together.xyz/v1/chat/completions', apiKey: process.env.TOGETHER_API_KEY,
-    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo-Free'] },
+    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo-Free'], trainsOnData: false },
+  { name: 'cerebras', baseUrl: 'https://api.cerebras.ai/v1/chat/completions', apiKey: process.env.CEREBRAS_API_KEY,
+    models: ['llama-3.3-70b', 'gpt-oss-120b'], trainsOnData: false },
+  // Owned last-resort floor: your Modal endpoint (Qwen2.5-7B, scale-to-zero).
+  // Only reached when every hosted provider above is unavailable; idle costs $0.
+  { name: 'modal', baseUrl: process.env.MODAL_LLM_URL || '', apiKey: process.env.MODAL_LLM_SECRET,
+    models: [process.env.MODAL_LLM_MODEL || 'qwen2.5-7b-instruct'], trainsOnData: false },
 ];
 
 // In-memory cache for parsed resumes
@@ -188,9 +200,11 @@ async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
 }
 
 async function parseResumeWithAI(resumeText: string): Promise<ResumeData> {
-  const hasAnyProvider = GEMINI_API_KEY || OA_PROVIDERS.some((p) => p.apiKey);
-  if (!hasAnyProvider) {
-    throw new Error('No AI API key configured (set GEMINI_API_KEY, GROQ_API_KEY, or another provider key)');
+  const hasUsableProvider = OA_PROVIDERS.some((p) => p.apiKey && p.baseUrl);
+  if (!hasUsableProvider) {
+    throw new Error('No no-train AI provider configured for resume parsing. Set one of: '
+      + 'NVIDIA_API_KEY, CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AI_TOKEN, GROQ_API_KEY, '
+      + 'TOGETHER_API_KEY, CEREBRAS_API_KEY, or MODAL_LLM_URL + MODAL_LLM_SECRET.');
   }
 
   const prompt = `Parse this resume text into a structured JSON format. Extract all information accurately - do NOT invent or add anything that isn't in the text.
@@ -254,8 +268,13 @@ Rules:
 
   let lastError: Error | null = null;
 
-  // Try Gemini first if available
-  if (GEMINI_API_KEY) {
+  // A resume is PII, so train-on-data providers (free Gemini, Mistral Experiment)
+  // are OFF here. Keep this false on the resume path; only a non-PII caller would
+  // ever flip it. This is what prevents resume text from being used for training.
+  const ALLOW_TRAIN_ON_DATA = false;
+
+  // Gemini (free tier) trains on inputs — disabled for resumes via the flag above.
+  if (ALLOW_TRAIN_ON_DATA && GEMINI_API_KEY) {
     for (const model of GEMINI_MODELS) {
       try {
         console.log(`[parse-resume] Trying Gemini model: ${model}`);
@@ -274,9 +293,10 @@ Rules:
     }
   }
 
-  // Fall back through the OpenAI-compatible free providers in order.
+  // Fall through the no-train OpenAI-compatible providers in order (Modal last).
   for (const provider of OA_PROVIDERS) {
-    if (!provider.apiKey) continue;
+    if (!provider.apiKey || !provider.baseUrl) continue;      // not configured
+    if (!ALLOW_TRAIN_ON_DATA && provider.trainsOnData) continue; // PII guard
     for (const model of provider.models) {
       try {
         console.log(`[parse-resume] Trying ${provider.name} model: ${model}`);
@@ -386,6 +406,9 @@ async function callOpenAICompatibleAPI(provider: OAProvider, model: string, prom
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${provider.apiKey}`,
+      // Groq (and some others) front their API with Cloudflare, which 403s the
+      // default server/runtime agent (error 1010). A browser UA gets through.
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     },
     body: JSON.stringify({
       model,
