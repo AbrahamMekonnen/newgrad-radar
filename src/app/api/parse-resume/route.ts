@@ -25,7 +25,7 @@ interface OAProvider { name: string; baseUrl: string; apiKey?: string; models: s
 const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 const OA_PROVIDERS: OAProvider[] = [
   { name: 'nvidia', baseUrl: 'https://integrate.api.nvidia.com/v1/chat/completions', apiKey: process.env.NVIDIA_API_KEY,
-    models: ['qwen/qwen2.5-7b-instruct', 'meta/llama-3.1-8b-instruct'], trainsOnData: false },
+    models: ['openai/gpt-oss-20b'], trainsOnData: false },
   { name: 'cloudflare', baseUrl: CF_ACCOUNT ? `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/v1/chat/completions` : '',
     apiKey: process.env.CLOUDFLARE_AI_TOKEN,
     models: ['@cf/qwen/qwen2.5-7b-instruct', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'], trainsOnData: false },
