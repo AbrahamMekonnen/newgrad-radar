@@ -219,8 +219,39 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
     }
   };
 
+  // The important fields the résumé/AI couldn't fill — surfaced in red up top so
+  // the user knows exactly what still needs them. Recomputes live as they type.
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : v ? String(v) : '');
+  const incomplete: string[] = [];
+  if (!str(formData.first_name)) incomplete.push('First name');
+  if (!str(formData.last_name)) incomplete.push('Last name');
+  if (!str(formData.email)) incomplete.push('Email');
+  if (!str(formData.phone)) incomplete.push('Phone');
+  if (!str(formData.location) && !(str(formData.city) && str(formData.state))) incomplete.push('Location');
+  if (!str(formData.linkedin_url) && !str(formData.github_url)) incomplete.push('LinkedIn or GitHub');
+  if (!str(formData.work_authorization)) incomplete.push('Work authorization');
+  if (!str(formData.years_experience)) incomplete.push('Years of experience');
+  if (!(formData.work_experience?.length)) incomplete.push('Work experience');
+  if (!(formData.education_history?.length)) incomplete.push('Education');
+  if (!str(formData.writing_sample)) incomplete.push('Writing sample (big quality boost for AI answers)');
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+      {incomplete.length > 0 && (
+        <div className="rounded-lg border-2 border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-900/20 p-4">
+          <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+            {incomplete.length} {incomplete.length === 1 ? 'thing needs' : 'things need'} your input — the résumé couldn&apos;t fill {incomplete.length === 1 ? 'it' : 'these'}
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {incomplete.map((f) => (
+              <li key={f} className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 text-xs font-medium px-2.5 py-1">
+                {f}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">Fill these in below, then click Save. Everything else was filled or defaulted for you — review and adjust anything.</p>
+        </div>
+      )}
       {/* Personal Information */}
       <section>
         <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h2>
