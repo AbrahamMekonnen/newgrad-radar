@@ -311,9 +311,16 @@
         // that processing finished; unrelated stale live regions are ignored.
         const shell = entry || ashbyQuestionContainer(input) || input?.parentElement;
         const text = normalize(shell?.textContent || '');
-        const retainedName = /\b(pdf|doc|docx|rtf|txt)\b/.test(text);
+        const retainedName = /\.(?:pdf|docx?|rtf|txt)\b/.test(text)
+          || /\b(?:resume|cv)[-_ a-z0-9]*\b(?:pdf|docx?|rtf|txt)\b/.test(text);
         const replaceAction = /\breplace\b|\bremove file\b|\bdownload\b/.test(text);
-        return Boolean(shell && (retainedName || replaceAction));
+        if (shell && (retainedName || replaceAction)) return true;
+        // Ashby leaves a generic live/status node mounted after its uploader
+        // settles. If the resume control is no longer busy and no upload error
+        // is visible, do not let that stale node block the entire application.
+        const busy = Boolean(shell?.querySelector?.('[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=spinner]'));
+        const error = /upload failed|could not upload|unsupported file|file too (?:large|small)|try again/.test(text);
+        return waitedMs >= 8000 && Boolean(shell) && !busy && !error;
       },
       submissionComplete(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');

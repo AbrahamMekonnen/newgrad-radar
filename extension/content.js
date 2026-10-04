@@ -513,7 +513,13 @@
         ariaLabel: element.getAttribute('aria-label') || field.label || '',
         value: String(inputValue),
       });
-      return committed?.ok === true;
+      if (committed?.ok === true) return true;
+      // Keep the isolated-world write as a safe fallback when a browser does
+      // not expose documentId targeting. Verify the live control after React
+      // has had two render frames rather than treating a missing bridge reply
+      // as an immediate field failure.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return String(element.value) === String(inputValue);
     }
     return true;
   };

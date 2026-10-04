@@ -136,7 +136,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (/community\.workday\.com\/invalid-url/i.test(currentUrl)) {
     currentByTab.delete(tabId);
     await chrome.storage.session.remove('job:' + tabId);
-    await report(job, 'failed', { detail: 'The Workday posting redirected to its invalid/expired-job page.' }).catch(() => undefined);
+    await report(job, 'failed', { detail: JSON.stringify({
+      message: 'The Workday posting redirected to its invalid/expired-job page.',
+      diagnostic: { code: 'posting_unavailable', ats: 'workday', category: 'stale_posting' },
+    }) }).catch(() => undefined);
     void poll();
     return;
   }
@@ -208,9 +211,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'SET_MAIN_WORLD_VALUE') {
       const tabId = sender.tab?.id;
-      if (!tabId) return { ok: false };
+      if (!tabId) return { ok: false, reason: 'missing_tab' };
+      const target = sender.documentId
+        ? { tabId, documentIds: [sender.documentId] }
+        : { tabId, frameIds: [Number.isInteger(sender.frameId) ? sender.frameId : 0] };
       const [{ result } = {}] = await chrome.scripting.executeScript({
-        target: { tabId, frameIds: [sender.frameId || 0] },
+        target,
         world: 'MAIN',
         args: [{ id: message.elementId, name: message.elementName, ariaLabel: message.ariaLabel, value: message.value }],
         func: ({ id, name, ariaLabel, value }) => {
@@ -218,7 +224,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const element = (id && document.getElementById(id))
             || (name && document.querySelector(`[name="${escaped(name)}"]`))
             || (ariaLabel && document.querySelector(`[aria-label="${escaped(ariaLabel)}"]`));
-          if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return false;
+          if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
+            return { ok: false, reason: 'element_not_found', id, name, ariaLabel };
+          }
           element.focus({ preventScroll: true });
           const proto = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
           const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
@@ -229,11 +237,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
           }
           element.dispatchEvent(new Event('change', { bubbles: true }));
-          element.blur();
-          return String(element.value) === String(value);
+          return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+            const retained = String(element.value) === String(value);
+            if (retained) element.blur();
+            resolve({ ok: retained, reason: retained ? '' : 'value_not_retained', actual: String(element.value) });
+          })));
         },
       });
-      return { ok: result === true };
+      return result && typeof result === 'object' ? result : { ok: result === true, reason: 'no_result' };
     }
     if (message.type === 'RESOLVE_FIELDS') {
       const tabId = sender.tab?.id;
