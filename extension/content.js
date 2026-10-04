@@ -38,10 +38,24 @@
     const proto = element instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    element.focus?.({ preventScroll: true });
     if (setter) setter.call(element, String(value));
     else element.value = String(value);
-    element.dispatchEvent(new Event('input', { bubbles: true }));
+    // Greenhouse's controlled number inputs only commit after a real input
+    // event followed by change/blur. A plain Event can update the DOM while
+    // leaving React state stale, after which the next render clears the year.
+    try {
+      element.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        composed: true,
+        inputType: 'insertText',
+        data: String(value),
+      }));
+    } catch {
+      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    }
     element.dispatchEvent(new Event('change', { bubbles: true }));
+    element.blur?.();
   };
   const setNativeChecked = (element, checked) => {
     const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');

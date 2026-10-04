@@ -157,7 +157,10 @@ export async function PATCH(request: NextRequest) {
     if (!receipt?.ok) return json({ error: receipt?.error === 'lease_expired' ? 'Lease expired' : 'Could not record submission' }, 409);
     return json({ ok: true, submittedAt: receipt.submittedAt, alreadyRecorded: receipt.alreadyRecorded === true });
   }
+  const terminalPostingFailure = stage === 'failed' && diagnostics.some((item) =>
+    item.code === 'posting_unavailable' || item.category === 'stale_posting');
   const status = stage === 'waiting_for_user' ? 'waiting_for_user'
+    : terminalPostingFailure ? 'expired'
     : stage === 'failed' ? 'waiting_for_browser' : 'browser_filling';
   const { error } = await db.from('autoapply_job_queue').update({
     status, browser_stage: stage, browser_progress: progress,
