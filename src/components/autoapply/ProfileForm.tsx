@@ -220,32 +220,41 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   };
 
   // The important fields the résumé/AI couldn't fill — surfaced in red up top so
-  // the user knows exactly what still needs them. Recomputes live as they type.
+  // the user knows exactly what still needs them. Each carries a scroll anchor to
+  // the field below. Recomputes live as they type, so the list shrinks to zero.
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : v ? String(v) : '');
-  const incomplete: string[] = [];
-  if (!str(formData.first_name)) incomplete.push('First name');
-  if (!str(formData.last_name)) incomplete.push('Last name');
-  if (!str(formData.email)) incomplete.push('Email');
-  if (!str(formData.phone)) incomplete.push('Phone');
-  if (!str(formData.location) && !(str(formData.city) && str(formData.state))) incomplete.push('Location');
-  if (!str(formData.linkedin_url) && !str(formData.github_url)) incomplete.push('LinkedIn or GitHub');
-  if (!str(formData.work_authorization)) incomplete.push('Work authorization');
-  if (!str(formData.years_experience)) incomplete.push('Years of experience');
-  if (!(formData.work_experience?.length)) incomplete.push('Work experience');
-  if (!(formData.education_history?.length)) incomplete.push('Education');
-  if (!str(formData.writing_sample)) incomplete.push('Writing sample (big quality boost for AI answers)');
+  const incomplete: { label: string; anchor: string }[] = [];
+  const need = (cond: boolean, label: string, anchor: string) => { if (cond) incomplete.push({ label, anchor }); };
+  need(!str(formData.first_name), 'First name', 'need-personal');
+  need(!str(formData.last_name), 'Last name', 'need-personal');
+  need(!str(formData.email), 'Email', 'need-personal');
+  need(!str(formData.phone), 'Phone', 'need-personal');
+  need(!str(formData.location) && !(str(formData.city) && str(formData.state)), 'Location', 'need-personal');
+  need(!str(formData.linkedin_url) && !str(formData.github_url), 'LinkedIn or GitHub', 'need-links');
+  need(!str(formData.work_authorization), 'Work authorization', 'need-workauth');
+  need(!str(formData.years_experience), 'Years of experience', 'need-years');
+  need(!(formData.work_experience?.length), 'Work experience', 'need-work-experience');
+  need(!(formData.education_history?.length), 'Education', 'need-education');
+  need(!str(formData.writing_sample), 'Writing sample (big quality boost)', 'need-writing-sample');
+  const needsAnchor = (a: string) => incomplete.some((i) => i.anchor === a);
+  // Red outline + scroll offset for a flagged container (empty) vs a normal one.
+  const flag = (a: string, base = '') => `${base} scroll-mt-24 ${needsAnchor(a) ? 'rounded-lg ring-2 ring-red-300 ring-offset-2 dark:ring-red-700' : ''}`.trim();
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
       {incomplete.length > 0 && (
         <div className="rounded-lg border-2 border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-900/20 p-4">
           <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-            {incomplete.length} {incomplete.length === 1 ? 'thing needs' : 'things need'} your input — the résumé couldn&apos;t fill {incomplete.length === 1 ? 'it' : 'these'}
+            {incomplete.length} {incomplete.length === 1 ? 'thing needs' : 'things need'} your input — the résumé couldn&apos;t fill {incomplete.length === 1 ? 'it' : 'these'}. Tap one to jump to it.
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {incomplete.map((f) => (
-              <li key={f} className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 text-xs font-medium px-2.5 py-1">
-                {f}
+              <li key={f.label}>
+                <button type="button"
+                  onClick={() => document.getElementById(f.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                  className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 text-xs font-medium px-2.5 py-1 hover:bg-red-200 dark:hover:bg-red-800/70 cursor-pointer">
+                  {f.label}
+                </button>
               </li>
             ))}
           </ul>
@@ -253,7 +262,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         </div>
       )}
       {/* Personal Information */}
-      <section>
+      <section id="need-personal" className={flag('need-personal')}>
         <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <DebouncedInput
@@ -336,7 +345,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Work Experience — full detail for ATS sections that ask you to re-enter each job */}
-      <section>
+      <section id="need-work-experience" className={flag('need-work-experience')}>
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-medium text-gray-900">Work Experience</h2>
           <button type="button" onClick={addExp} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add role</button>
@@ -371,7 +380,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Education — full detail */}
-      <section>
+      <section id="need-education" className={flag('need-education')}>
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-medium text-gray-900">Education</h2>
           <button type="button" onClick={addEdu} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add school</button>
@@ -401,7 +410,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       </section>
 
       {/* Links */}
-      <section>
+      <section id="need-links" className={flag('need-links')}>
         <h2 className="text-lg font-medium text-gray-900 mb-4">Links</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <DebouncedInput
@@ -573,7 +582,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         </p>
 
         <div className="space-y-4">
-          <div>
+          <div id="need-workauth" className={flag('need-workauth')}>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Work Authorization
             </label>
@@ -635,7 +644,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             </div>
           </div>
 
-          <div>
+          <div id="need-years" className={flag('need-years')}>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Years of Experience
             </label>
@@ -823,7 +832,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
             <textarea rows={3} value={formData.career_goals || ''} onChange={(e) => handleChange('career_goals', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
           </div>
-          <div>
+          <div id="need-writing-sample" className={flag('need-writing-sample')}>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Writing sample <span className="text-indigo-600 font-semibold">(biggest quality boost)</span>
             </label>
