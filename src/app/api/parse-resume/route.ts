@@ -176,12 +176,14 @@ async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
   // be read".)
   try {
     const { extractText, getDocumentProxy } = await import('unpdf');
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    // Pass a COPY — pdfjs detaches the backing ArrayBuffer, which would later
+    // break appendPdfLinks()/the raw fallback that re-read `buffer`.
+    const pdf = await getDocumentProxy(new Uint8Array(buffer.slice(0)));
     const { text } = await extractText(pdf, { mergePages: true });
     const merged = (Array.isArray(text) ? text.join('\n') : text || '').trim();
     if (merged.length > 30) {
       console.log('[parse-resume] unpdf extracted text length:', merged.length);
-      return merged;
+      return appendPdfLinks(merged, buffer);
     }
     console.warn('[parse-resume] unpdf produced too little text; using raw fallback');
   } catch (e) {
@@ -196,7 +198,27 @@ async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
     .map((m) => m.slice(1, -1))
     .filter((t) => t.length > 2 && /[a-zA-Z]/.test(t))
     .join(' ');
-  return extractedText || rawText.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim();
+  return appendPdfLinks(extractedText || rawText.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim(), buffer);
+}
+
+// Résumés render "LinkedIn"/"GitHub"/"Portfolio" as clickable words — the real
+// URL lives in the PDF's /URI link actions, NOT the text layer the extractor
+// reads, so the model never sees it and leaves those fields blank. Pull the URIs
+// straight from the raw bytes (pdfjs's annotation reader is unreliable across
+// Node versions) and append them so the model can fill linkedin/github/portfolio.
+function appendPdfLinks(text: string, buffer: ArrayBuffer): string {
+  try {
+    const raw = Buffer.from(buffer).toString('latin1');
+    const urls = new Set<string>();
+    for (const m of raw.matchAll(/\/URI\s*\(([^)]+)\)/g)) {
+      const u = m[1].replace(/\\(.)/g, '$1').trim();
+      if (/^https?:\/\//i.test(u)) urls.add(u);
+    }
+    if (!urls.size) return text;
+    return `${text}\n\nLinks found in the document:\n${[...urls].join('\n')}`;
+  } catch {
+    return text;
+  }
 }
 
 async function parseResumeWithAI(resumeText: string): Promise<ResumeData> {
