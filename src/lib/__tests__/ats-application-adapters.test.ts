@@ -145,6 +145,20 @@ describe('browser ATS adapters', () => {
     input.files = [];
     expect(ATS.adapters.ashby.uploadReadyOverride(doc, 60000)).toBe(false);
   });
+  it('accepts an Ashby file that the helper assigned and Ashby ingested without an upload error', () => {
+    const entry = {
+      textContent: 'Resume Replace',
+      querySelector: () => null,
+    };
+    const input = {
+      type: 'file', files: [],
+      getAttribute: (name: string) => name === 'data-hireradar-uploaded' ? 'resume.pdf' : null,
+      closest: () => entry,
+    };
+    expect(ATS.adapters.ashby.fieldAccepted(input, '')).toBe(true);
+    entry.textContent = 'Resume upload failed. Try again.';
+    expect(ATS.adapters.ashby.fieldAccepted(input, '')).toBe(false);
+  });
   it('confirms Ashby only after the form is replaced by a positive receipt', () => {
     const panel = {
       textContent: 'Thank you for your interest. Our team will review your application.',

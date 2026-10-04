@@ -261,6 +261,15 @@
         return true;
       },
       fieldAccepted(element, wanted) {
+        if (element?.type === 'file') {
+          if (element.files?.length) return true;
+          const entry = ashbyQuestionContainer(element);
+          const text = normalize(entry?.textContent || '');
+          const uploadedByHelper = Boolean(element.getAttribute?.('data-hireradar-uploaded'));
+          const busy = Boolean(entry?.querySelector?.('[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=spinner]'));
+          const error = /upload failed|could not upload|unsupported file|file too (?:large|small)|try again/.test(text);
+          return uploadedByHelper && !busy && !error;
+        }
         if (element?.type !== 'checkbox') return null;
         const entry = ashbyQuestionContainer(element);
         const yesNo = entry?.querySelector('.ashby-application-form-input-yesno');
@@ -320,7 +329,8 @@
         // is visible, do not let that stale node block the entire application.
         const busy = Boolean(shell?.querySelector?.('[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=spinner]'));
         const error = /upload failed|could not upload|unsupported file|file too (?:large|small)|try again/.test(text);
-        return waitedMs >= 8000 && Boolean(shell) && !busy && !error;
+        const uploadedByHelper = Boolean(input?.getAttribute?.('data-hireradar-uploaded'));
+        return waitedMs >= 8000 && uploadedByHelper && !busy && !error;
       },
       submissionComplete(doc) {
         const panel = doc.querySelector('#form[role="tabpanel"], .ashby-application-form');

@@ -450,7 +450,12 @@
         element.files = transfer.files;
         element.dispatchEvent(new Event('input', { bubbles: true }));
         element.dispatchEvent(new Event('change', { bubbles: true }));
-        return element.files?.length === 1;
+        const assigned = element.files?.length === 1;
+        if (assigned) {
+          element.setAttribute('data-hireradar-uploaded', file.name);
+          element.setAttribute('data-hireradar-uploaded-at', String(Date.now()));
+        }
+        return assigned;
       } catch { return false; }
     }
 
@@ -1312,7 +1317,7 @@
     const invalids = [...new Set([
       ...(adapterInvalid ? [adapterInvalid] : []),
       ...(EXEC?.requiredInvalids?.(form) || []),
-    ])];
+    ])].filter((element) => adapter?.fieldAccepted?.(element, '') !== true);
     if (invalids.length) {
       const firstInvalid = invalids[0];
       const firstLabel = fieldLabelFor(firstInvalid) || firstInvalid.name || firstInvalid.id;
