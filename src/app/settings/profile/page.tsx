@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { UserProfile } from '@/lib/types';
 import { upsertUserProfile } from '@/lib/saveProfile';
+import { hydrateProfileSections, dehydrateProfileSections } from '@/lib/profileSections';
 import { ProfileForm, StoryBankSection } from '@/components/autoapply';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 
@@ -34,7 +35,7 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
     }
 
     if (data) {
-      setProfile(data);
+      setProfile(hydrateProfileSections(data as UserProfile));
     } else {
       // Set defaults
       setProfile({
@@ -74,10 +75,10 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
   }, [fetchProfile]);
 
   const handleSave = async (updatedProfile: UserProfile) => {
-    const { error } = await upsertUserProfile(supabase, {
+    const { error } = await upsertUserProfile(supabase, dehydrateProfileSections({
       ...updatedProfile,
       updated_at: new Date().toISOString(),
-    });
+    }));
 
     if (error) {
       throw error;

@@ -544,7 +544,7 @@ export async function POST(request: NextRequest) {
     // answers, projects) AND the actual job posting, so "why this company/role"
     // answers cite specific, true details instead of generic praise.
     const storyBank = Object.entries(custom)
-      .filter(([k, v]) => !k.startsWith('__fact:') && typeof v === 'string' && v.trim().length > 24)
+      .filter(([k, v]) => !k.startsWith('__') && typeof v === 'string' && v.trim().length > 24)
       .slice(0, 8).map(([k, v]) => `- ${k}: ${v}`).join('\n');
     // Pull the STAR stories the user curated into their Story Bank so behavioral and
     // "tell us about a time" answers draw on real experiences they wrote down, not just

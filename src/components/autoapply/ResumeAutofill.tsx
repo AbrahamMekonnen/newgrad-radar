@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { UserProfile } from '@/lib/types';
 import { mapResumeToProfile } from '@/lib/resumeToProfile';
 import { upsertUserProfile } from '@/lib/saveProfile';
+import { hydrateProfileSections, dehydrateProfileSections } from '@/lib/profileSections';
 import type { ResumeData } from '@/lib/resume-templates';
 
 /**
@@ -61,7 +62,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
       // 2) Load any existing profile so we never overwrite what the user set.
       const { data: existing } = await supabase
         .from('user_profiles').select('*').eq('user_id', userId).single();
-      const base: UserProfile = existing ? (existing as UserProfile) : defaults();
+      const base: UserProfile = existing ? hydrateProfileSections(existing as UserProfile) : defaults();
 
       // 3) Extract (LLM) + map (deterministic).
       setBusy('reading');
@@ -80,14 +81,14 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
 
       // 4) Save the filled profile on the user's behalf.
       setBusy('saving');
-      const { error: saveErr } = await upsertUserProfile(supabase, {
+      const { error: saveErr } = await upsertUserProfile(supabase, dehydrateProfileSections({
         ...base,
         ...updates,
         resume_url: resumeUrl,
         resume_filename: file.name,
         email: base.email || email,
         updated_at: new Date().toISOString(),
-      });
+      }));
       if (saveErr) throw new Error((saveErr as { message?: string })?.message || 'Could not save your profile');
 
       setResult({ ok: true, filled, updated, missing, filename: file.name });
