@@ -238,7 +238,6 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     }
 
     addFact('security_clearance', sf.security_clearance, 'Security clearance');
-    addFact('military_service', sf.military_service, 'Military service');
     addFact('other_languages', sf.languages, 'Other languages');
     addFact('english_level', sf.english_proficiency && ENGLISH.includes(sf.english_proficiency) ? sf.english_proficiency : null, 'English proficiency');
   }
@@ -261,6 +260,47 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
   fillFactIfEmpty('recent_job_title', exp[0]?.title || null, 'Current/most recent job title');
   const internCount = exp.filter((e) => /intern|co-?op/i.test(e.title || '')).length;
   if (internCount > 0) fillFactIfEmpty('internship_count', String(internCount), 'Number of internships');
+
+  // Sensible defaults for the common application acknowledgements/consents and
+  // the demographic self-ID fields, so the profile reads as complete and the agent
+  // isn't stopped to ask on every application. These are the SAME conservative
+  // answers the resolver would use at apply time — surfaced here so they're visible
+  // and editable. Fill-only (never overwrites a choice you made); you review before Save.
+  const DEFAULT_FACTS: Array<[string, string, string]> = [
+    // Demographics / protected self-ID → privacy-preserving decline (a real, safe answer).
+    ['gender_preference', 'Decline to self-identify', 'Gender'],
+    ['gender_identity_preference', 'Decline to self-identify', 'Gender identity'],
+    ['ethnicity_preference', 'Decline to self-identify', 'Hispanic/Latino'],
+    ['race_preference', 'Decline to self-identify', 'Race'],
+    ['sexual_orientation_preference', 'Decline to self-identify', 'Sexual orientation'],
+    ['veteran_preference', 'Decline to self-identify', 'Veteran status'],
+    ['disability_preference', 'Decline to self-identify', 'Disability status'],
+    // Contact / marketing consents → conservative opt-out.
+    ['sms_consent', 'No', 'SMS consent'],
+    ['whatsapp_consent', 'No', 'WhatsApp consent'],
+    ['marketing_communications', 'No', 'Marketing opt-in'],
+    ['interview_recording_consent', 'No', 'Interview recording'],
+    ['ai_notetaker_consent', 'No', 'AI notetaker'],
+    // Acknowledgements you must accept to submit an application → Yes.
+    ['privacy_acknowledgement', 'Yes', 'Privacy notice'],
+    ['demographic_data_consent', 'Yes', 'Demographic data consent'],
+    ['arbitration_acknowledgement', 'Yes', 'Arbitration agreement'],
+    ['truthfulness_certification', 'Yes', 'Truthfulness certification'],
+    ['interview_assistance_policy_acknowledgement', 'Yes', 'Interview-assistance policy'],
+    ['ai_use_policy_acknowledgement', 'Yes', 'Responsible-AI policy'],
+    // Flexibility a job-seeker is generally open to → Yes.
+    ['remote_work', 'Yes', 'Comfortable working remotely'],
+    ['onsite_five_days', 'Yes', 'Available onsite five days'],
+    ['travel', 'Yes', 'Willing to travel'],
+    // Government / military service → No for the vast majority (correct it if that's not you).
+    ['government_current', 'No', 'Current government employee'],
+    ['government_past_10_years', 'No', 'Government employee (past 10y)'],
+    ['reserve_or_guard', 'No', 'Reserves/National Guard'],
+    ['foreign_government_service', 'No', 'Foreign government/military'],
+  ];
+  for (const [key, val, label] of DEFAULT_FACTS) fillFactIfEmpty(key, val, label);
+  // Military service is a Yes/No fact: Yes only if the résumé states service, else No.
+  fillFactIfEmpty('military_service', resume.stated_facts?.military_service ? 'Yes' : 'No', 'Military service');
 
   if (Object.keys(factAdds).length) {
     updates.custom_answers = { ...(existing.custom_answers || {}), ...factAdds };
