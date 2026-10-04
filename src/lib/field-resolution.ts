@@ -24,11 +24,11 @@ export const optionSetHash = (field: ResolutionField) => createHash('sha256')
 
 export const isSensitiveFact = (label: unknown) => /citizen|citizenship|visa|sponsor|work authori[sz]ation|legally authori[sz]ed|veteran|disab|gender|sex|race|ethni|relig|age|18|criminal|convict|security clearance|security code|verification code|one.time code|\botp\b|export control|government official|background check/.test(String(label || '').toLowerCase());
 
-export const mayUseAi = (field: ResolutionField) => {
-  if (isSensitiveFact(field.label)) return false;
-  const q = String(field.label || '').toLowerCase();
-  return !field.options?.length || /why|describe|tell us|project|worked on|similar role|accomplishment|experience|additional information|cover letter|motivat|interest|strength|challenge|learn/.test(q);
-};
+// Non-sensitive fields may all be AI-answered from context (open-ended,
+// short-answer, OR multiple-choice). Sensitive fields are handled separately by
+// the caller (routed to AI but flagged for review). The drafter still abstains
+// when the candidate's data doesn't actually answer the question.
+export const mayUseAi = (field: ResolutionField) => !isSensitiveFact(field.label);
 
 export const exactSuppliedOption = (field: ResolutionField, value: unknown) => {
   const wanted = String(value || '').trim().toLowerCase();

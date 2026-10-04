@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   const answers: { name: string; fieldId?: string; value: string; source: string; confidence: number; reason: string; matchedOption?: string; safeToApply: boolean; attempt: number; optionSetHash: string; optionSignature: string }[] = [];
   const prose: LiveField[] = [];
   const unresolved: LiveField[] = [];
-  const pick = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched verified candidate data') => {
+  const pick = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched verified candidate data', safe = true) => {
     if (value === null || value === undefined || value === '') return false;
     let chosen = String(value);
     const options = optionLabels(f);
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       chosen = matchAvailableOption([f.section, f.label].filter(Boolean).join(' '), chosen, options) || '';
       if (!chosen) return false;
     }
-    answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: source === 'ai' ? 0.75 : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: true, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) }); return true;
+    answers.push({ name: f.name, fieldId: f.fieldId, value: chosen, source, confidence: source === 'ai' ? (safe ? 0.75 : 0.5) : 0.98, reason, matchedOption: options.length ? chosen : undefined, safeToApply: safe, attempt: f.attempt || 1, optionSetHash: optionSetHash(f), optionSignature: normalizedOptionSignature(f) }); return true;
   };
   const pickSearchable = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched searchable profile data') => {
     if (value === null || value === undefined || value === '') return false;
@@ -537,7 +537,12 @@ export async function POST(request: NextRequest) {
     }
     if (/military status/.test(q)
       && pick(f, fact('veteran_preference') || privacyDecline, fact('veteran_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
-    if (policy?.resolution === 'ai_grounded' || mayUseAi(f)) prose.push(f);
+    // Let the AI attempt EVERYTHING the deterministic matcher didn't resolve —
+    // open-ended, short-answer, multiple-choice, and even sensitive questions.
+    // The drafter answers only from the candidate's real data and abstains ("")
+    // when it isn't there; sensitive answers are flagged safeToApply:false below
+    // so they're reviewed, never auto-submitted. The user is the final check.
+    if (policy?.resolution === 'ai_grounded' || mayUseAi(f) || isSensitiveFact(f.label)) prose.push(f);
     else unresolved.push(f);
   }
 
@@ -619,6 +624,12 @@ NEVER USE (these read as AI): the em dash "—"; "not just X but Y" / "not only 
 
 Before returning, reread every answer as the recruiter who reads 300 a day. Delete anything templated, generic, self-impressed, or that sounds generated${voice ? ', and anything that does not sound like the writing sample above' : ''}${voiceNotes ? ', and anything that clashes with how they want to come across' : ''}. If a sentence could appear in any candidate's application for any company, rewrite it so it is specific to this person and this posting.
 
+ANSWER FORMAT BY QUESTION TYPE (each QUESTION may include an "options" list):
+- If "options" is non-empty, return EXACTLY one of those option strings — the one that is truthful for this person per the facts. If the facts don't determine it, return "".
+- Short factual questions (dates, counts, yes/no, a location, a title): answer briefly and plainly, no prose.
+- Open-ended questions (why / describe / tell us / cover letter): follow the voice and rules above.
+- SENSITIVE questions (work authorization, citizenship, visa/sponsorship, gender, race, ethnicity, sexual orientation, disability, veteran status, age, criminal history, security clearance): answer ONLY if the facts EXPLICITLY state it. NEVER infer it from a name, school, location, or employer. If it is not explicitly in the facts, return "".
+
 CANDIDATE:
 ${candidate}
 
@@ -626,7 +637,7 @@ JOB:
 ${jobContext}
 
 QUESTIONS (answer each by its exact fieldId):
-${JSON.stringify(prose.map((f) => ({ fieldId: f.fieldId, name: f.name, label: f.label })))}
+${JSON.stringify(prose.map((f) => ({ fieldId: f.fieldId, name: f.name, label: f.label, options: optionLabels(f) })))}
 
 Return only valid json in this exact shape: {"answers":[{"fieldId":"...","name":"...","value":"..."}]}.`;
     // Draft with Gemini, then Groq as a fallback, so quota or rate limits never
@@ -637,9 +648,14 @@ Return only valid json in this exact shape: {"answers":[{"fieldId":"...","name":
         const parsed = JSON.parse(raw);
         for (const item of parsed.answers || []) {
           const field = prose.find((candidate) => candidate.fieldId ? candidate.fieldId === item.fieldId : candidate.name === item.name);
-          if (!field || !item.value || isSensitiveFact(field.label)) continue;
+          if (!field || !item.value) continue;
+          const sensitive = isSensitiveFact(field.label);
           const value = field.options?.length ? exactSuppliedOption(field, item.value) : humanizeProse(String(item.value));
-          if (value) pick(field, value, 'ai', 'Drafted in the candidate’s voice from their real background and the job posting');
+          // Sensitive answers are suggestions grounded in the user's own data — never
+          // auto-submitted (safeToApply:false); the user confirms them before they go.
+          if (value) pick(field, value, 'ai',
+            sensitive ? 'AI-suggested from your data — review before submitting' : 'Drafted in the candidate’s voice from their real background and the job posting',
+            !sensitive);
         }
       } catch { /* unresolved fields remain for the user */ }
     }
