@@ -517,6 +517,13 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('threat_investigation_leadership'), 'saved', 'Matched the confirmed threat-investigation leadership experience')) continue;
     if (/^website\b|personal website/.test(q)
       && pick(f, profile?.portfolio_url || profile?.github_url || profile?.linkedin_url, 'profile', 'Used the saved candidate website')) continue;
+    if (/finra licenses?|active finra/.test(q)
+      && pick(f, fact('finra_licenses'), 'saved', 'Matched the confirmed FINRA license history')) continue;
+    if (/if yes.*visa type|enter visa type/.test(q)) {
+      const noSponsorship = profile?.require_sponsorship === false;
+      if (pick(f, noSponsorship ? 'NA' : fact('visa_type'), 'profile',
+        noSponsorship ? 'Selected not applicable from the confirmed no-sponsorship status' : 'Matched the confirmed visa type')) continue;
+    }
     if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {
       const authorization = norm(profile?.work_authorization);
       const inferred = /us citizen|permanent resident|green card/.test(authorization) ? 'No'

@@ -57,6 +57,8 @@ const seedFacts = {
   six_month_full_time_program: 'Yes',
   education_start_date: 'September 2022',
   internship_count: '2',
+  finra_licenses: 'None',
+  preferred_office_locations: 'Costa Mesa, CA (HQ); Seattle, WA; Boston, MA',
   prior_interviews: 'None unless recorded in a saved company-specific answer',
   offer_deadline: 'None',
   sat_score: 'Not taken',

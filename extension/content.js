@@ -497,7 +497,10 @@
       return setCheckboxValue(element, checked);
     }
     if (String(element.value || '').trim()) return true; // never overwrite user edits
-    setNativeValue(element, value);
+    const inputValue = element.type === 'number'
+      ? (String(value).match(/-?\d+(?:\.\d+)?/g)?.join('').replace(/^(19|20)(\d{2}).*/, '$1$2') || String(value))
+      : value;
+    setNativeValue(element, inputValue);
     if (element.type === 'number') {
       // Extension content scripts run in an isolated JavaScript world. Most
       // React text controls observe the bubbled events, but Greenhouse's number
@@ -508,7 +511,7 @@
         elementId: element.id || '',
         elementName: element.name || '',
         ariaLabel: element.getAttribute('aria-label') || field.label || '',
-        value: String(value),
+        value: String(inputValue),
       });
       return committed?.ok === true;
     }
