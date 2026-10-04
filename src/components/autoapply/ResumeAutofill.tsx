@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { UserProfile } from '@/lib/types';
 import { mapResumeToProfile } from '@/lib/resumeToProfile';
+import { upsertUserProfile } from '@/lib/saveProfile';
 import type { ResumeData } from '@/lib/resume-templates';
 
 /**
@@ -79,7 +80,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
 
       // 4) Save the filled profile on the user's behalf.
       setBusy('saving');
-      const { error: saveErr } = await supabase.from('user_profiles').upsert({
+      const { error: saveErr } = await upsertUserProfile(supabase, {
         ...base,
         ...updates,
         resume_url: resumeUrl,
@@ -87,7 +88,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
         email: base.email || email,
         updated_at: new Date().toISOString(),
       });
-      if (saveErr) throw new Error(saveErr.message || 'Could not save your profile');
+      if (saveErr) throw new Error((saveErr as { message?: string })?.message || 'Could not save your profile');
 
       setResult({ ok: true, filled, missing, filename: file.name });
     } catch (err) {

@@ -132,6 +132,45 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     set('education_gpa', edu.gpa || null, 'GPA');
   }
 
+  // Full structured history for ATS "re-enter each job / school" sections. Only
+  // set when the user hasn't already built these, so résumé re-parses never clobber edits.
+  const rng = (d?: string | null) => {
+    const parts = (d || '').split(/[-–—]/).map((p) => p.trim()).filter(Boolean);
+    return parts.length >= 2
+      ? { start: parts[0], end: parts.slice(1).join(' - ') }
+      : { start: null, end: parts[0] || null };
+  };
+  if (isEmpty(existing.work_experience) && exp.length) {
+    updates.work_experience = exp.map((e) => {
+      const { start, end } = rng(e.date);
+      return {
+        company: e.company || null, title: e.title || null, location: e.location || null,
+        start_date: start, end_date: end, current: /present|current/i.test(e.date || ''),
+        bullets: Array.isArray(e.bullets) ? e.bullets : [],
+      };
+    });
+    filled.push({ field: 'work_experience', label: `Work experience (${exp.length} role${exp.length === 1 ? '' : 's'})` });
+  }
+  const eduAll = resume.education || [];
+  if (isEmpty(existing.education_history) && eduAll.length) {
+    updates.education_history = eduAll.map((ed) => {
+      const { degree: deg, major: maj } = splitDegree(ed.degree);
+      const { start, end } = rng(ed.date);
+      return { school: ed.school || null, degree: deg, major: maj, location: ed.location || null, start_date: start, end_date: end, gpa: ed.gpa || null };
+    });
+    filled.push({ field: 'education_history', label: `Education (${eduAll.length})` });
+  }
+  const projAll = resume.projects || [];
+  if (isEmpty(existing.projects) && projAll.length) {
+    updates.projects = projAll.map((p) => ({ name: p.name || null, technologies: p.technologies || null, date: p.date || null, bullets: Array.isArray(p.bullets) ? p.bullets : [] }));
+    filled.push({ field: 'projects', label: `Projects (${projAll.length})` });
+  }
+  const skillAll = resume.skills || [];
+  if (isEmpty(existing.skills_list) && skillAll.length) {
+    updates.skills_list = skillAll.map((s) => ({ category: s.category || null, items: Array.isArray(s.items) ? s.items : [] }));
+    filled.push({ field: 'skills_list', label: 'Skills' });
+  }
+
   // Sensitive/legal facts ONLY when the résumé explicitly stated them — the parser
   // returns null for anything it can't read verbatim (it never infers citizenship,
   // work auth, etc. from school/name/employer). Normalize the enum ones to the

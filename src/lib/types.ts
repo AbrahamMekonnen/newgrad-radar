@@ -312,6 +312,46 @@ export interface UserProfile {
   proud_project?: string | null;
   career_goals?: string | null;
   custom_answers: Record<string, string>;
+
+  // Full structured history (parsed from the résumé, user-editable). Powers ATS
+  // forms that ask applicants to re-enter each job / school in detail. The flat
+  // fields above remain for simple single-value questions. See migration 061.
+  work_experience?: ProfileExperience[] | null;
+  education_history?: ProfileEducation[] | null;
+  projects?: ProfileProject[] | null;
+  skills_list?: ProfileSkillGroup[] | null;
+}
+
+export interface ProfileExperience {
+  company?: string | null;
+  title?: string | null;
+  location?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;   // e.g. "Present" for a current role
+  current?: boolean | null;
+  bullets?: string[];
+}
+
+export interface ProfileEducation {
+  school?: string | null;
+  degree?: string | null;
+  major?: string | null;
+  location?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  gpa?: string | null;
+}
+
+export interface ProfileProject {
+  name?: string | null;
+  technologies?: string | null;
+  date?: string | null;
+  bullets?: string[];
+}
+
+export interface ProfileSkillGroup {
+  category?: string | null;
+  items?: string[];
 }
 
 export type ApplicationStatus = 'pending' | 'filling' | 'review' | 'submitted' | 'failed';

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { UserProfile } from '@/lib/types';
+import { upsertUserProfile } from '@/lib/saveProfile';
 import { ProfileForm, StoryBankSection } from '@/components/autoapply';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 
@@ -73,7 +74,7 @@ function ProfileContent({ userId, email }: { userId: string; email: string }) {
   }, [fetchProfile]);
 
   const handleSave = async (updatedProfile: UserProfile) => {
-    const { error } = await supabase.from('user_profiles').upsert({
+    const { error } = await upsertUserProfile(supabase, {
       ...updatedProfile,
       updated_at: new Date().toISOString(),
     });

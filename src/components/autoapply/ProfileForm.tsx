@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
-import { UserProfile } from '@/lib/types';
+import { UserProfile, ProfileExperience, ProfileEducation } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -122,6 +122,23 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
       ['__fact:' + key]: value,
     });
   };
+  // Structured work history / education (full detail for ATS "re-enter each job"
+  // sections). Edited as arrays on the profile; bullets use one-per-line textareas.
+  const experiences: ProfileExperience[] = formData.work_experience || [];
+  const educations: ProfileEducation[] = formData.education_history || [];
+  const updateExp = (i: number, patch: Partial<ProfileExperience>) =>
+    handleChange('work_experience', experiences.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
+  const addExp = () =>
+    handleChange('work_experience', [...experiences, { company: '', title: '', location: '', start_date: '', end_date: '', current: false, bullets: [] }]);
+  const removeExp = (i: number) =>
+    handleChange('work_experience', experiences.filter((_, idx) => idx !== i));
+  const updateEdu = (i: number, patch: Partial<ProfileEducation>) =>
+    handleChange('education_history', educations.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
+  const addEdu = () =>
+    handleChange('education_history', [...educations, { school: '', degree: '', major: '', location: '', start_date: '', end_date: '', gpa: '' }]);
+  const removeEdu = (i: number) =>
+    handleChange('education_history', educations.filter((_, idx) => idx !== i));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -283,6 +300,71 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
           <DebouncedInput field="education_major" label="Major" value={formData.education_major || ''} onChange={handleChange} />
           <DebouncedInput field="education_graduation_date" label="Graduation Date" type="date" value={formData.education_graduation_date || ''} onChange={handleChange} />
           <DebouncedInput field="education_gpa" label="GPA (optional)" value={formData.education_gpa || ''} onChange={handleChange} />
+        </div>
+      </section>
+
+      {/* Work Experience — full detail for ATS sections that ask you to re-enter each job */}
+      <section>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-medium text-gray-900">Work Experience</h2>
+          <button type="button" onClick={addExp} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add role</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Your full history, so auto-apply can fill the detailed experience sections some applications require. Auto-filled from your résumé; edit anything.</p>
+        <div className="space-y-4">
+          {experiences.length === 0 && (
+            <p className="text-sm text-gray-400">No roles yet. Upload a résumé to auto-fill, or add one.</p>
+          )}
+          {experiences.map((exp, i) => (
+            <div key={i} className="rounded-lg border border-gray-200 p-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input placeholder="Company" value={exp.company || ''} onChange={(e) => updateExp(i, { company: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <input placeholder="Title" value={exp.title || ''} onChange={(e) => updateExp(i, { title: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <input placeholder="Location" value={exp.location || ''} onChange={(e) => updateExp(i, { location: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <div className="flex gap-2">
+                  <input placeholder="Start (e.g. Jun 2025)" value={exp.start_date || ''} onChange={(e) => updateExp(i, { start_date: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  <input placeholder="End / Present" value={exp.end_date || ''} onChange={(e) => updateExp(i, { end_date: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+                <input type="checkbox" checked={!!exp.current} onChange={(e) => updateExp(i, { current: e.target.checked })} />
+                I currently work here
+              </label>
+              <textarea rows={3} placeholder="What you did — one bullet per line" value={(exp.bullets || []).join('\n')}
+                onChange={(e) => updateExp(i, { bullets: e.target.value.split('\n') })}
+                className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <button type="button" onClick={() => removeExp(i)} className="mt-2 text-xs text-red-500 hover:text-red-700">Remove role</button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Education — full detail */}
+      <section>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-medium text-gray-900">Education</h2>
+          <button type="button" onClick={addEdu} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add school</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Every school/degree, for applications that ask for your full education history.</p>
+        <div className="space-y-4">
+          {educations.length === 0 && (
+            <p className="text-sm text-gray-400">No schools yet. Upload a résumé to auto-fill, or add one.</p>
+          )}
+          {educations.map((ed, i) => (
+            <div key={i} className="rounded-lg border border-gray-200 p-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input placeholder="School" value={ed.school || ''} onChange={(e) => updateEdu(i, { school: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <input placeholder="Degree (e.g. B.S.)" value={ed.degree || ''} onChange={(e) => updateEdu(i, { degree: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <input placeholder="Major / field" value={ed.major || ''} onChange={(e) => updateEdu(i, { major: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <input placeholder="Location" value={ed.location || ''} onChange={(e) => updateEdu(i, { location: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+                <div className="flex gap-2">
+                  <input placeholder="Start" value={ed.start_date || ''} onChange={(e) => updateEdu(i, { start_date: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  <input placeholder="End / Expected" value={ed.end_date || ''} onChange={(e) => updateEdu(i, { end_date: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                </div>
+                <input placeholder="GPA (optional)" value={ed.gpa || ''} onChange={(e) => updateEdu(i, { gpa: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg" />
+              </div>
+              <button type="button" onClick={() => removeEdu(i)} className="mt-2 text-xs text-red-500 hover:text-red-700">Remove school</button>
+            </div>
+          ))}
         </div>
       </section>
 
