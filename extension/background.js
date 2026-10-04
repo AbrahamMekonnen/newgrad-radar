@@ -127,7 +127,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   currentByTab.set(tab.id, job);
   await chrome.storage.session.set({ ['job:' + tab.id]: job });
 });
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
   const result = await chrome.storage.session.get('job:' + tabId);
   const job = currentByTab.get(tabId) || result['job:' + tabId];

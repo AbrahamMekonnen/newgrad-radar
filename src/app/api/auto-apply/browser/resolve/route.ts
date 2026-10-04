@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchAvailableOption, matchFirstAvailablePreference } from '@/lib/form-option-matching';
 import { classifyApplicationQuestion } from '@/lib/autoapply-question-policy';
-import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, normalizeValueForControl, optionLabels, optionSetHash, ResolutionField } from '@/lib/field-resolution';
 import { salaryAnswerForField } from '@/lib/autoapply-salary';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Cache-Control': 'no-store' };
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
   const unresolved: LiveField[] = [];
   const pick = (f: LiveField, value: unknown, source = 'profile', reason = 'Matched verified candidate data', safe = true) => {
     if (value === null || value === undefined || value === '') return false;
-    let chosen = String(value);
+    let chosen = normalizeValueForControl(f, value);
     const options = optionLabels(f);
     if (options.length) {
       chosen = matchAvailableOption([f.section, f.label].filter(Boolean).join(' '), chosen, options) || '';
@@ -261,7 +261,8 @@ export async function POST(request: NextRequest) {
     if (/export (?:control|compliance|regulations)|u s person|itar|ear\b/.test(q)) {
       const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
       const citizenOption = optionLabels(f).find((option) => /u s citizen/.test(norm(option)));
-      if (pick(f, usPerson ? (citizenOption || 'I am currently a U.S. Person') : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
+      const binary = optionLabels(f).map(norm).includes('yes') && optionLabels(f).map(norm).includes('no');
+      if (pick(f, usPerson ? (citizenOption || (binary ? 'Yes' : 'I am currently a U.S. Person')) : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
     }
     if (/require an export licen[cs]e|export licen[cs]e.*require/.test(q)) {
       const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
@@ -357,6 +358,17 @@ export async function POST(request: NextRequest) {
     if (/\bgre\b/.test(q) && pick(f, fact('gre_score'), 'saved', 'Matched the confirmed GRE response')) continue;
     if (/internship|co op|co-op/.test(q) && /how many|number of/.test(q)
       && pick(f, fact('internship_count'), 'saved', 'Matched the confirmed internship or co-op count')) continue;
+    if (/prior internship|prior co op|prior co-op|internship or co op experience/.test(q)) {
+      const count = Number(fact('internship_count') || 0);
+      if (pick(f, count > 0 ? 'Yes' : fact('internship_count') ? 'No' : null,
+        'saved', 'Derived prior internship experience from the confirmed internship count')) continue;
+    }
+    if (/minimum of .*technical work.*(?:internship|co op)|technical work.*able to start full time/.test(q)) {
+      const count = Number(fact('internship_count') || 0);
+      const start = norm(fact('full_time_start_window') || fact('available_start_date'));
+      if (pick(f, count > 0 && /2026|immediate/.test(start) ? 'Yes' : (count || start) ? 'No' : null,
+        'saved', 'Combined confirmed technical internship history with full-time availability')) continue;
+    }
     if (/months? you are available.*internship|available.*internship.*months?/.test(q)
       && pick(f, optionLabels(f).find((option) => /required/.test(norm(option))) || fact('internship_months') || fact('internship_availability'), 'saved', 'Matched a confirmed required internship month')) continue;
     if (/internship|co op|co-op/.test(q) && /availability|available|start|end/.test(q)

@@ -1,4 +1,4 @@
-import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, optionSetHash, scopedAnswerKey, validateResolutionAnswer } from '../field-resolution';
+import { exactSuppliedOption, findSavedAnswer, isSensitiveFact, mayUseAi, normalizedOptionSignature, normalizeValueForControl, optionSetHash, scopedAnswerKey, validateResolutionAnswer } from '../field-resolution';
 import { matchAvailableOption } from '../form-option-matching';
 describe('field resolution policy', () => {
   it('classifies prose for deferred AI while excluding sensitive facts', () => {
@@ -52,6 +52,11 @@ describe('field resolution policy', () => {
     expect(matchAvailableOption('SAT score', 'Not taken', ['1400-1600', 'I did not take the SAT'])).toBe('I did not take the SAT');
     expect(matchAvailableOption('Expected graduation month/year', 'May 2028', ['Jan - April 2028', 'May - Aug 2028'])).toBe('May - Aug 2028');
     expect(matchAvailableOption('Cumulative GPA', '3.6', ['4.0 or higher', '3.5 - 3.99', '3.49 - 3.0'])).toBe('3.5 - 3.99');
+  });
+  it('coerces saved date and formatted numeric answers for number controls', () => {
+    expect(normalizeValueForControl({ name: 'end-year--0', label: 'End date year', type: 'number' }, 'May 2028')).toBe('2028');
+    expect(normalizeValueForControl({ name: 'salary', label: 'Expected salary', type: 'number' }, '$120,000')).toBe('120000');
+    expect(normalizeValueForControl({ name: 'notes', label: 'Additional details', type: 'text' }, 'May 2028')).toBe('May 2028');
   });
 });
 

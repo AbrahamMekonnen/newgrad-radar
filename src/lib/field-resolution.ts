@@ -9,6 +9,17 @@ export type ResolutionField = {
   validation?: { message?: string; accepted?: boolean; optionSetHash?: string; optionSignature?: string };
 };
 
+export function normalizeValueForControl(field: ResolutionField, value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw || String(field.type || '').toLowerCase() !== 'number') return raw;
+  const question = `${field.section || ''} ${field.label || ''}`.toLowerCase();
+  if (/\byear\b|graduat/.test(question)) {
+    return raw.match(/\b(?:19|20)\d{2}\b/)?.[0] || raw;
+  }
+  const numeric = raw.replace(/[$,\s]/g, '').match(/-?\d+(?:\.\d+)?/);
+  return numeric?.[0] || raw;
+}
+
 export const optionLabels = (field: ResolutionField) => (field.options || [])
   .map((option) => typeof option === 'string' ? option : option.label)
   .filter(Boolean);
