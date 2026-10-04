@@ -1102,6 +1102,22 @@
     if (data.lastSubmitAttemptAt && now - data.lastSubmitAttemptAt < 30000) return true;
     if ((data.submitAttempts || 0) >= 1) {
       const errors = visibleAtsErrors();
+      const captchaError = errors.find((value) => /recaptcha|captcha|confirm you(?:'| a)?re human/i.test(value));
+      if (captchaError) {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'waiting_for_user',
+          detail: { detail: JSON.stringify({
+            message: 'The ATS requires a CAPTCHA before it will accept this application.',
+            challenge: 'captcha',
+            diagnostic: EXEC?.safeDiagnostic?.({ code: 'captcha_required', ats: data.atsType,
+              category: 'user_challenge', attempt: data.submitAttempts }),
+          }) },
+        });
+        data.stopAutomation = true;
+        persist(data);
+        banner('Complete the visible CAPTCHA to finish this application.', true);
+        return false;
+      }
       const decision = EXEC?.shouldRetrySubmit?.({ attempts: data.submitAttempts, errors })
         || { retry: false, category: 'unconfirmed' };
       if (decision.retry) {

@@ -448,7 +448,8 @@ async function main() {
         clickCount: submitClicks.length, trustedClickCount: submitClicks.filter((event) => event.trusted).length,
         submitEventCount: submitEvents.length, applicationPosts, verificationResponses, successResponses,
         reactHydrationError: consoleErrors.some((message) => /react error #418|invariant=418/i.test(message)),
-        classification: verificationResponses.length ? 'email_verification_requested'
+        classification: (evidence.visibleErrors || []).some((message) => /recaptcha|captcha|confirm you(?:'| a)?re human/i.test(message)) ? 'captcha_required'
+          : verificationResponses.length ? 'email_verification_requested'
           : successResponses.length ? 'application_request_accepted'
             : applicationPosts.length ? 'application_request_rejected'
               : submitEvents.length ? 'submit_event_without_application_request'
