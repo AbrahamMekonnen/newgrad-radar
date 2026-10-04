@@ -66,6 +66,7 @@ const seedFacts = {
   government_access_card: 'No',
   export_control_status: 'Authorized to work in the United States without employer sponsorship',
   internship_availability: 'Available for the full dates listed in the job posting',
+  internship_season: 'Summer 2027',
   internship_months: 'January, February, March, April, May, and June',
   can_perform_essential_functions: 'Yes',
   document_acknowledgement: 'Yes',

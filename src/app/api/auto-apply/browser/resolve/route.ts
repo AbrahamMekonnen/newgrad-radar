@@ -237,6 +237,11 @@ export async function POST(request: NextRequest) {
     if (/interest in finance/.test(q) && pick(f, fact('finance_interest'), 'saved', 'Matched the confirmed finance-interest response')) continue;
     if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
+    if (/active security clearance/.test(q)) {
+      const neverHeld = optionLabels(f).find((option) => /never held.*clearance/.test(norm(option)));
+      if (pick(f, /^(no|none)\b/.test(norm(fact('security_clearance'))) ? (neverHeld || 'None') : fact('security_clearance'),
+        'saved', 'Matched active-clearance options to the confirmed clearance history')) continue;
+    }
     if (/security clearance|clearance level|clearance from (?:the )?government|any (?:government )?clearance/.test(q)
       && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/if yes.*level of security clearance|which level of security clearance/.test(q)
@@ -253,9 +258,10 @@ export async function POST(request: NextRequest) {
         'saved', 'Matched confirmed citizenship to the clearance-eligibility question')) continue;
     }
     if (/cac|common access card|piv card/.test(q) && pick(f, fact('government_access_card'), 'saved', 'Matched the confirmed government access-card fact')) continue;
-    if (/export (?:control|compliance)|u s person|itar|ear/.test(q)) {
+    if (/export (?:control|compliance|regulations)|u s person|itar|ear\b/.test(q)) {
       const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
-      if (pick(f, usPerson ? 'I am currently a U.S. Person' : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
+      const citizenOption = optionLabels(f).find((option) => /u s citizen/.test(norm(option)));
+      if (pick(f, usPerson ? (citizenOption || 'I am currently a U.S. Person') : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
     }
     if (/require an export licen[cs]e|export licen[cs]e.*require/.test(q)) {
       const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
@@ -379,9 +385,9 @@ export async function POST(request: NextRequest) {
         ? 'Matched the confirmed availability date'
         : 'Matched the role term stated in the user-selected job title')) continue;
     }
-    if (/available for a .*week internship|internship.*check all that apply|intern season/.test(q)) {
+    if (/available for a .*week internship|internship.*check all that apply|intern season|confirm the season|season.*applying/.test(q)) {
       const roleTerm = String(job.job_title || '').match(/\b(spring|summer|fall|winter)\s+(20\d{2})\b/i)?.[0];
-      if (pick(f, roleTerm || fact('internship_availability'), roleTerm ? 'job' : 'saved',
+      if (pick(f, roleTerm || fact('internship_season') || fact('internship_availability'), roleTerm ? 'job' : 'saved',
         roleTerm ? 'Matched the internship term in the user-selected job title' : 'Matched confirmed internship availability')) continue;
     }
     if (/when are you available for a 12 week internship/.test(q)
