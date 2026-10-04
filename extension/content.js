@@ -705,6 +705,10 @@
     return { name, fieldId, label, section, type: semanticType, required, options, optionSignature: ATS?.optionSignature?.(options) || '' };
   };
   const controlHasValue = (element, field) => {
+    // React ATS controls can retain a string while rejecting it through their
+    // own validation state (for example, a future employment end date). Such a
+    // control is unresolved even when native HTML validity still says true.
+    if (element.getAttribute('aria-invalid') === 'true') return false;
     const adapterAccepted = ATS?.detect(location.href)?.fieldAccepted?.(element, answerLabel(field || {}));
     if (adapterAccepted !== null && adapterAccepted !== undefined) return adapterAccepted;
     if (element.type === 'radio') {
@@ -1570,6 +1574,17 @@
           // so a field that appears after the first pass still gets resolved.
           // Best-effort: a resolver hiccup must never block prepared fills.
           const failedLive = [];
+          // A submit attempt can reveal server/client validation that was not
+          // exposed during the initial scan. Reopen those controls for one
+          // bounded repair pass instead of treating their retained text as valid.
+          for (const element of document.querySelectorAll('[aria-invalid="true"]')) {
+            if (element.getClientRects().length === 0) continue;
+            const invalidField = liveFieldFor(element);
+            const key = fieldKey(invalidField);
+            attemptedLive.delete(key);
+            const prior = resolutionState.get(key);
+            if (prior) resolutionState.set(key, { ...prior, accepted: false, exhausted: false, attempt: 0, signatures: new Set() });
+          }
           // Resolve the complete visible form, then rescan because React ATSes
           // can reveal dependent required questions after earlier selections.
           // Walk conditional sections until the form stabilizes. The hard cap

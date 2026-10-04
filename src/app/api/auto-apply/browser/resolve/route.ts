@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
     if (/military service|served.*armed forces|current or former.*military/.test(q) && pick(f, fact('military_service'), 'saved', 'Matched confirmed military-service history')) continue;
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
-    if (/5 days|five days|four days|4 days|(?:3|three) times a week|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
+    if (/5 days|five days|four days|4 days|(?:3|three) (?:days?\/|days? |times? )(?:a |per )?week|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/working in person.*25|in person.*offices.*25/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed in-person work preference')) continue;
@@ -311,17 +311,27 @@ export async function POST(request: NextRequest) {
       const actualTerm = season && graduationYear ? `${season} ${graduationYear}` : normalizedGraduation;
       if (pick(f, allowedTerms.includes(actualTerm) ? 'Yes' : 'No', 'profile', 'Compared the confirmed graduation date with the listed eligible terms')) continue;
     }
-    if (/end date month|graduation month|month.*graduat/.test(q)
-      && pick(f, graduationMonth, 'profile', 'Split the confirmed graduation date into its month')) continue;
-    if (/end date year|graduation year|year.*graduat|graduat.*year|year.*degree|degree.*year/.test(q)
-      && pick(f, graduationYear, 'profile', 'Split the confirmed graduation date into its year')) continue;
     const educationStartDate = String(fact('education_start_date') || '');
     const educationStartYear = educationStartDate.match(/\b(?:19|20)\d{2}\b/)?.[0];
     const educationStartMonth = educationStartDate.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    const employmentStartDate = String(fact('employment_start_date') || '');
+    const employmentEndDate = String(fact('employment_end_date') || '');
+    const datePart = (value: string, kind: 'month' | 'year') => kind === 'year'
+      ? value.match(/\b(?:19|20)\d{2}\b/)?.[0]
+      : value.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i)?.[0];
+    const educationDateField = /education|school|degree|graduat/.test(q);
+    if (/end date month|graduation month|month.*graduat/.test(q)
+      && pick(f, educationDateField ? graduationMonth : datePart(employmentEndDate, 'month'), educationDateField ? 'profile' : 'saved',
+        educationDateField ? 'Split the confirmed graduation date into its month' : 'Split the confirmed employment end date into its month')) continue;
+    if (/end date year|graduation year|year.*graduat|graduat.*year|year.*degree|degree.*year/.test(q)
+      && pick(f, educationDateField ? graduationYear : datePart(employmentEndDate, 'year'), educationDateField ? 'profile' : 'saved',
+        educationDateField ? 'Split the confirmed graduation date into its year' : 'Split the confirmed employment end date into its year')) continue;
     if (/start date month|education start month|month.*start/.test(q)
-      && pick(f, educationStartMonth, 'saved', 'Split the confirmed education start date into its month')) continue;
+      && pick(f, educationDateField ? educationStartMonth : datePart(employmentStartDate, 'month'), 'saved',
+        educationDateField ? 'Split the confirmed education start date into its month' : 'Split the confirmed employment start date into its month')) continue;
     if (/start date year|education start year|year.*start/.test(q)
-      && pick(f, educationStartYear, 'saved', 'Split the confirmed education start date into its year')) continue;
+      && pick(f, educationDateField ? educationStartYear : datePart(employmentStartDate, 'year'), 'saved',
+        educationDateField ? 'Split the confirmed education start date into its year' : 'Split the confirmed employment start date into its year')) continue;
     if (/\bgpa\b|grade point average/.test(q)
       && pick(f, profile?.education_gpa, 'profile', 'Matched the confirmed cumulative GPA')) continue;
     if (/expected graduation date.*2028 or later/.test(q)) {
@@ -471,6 +481,10 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('erp_systems_experience'), 'saved', 'Matched the confirmed ERP experience')) continue;
     if (/public sector experience/.test(q)
       && pick(f, fact('public_sector_experience'), 'saved', 'Matched the confirmed public-sector experience')) continue;
+    if (/5 years.*(?:threat actor|tracking clustering|ttps)|tracking clustering.*threat actor/.test(q)
+      && pick(f, fact('threat_actor_experience_5_years'), 'saved', 'Matched the confirmed threat-intelligence experience')) continue;
+    if (/independently led threat actor investigations|threat actor investigations end to end/.test(q)
+      && pick(f, fact('threat_investigation_leadership'), 'saved', 'Matched the confirmed threat-investigation leadership experience')) continue;
     if (/^website\b|personal website/.test(q)
       && pick(f, profile?.portfolio_url || profile?.github_url || profile?.linkedin_url, 'profile', 'Used the saved candidate website')) continue;
     if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {

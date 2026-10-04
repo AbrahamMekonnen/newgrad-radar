@@ -101,6 +101,10 @@ const seedFacts = {
   ipo_preipo_experience: 'No, I have not worked in an IPO or pre-IPO environment.',
   erp_systems_experience: 'I have not managed or implemented an ERP system and have not used NetSuite or Oracle Fusion professionally.',
   public_sector_experience: 'No',
+  employment_start_date: 'September 2022',
+  employment_end_date: 'May 2024',
+  threat_actor_experience_5_years: 'No',
+  threat_investigation_leadership: 'No',
 };
 const rawAnswers = {
   'what is your expected graduation month year': 'May 2028',
