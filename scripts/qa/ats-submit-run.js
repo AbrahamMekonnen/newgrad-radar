@@ -436,8 +436,8 @@ async function main() {
         if (ats === 'greenhouse') {
           try {
             const url = new URL(event.url);
-            return url.hostname === 'boards.greenhouse.io'
-              && /\/(?:embed\/[^/]+\/)?jobs\/\d+\/?$/.test(url.pathname);
+            return (url.hostname === 'boards.greenhouse.io' || url.hostname === 'job-boards.greenhouse.io')
+              && /\/(?:embed\/[^/]+\/)?(?:jobs?\/)?\d+\/?$/.test(url.pathname);
           } catch { return false; }
         }
         return !/snowplow|spl\.greenhouse|amazonaws\.com|recaptcha|google-analytics|analytics|doubleclick|datadog|segment|rudderstack|zoominfo|linkedin\.com\/wa/.test(event.url);

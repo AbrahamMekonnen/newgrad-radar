@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "rules": [
     {"id":"source","patterns":["how did you hear","heard about","learn about","source of application","where did you find"],"resolution":"profile","profileKey":"default_source","sensitive":false},
-    {"id":"previous_employment","patterns":["previously worked","ever worked at","worked at .* before","former employee","current or former.*employee"],"resolution":"employment_history","sensitive":false},
+    {"id":"previous_employment","patterns":["previously worked","previously been employed","ever been employed","ever worked (?:at|for)","worked at .* before","employed by .* in the past","been employed.*(?:by|in the past)","former employee","current or former.*employee"],"resolution":"employment_history","sensitive":false},
     {"id":"location_confirmation","patterns":["currently located in","currently live in","are you based in"],"resolution":"location_compare","sensitive":false},
     {"id":"degree","patterns":["degree","education level","qualification"],"resolution":"profile_option","profileKey":"education_degree","sensitive":false},
     {"id":"work_authorization","patterns":["work authorization","authorized to work","eligible to work","right to work"],"resolution":"profile_option","profileKey":"work_authorization","sensitive":true},

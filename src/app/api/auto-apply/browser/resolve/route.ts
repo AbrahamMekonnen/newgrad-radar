@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     if (/reserves|national guard/.test(q) && pick(f, fact('reserve_or_guard'), 'saved', 'Matched an explicit reusable service fact')) continue;
     if (/military service|served.*armed forces|current or former.*military/.test(q) && pick(f, fact('military_service'), 'saved', 'Matched confirmed military-service history')) continue;
     if (/foreign government|foreign military/.test(q) && pick(f, fact('foreign_government_service'), 'saved', 'Matched confirmed foreign-government service history')) continue;
-    if (/5 days|five days|four days|4 days|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
+    if (/5 days|five days|four days|4 days|(?:3|three) times a week|full week.*office|office.*full week|work.*days per week.*office|full time on site|work on site|work from the office/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched an explicit reusable onsite preference')) continue;
     if (/working in person.*25|in person.*offices.*25/.test(q)
       && pick(f, fact('onsite_five_days'), 'saved', 'Matched the confirmed in-person work preference')) continue;
@@ -233,7 +233,8 @@ export async function POST(request: NextRequest) {
     if (/interest in finance/.test(q) && pick(f, fact('finance_interest'), 'saved', 'Matched the confirmed finance-interest response')) continue;
     if (/employment obligations|non compete|non-compete/.test(q) && pick(f, fact('employment_obligations'), 'saved', 'Matched the confirmed employment-obligations response')) continue;
     if (/other processes|offers timelines/.test(q) && pick(f, fact('other_processes'), 'saved', 'Matched the confirmed recruiting-process response')) continue;
-    if (/security clearance|clearance level/.test(q) && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
+    if (/security clearance|clearance level|clearance from (?:the )?government|any (?:government )?clearance/.test(q)
+      && pick(f, fact('security_clearance'), 'saved', 'Matched an explicit clearance fact')) continue;
     if (/if yes.*level of security clearance|which level of security clearance/.test(q)
       && pick(f, /^(no|none)\b/.test(norm(fact('security_clearance'))) ? 'None' : fact('security_clearance'), 'saved', 'Matched the confirmed clearance level')) continue;
     if (/polygraph level/.test(q)
@@ -263,7 +264,7 @@ export async function POST(request: NextRequest) {
     if (/citizen|citizenship|permanent resident/.test(q) && pick(f, fact('citizenship_status'), 'saved', 'Matched an explicit citizenship or residency fact')) continue;
     const privacyDecline = 'Decline to self-identify';
     if (/gender identity/.test(q) && pick(f, fact('gender_identity_preference') || privacyDecline, fact('gender_identity_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
-    if (/gender|^sex$/.test(q) && pick(f, fact('gender_preference') || privacyDecline, fact('gender_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
+    if (/gender|(?:identify|identification|describe).*\bsex\b|^sex$/.test(q) && pick(f, fact('gender_preference') || privacyDecline, fact('gender_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (/hispanic|latino|ethnicity|ethnic/.test(q) && pick(f, fact('ethnicity_preference') || privacyDecline, fact('ethnicity_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (/\brace\b|racial/.test(q) && pick(f, fact('race_preference') || privacyDecline, fact('race_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
     if (/veteran/.test(q) && pick(f, fact('veteran_preference') || privacyDecline, fact('veteran_preference') ? 'saved' : 'privacy_default', 'Used the explicit preference or privacy-preserving decline option')) continue;
@@ -464,6 +465,12 @@ export async function POST(request: NextRequest) {
     if (/salary|compensation/.test(q)
       && pick(f, salaryAnswerForField(f.label, f.type, jobMarket, profile), 'market_evidence',
         'Used the posted salary range or an explicit candidate salary preference')) continue;
+    if (/ipo|pre ipo environment/.test(q)
+      && pick(f, fact('ipo_preipo_experience'), 'saved', 'Matched the confirmed IPO or pre-IPO experience')) continue;
+    if (/erp systems?|netsuite|oracle fusion/.test(q)
+      && pick(f, fact('erp_systems_experience'), 'saved', 'Matched the confirmed ERP experience')) continue;
+    if (/public sector experience/.test(q)
+      && pick(f, fact('public_sector_experience'), 'saved', 'Matched the confirmed public-sector experience')) continue;
     if (/^website\b|personal website/.test(q)
       && pick(f, profile?.portfolio_url || profile?.github_url || profile?.linkedin_url, 'profile', 'Used the saved candidate website')) continue;
     if (policy?.id === 'sponsorship' || /sponsor/.test(q)) {
@@ -491,7 +498,7 @@ export async function POST(request: NextRequest) {
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No',
         'profile', 'Compared confirmed employment history with the employer')) continue;
     }
-    if (policy?.id === 'previous_employment' || /previously worked|previously been employed|ever been employed|ever worked (?:at|for)|worked at .* before|employed by .* in the past|former employee|current or former/.test(q)) {
+    if (policy?.id === 'previous_employment' || /previously worked|previously been employed|ever been employed|ever worked (?:at|for)|worked at .* before|employed by .* in the past|been employed.*(?:by|in the past)|former employee|current or former/.test(q)) {
       const employers = [...(profile?.prior_employers || []), profile?.current_company].filter(Boolean).map(norm);
       const company = norm(job.company_name);
       if (pick(f, employers.some((e: string) => e.includes(company) || company.includes(e)) ? 'Yes' : 'No')) continue;

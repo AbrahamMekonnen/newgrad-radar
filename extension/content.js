@@ -1382,6 +1382,19 @@
       // filling and submission.
       if (!isTopFrame && !isSmartRecruiters && !isEmbeddedGreenhouse) return;
       if (isTopFrame && normalize(data.atsType) === 'greenhouse'
+        && /job-boards\.greenhouse\.io$/i.test(location.hostname)
+        && new URLSearchParams(location.search).get('error') === 'true') {
+        if (data.browserWorker) await send({
+          type: 'PROGRESS', stage: 'failed',
+          detail: { detail: JSON.stringify({
+            message: 'This Greenhouse posting is no longer available.',
+            diagnostic: EXEC?.safeDiagnostic?.({ code: 'posting_unavailable', ats: 'greenhouse', category: 'stale_posting' }),
+          }) },
+        });
+        banner('This job posting is no longer available.', true);
+        return;
+      }
+      if (isTopFrame && normalize(data.atsType) === 'greenhouse'
         && document.querySelector('iframe[src*="/embed/job_app"]')) {
         // The embedded Greenhouse child owns validation and submission. The
         // wrapper must not overwrite its progress with a no-form diagnosis.

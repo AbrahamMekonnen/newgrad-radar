@@ -98,6 +98,9 @@ const seedFacts = {
   full_time_start_window: 'Q4 2026 (October - December)',
   first_location_preference: 'San Francisco, CA, United States',
   preferred_office_locations: 'Menlo Park, CA | New York, NY | Bellevue, WA',
+  ipo_preipo_experience: 'No, I have not worked in an IPO or pre-IPO environment.',
+  erp_systems_experience: 'I have not managed or implemented an ERP system and have not used NetSuite or Oracle Fusion professionally.',
+  public_sector_experience: 'No',
 };
 const rawAnswers = {
   'what is your expected graduation month year': 'May 2028',
