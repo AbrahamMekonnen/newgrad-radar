@@ -146,6 +146,10 @@ export async function POST(request: NextRequest) {
       if (pick(f, inUs && norm(fact('onsite_five_days')) === 'yes' ? 'Yes' : 'No', 'profile', 'Combined the confirmed country and onsite preference')) continue;
     }
     if (/remote work|work remotely|remote environment/.test(q) && pick(f, fact('remote_work'), 'saved', 'Matched an explicit remote-work preference')) continue;
+    if (/from where.*intend to work|where do you intend to work/.test(q)
+      && pick(f, profile?.location || [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', '), 'profile', 'Matched the confirmed intended work location')) continue;
+    if (/working.*(?:eastern|central).*time|(?:eastern|central) time.*(?:work|hours)|working.*u s time zones?/.test(q)
+      && pick(f, fact('us_timezone_hours'), 'saved', 'Matched the confirmed U.S. time-zone availability')) continue;
     if (/relocat|commutable proximity/.test(q)) {
       const binary = optionLabels(f).map(norm).some((option) => option === 'yes');
       const willingOption = optionLabels(f).find((option) => /willing to relocate/.test(norm(option)) && !/not willing/.test(norm(option)));
@@ -252,6 +256,10 @@ export async function POST(request: NextRequest) {
     if (/export (?:control|compliance)|u s person|itar|ear/.test(q)) {
       const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
       if (pick(f, usPerson ? 'I am currently a U.S. Person' : fact('export_control_status'), 'saved', 'Matched the confirmed export-control status')) continue;
+    }
+    if (/require an export licen[cs]e|export licen[cs]e.*require/.test(q)) {
+      const usPerson = /u s citizen|citizen|permanent resident|green card/.test(norm(fact('citizenship_status') || profile?.work_authorization));
+      if (pick(f, usPerson ? 'No' : fact('export_license_required'), 'saved', 'Derived export-license need from the confirmed U.S.-person status')) continue;
     }
     if (/currently on an? f ?1.*(?:opt|cpt)|(?:opt|cpt).*status/.test(q)
       && pick(f, /f ?1|student visa|opt|cpt/.test(norm(profile?.work_authorization)) ? 'Yes' : 'No', 'profile', 'Matched the confirmed current immigration status')) continue;
@@ -481,6 +489,10 @@ export async function POST(request: NextRequest) {
       && pick(f, fact('erp_systems_experience'), 'saved', 'Matched the confirmed ERP experience')) continue;
     if (/public sector experience/.test(q)
       && pick(f, fact('public_sector_experience'), 'saved', 'Matched the confirmed public-sector experience')) continue;
+    if (/family members?|relatives?|personal relationships?.*(?:supplier|partner|vendor|company)|relationship.*(?:supplier|partner|vendor)/.test(q)
+      && pick(f, fact('business_relationship_conflict'), 'saved', 'Matched the confirmed business-relationship conflict status')) continue;
+    if (/outside business activit|advisory consulting|board roles?|side businesses?/.test(q)
+      && pick(f, fact('outside_business_activities'), 'saved', 'Matched the confirmed outside-business-activity status')) continue;
     if (/5 years.*(?:threat actor|tracking clustering|ttps)|tracking clustering.*threat actor/.test(q)
       && pick(f, fact('threat_actor_experience_5_years'), 'saved', 'Matched the confirmed threat-intelligence experience')) continue;
     if (/independently led threat actor investigations|threat actor investigations end to end/.test(q)

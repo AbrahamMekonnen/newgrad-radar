@@ -105,6 +105,10 @@ const seedFacts = {
   employment_end_date: 'May 2024',
   threat_actor_experience_5_years: 'No',
   threat_investigation_leadership: 'No',
+  us_timezone_hours: 'Yes',
+  export_license_required: 'No',
+  business_relationship_conflict: 'No',
+  outside_business_activities: 'No',
 };
 const rawAnswers = {
   'what is your expected graduation month year': 'May 2028',

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewGrad Radar Autofill Helper",
-  "version": "0.19.7",
+  "version": "0.19.8",
   "description": "Runs user-authorized HireRadar applications in visible ATS tabs and reports verified results.",
   "permissions": [
     "storage",
@@ -39,6 +39,7 @@
     "https://www.cloudflare.com/*",
     "https://careers.airbnb.com/*",
     "https://www.coinbase.com/*",
+    "https://www.okta.com/*",
     "https://jmrbyubrrpxxvotsljms.supabase.co/*"
   ],
   "background": {
@@ -76,6 +77,7 @@
         ,"https://www.cloudflare.com/*"
         ,"https://careers.airbnb.com/*"
         ,"https://www.coinbase.com/*"
+        ,"https://www.okta.com/*"
       ],
       "js": [
         "ats-recipes.js",
