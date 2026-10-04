@@ -205,7 +205,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         type: response.headers.get('content-type') || 'application/pdf',
         name: decodeURIComponent(fileUrl.pathname.split('/').pop() || 'resume.pdf'),
       };
-    }    if (message.type === 'RESOLVE_FIELDS') {
+    }
+    if (message.type === 'SET_MAIN_WORLD_VALUE') {
+      const tabId = sender.tab?.id;
+      if (!tabId) return { ok: false };
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId, frameIds: [sender.frameId || 0] },
+        world: 'MAIN',
+        args: [{ id: message.elementId, name: message.elementName, ariaLabel: message.ariaLabel, value: message.value }],
+        func: ({ id, name, ariaLabel, value }) => {
+          const escaped = (input) => globalThis.CSS?.escape ? CSS.escape(String(input)) : String(input).replace(/["\\]/g, '\\$&');
+          const element = (id && document.getElementById(id))
+            || (name && document.querySelector(`[name="${escaped(name)}"]`))
+            || (ariaLabel && document.querySelector(`[aria-label="${escaped(ariaLabel)}"]`));
+          if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return false;
+          element.focus({ preventScroll: true });
+          const proto = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (setter) setter.call(element, String(value)); else element.value = String(value);
+          try {
+            element.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: String(value) }));
+          } catch {
+            element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          }
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          element.blur();
+          return String(element.value) === String(value);
+        },
+      });
+      return { ok: result === true };
+    }
+    if (message.type === 'RESOLVE_FIELDS') {
       const tabId = sender.tab?.id;
       if (!tabId) return { answers: [], needsUser: [] };
       const result = await chrome.storage.session.get('job:' + tabId);

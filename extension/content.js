@@ -498,6 +498,20 @@
     }
     if (String(element.value || '').trim()) return true; // never overwrite user edits
     setNativeValue(element, value);
+    if (element.type === 'number') {
+      // Extension content scripts run in an isolated JavaScript world. Most
+      // React text controls observe the bubbled events, but Greenhouse's number
+      // component can restore its page-world state after our isolated-world
+      // setter runs. Commit the same value through a tiny page-world bridge.
+      const committed = await send({
+        type: 'SET_MAIN_WORLD_VALUE',
+        elementId: element.id || '',
+        elementName: element.name || '',
+        ariaLabel: element.getAttribute('aria-label') || field.label || '',
+        value: String(value),
+      });
+      return committed?.ok === true;
+    }
     return true;
   };
 
