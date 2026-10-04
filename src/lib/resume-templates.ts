@@ -44,6 +44,11 @@ export interface ResumeData {
   // work_authorization / citizenship_status / english_proficiency are normalized
   // to the profile's dropdown options; the rest are the résumé's own wording.
   stated_facts?: ResumeStatedFacts;
+
+  // Short drafts generated FROM the résumé's real content (grounded, not invented),
+  // to seed the profile's free-text context fields. The user edits before saving.
+  proud_project?: string | null;   // 1-2 sentences on the most impressive project/achievement
+  career_goals?: string | null;    // 1 sentence inferred from the roles/trajectory
 }
 
 export interface ResumeStatedFacts {

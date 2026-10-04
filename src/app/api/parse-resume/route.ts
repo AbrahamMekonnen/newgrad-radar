@@ -287,7 +287,9 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
     "military_service": "branch/dates text, or null",
     "languages": "languages with proficiency, or null",
     "english_proficiency": "one of: A1 (Beginner) | A2 (Pre-Intermediate) | B1 (Intermediate) | B2 (Upper-Intermediate) | C1 (Advanced) | C2 (Native) — or null"
-  }
+  },
+  "proud_project": "1-2 sentences describing the single most impressive project or achievement in THIS resume (use its real details), or null if none",
+  "career_goals": "1 short sentence of likely career goals inferred from the roles/field in THIS resume, or null"
 }
 
 Rules:
@@ -430,6 +432,8 @@ async function callGeminiAPI(model: string, prompt: string): Promise<ResumeData>
     projects: parsed.projects || [],
     skills: parsed.skills || [],
     stated_facts: parsed.stated_facts || undefined,
+    proud_project: parsed.proud_project || undefined,
+    career_goals: parsed.career_goals || undefined,
   };
 }
 
@@ -493,6 +497,8 @@ async function callOpenAICompatibleAPI(provider: OAProvider, model: string, prom
     projects: parsed.projects || [],
     skills: parsed.skills || [],
     stated_facts: parsed.stated_facts || undefined,
+    proud_project: parsed.proud_project || undefined,
+    career_goals: parsed.career_goals || undefined,
   };
 }
 

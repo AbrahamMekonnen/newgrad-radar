@@ -107,6 +107,27 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     else if (!sameDeep(cur, value)) { updates[field] = value; updated.push({ field: field as string, label }); }
   };
 
+  // Reusable facts live in custom_answers under __fact:<key> (same keys the
+  // resolver reads). Fill when empty, update when the résumé states a new value.
+  const factAdds: Record<string, string> = {};
+  const addFact = (key: string, value: string | null | undefined, label: string) => {
+    if (!value || !value.trim()) return;
+    const cur = (existing.custom_answers || {})['__fact:' + key];
+    if (isEmpty(cur)) { factAdds['__fact:' + key] = value.trim(); filled.push({ field: 'fact:' + key, label }); }
+    else if (!sameScalar(cur, value)) { factAdds['__fact:' + key] = value.trim(); updated.push({ field: 'fact:' + key, label }); }
+  };
+
+  // For INFERRED/guessed values (not stated verbatim on the résumé) — only fill an
+  // empty field, never overwrite the user's own choice, since it's a best guess.
+  const fillIfEmpty = <K extends keyof UserProfile>(field: K, value: UserProfile[K], label: string) => {
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return;
+    if (isEmpty(existing[field])) { updates[field] = value; filled.push({ field: field as string, label }); }
+  };
+  const fillFactIfEmpty = (key: string, value: string | null | undefined, label: string) => {
+    if (!value || !value.trim()) return;
+    if (isEmpty((existing.custom_answers || {})['__fact:' + key])) { factAdds['__fact:' + key] = value.trim(); filled.push({ field: 'fact:' + key, label }); }
+  };
+
   // Name -> first / last
   if (resume.name) {
     const tokens = resume.name.trim().split(/\s+/);
@@ -189,46 +210,60 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
   // profile's dropdown options so they render; store the rest as reusable facts.
   const sf = resume.stated_facts;
   if (sf) {
-    const WORK_AUTH = ['US Citizen', 'Permanent Resident', 'Visa Holder (H1B, L1, etc.)', 'Student Visa (F1, OPT, CPT)', 'Other'];
-    const CITIZEN = ['U.S. citizen', 'Lawful U.S. permanent resident', 'Other'];
     const ENGLISH = ['A1 (Beginner)', 'A2 (Pre-Intermediate)', 'B1 (Intermediate)', 'B2 (Upper-Intermediate)', 'C1 (Advanced)', 'C2 (Native)'];
 
-    if (sf.work_authorization && WORK_AUTH.includes(sf.work_authorization)) {
-      set('work_authorization', sf.work_authorization, 'Work authorization');
-    }
+    // The résumé's stated status drives BOTH the work-authorization select and the
+    // citizenship fact. Models put it in either field inconsistently ("US Citizen"
+    // vs "U.S. citizen"), so combine them and match tolerantly to the exact option
+    // VALUES the dropdowns expect (a label mismatch means the field renders blank).
+    const statusText = `${sf.work_authorization || ''} ${sf.citizenship_status || ''}`.toLowerCase();
+    const wa = /permanent resident|green card|lawful permanent/.test(statusText) ? 'permanent_resident'
+      : /citizen/.test(statusText) ? 'us_citizen'
+      : /h-?1b|l-?1|visa holder/.test(statusText) ? 'visa_holder'
+      : /f-?1|opt|cpt|student visa/.test(statusText) ? 'student_visa'
+      : (sf.work_authorization || sf.citizenship_status) ? 'other' : null;
+    if (wa) set('work_authorization', wa, 'Work authorization');
+    const citizen = /permanent resident|green card|lawful permanent/.test(statusText) ? 'Lawful U.S. permanent resident'
+      : /citizen/.test(statusText) ? 'U.S. citizen'
+      : sf.citizenship_status ? 'Other' : null;
+    addFact('citizenship_status', citizen, 'Citizenship status');
+
     // Models sometimes return the boolean as the string "true"/"false" — accept both.
     const rawSponsor = sf.requires_sponsorship as unknown;
     const sponsor = typeof rawSponsor === 'boolean' ? rawSponsor
-      : rawSponsor === 'true' ? true
-      : rawSponsor === 'false' ? false : null;
+      : rawSponsor === 'true' ? true : rawSponsor === 'false' ? false : null;
     if (sponsor !== null) {
-      if (isEmpty(existing.require_sponsorship)) {
-        updates.require_sponsorship = sponsor;
-        filled.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
-      } else if (existing.require_sponsorship !== sponsor) {
-        updates.require_sponsorship = sponsor;
-        updated.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
-      }
+      if (isEmpty(existing.require_sponsorship)) { updates.require_sponsorship = sponsor; filled.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' }); }
+      else if (existing.require_sponsorship !== sponsor) { updates.require_sponsorship = sponsor; updated.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' }); }
     }
 
-    // Reusable facts live in custom_answers under __fact:<key> (same keys the
-    // resolver reads). Fill when empty, update when the résumé now states a
-    // different value.
-    const factAdds: Record<string, string> = {};
-    const addFact = (key: string, value: string | null | undefined, label: string) => {
-      if (!value || !value.trim()) return;
-      const cur = (existing.custom_answers || {})['__fact:' + key];
-      if (isEmpty(cur)) { factAdds['__fact:' + key] = value.trim(); filled.push({ field: 'fact:' + key, label }); }
-      else if (!sameScalar(cur, value)) { factAdds['__fact:' + key] = value.trim(); updated.push({ field: 'fact:' + key, label }); }
-    };
-    addFact('citizenship_status', sf.citizenship_status && CITIZEN.includes(sf.citizenship_status) ? sf.citizenship_status : null, 'Citizenship status');
     addFact('security_clearance', sf.security_clearance, 'Security clearance');
     addFact('military_service', sf.military_service, 'Military service');
     addFact('other_languages', sf.languages, 'Other languages');
     addFact('english_level', sf.english_proficiency && ENGLISH.includes(sf.english_proficiency) ? sf.english_proficiency : null, 'English proficiency');
-    if (Object.keys(factAdds).length) {
-      updates.custom_answers = { ...(existing.custom_answers || {}), ...factAdds };
-    }
+  }
+
+  // AI-drafted free-text context (from the résumé; the user edits before saving).
+  fillIfEmpty('proud_project', resume.proud_project || null, 'Proudest project');
+  fillIfEmpty('career_goals', resume.career_goals || null, 'Career goals');
+
+  // Safe, non-sensitive inferences the résumé clearly supports (fill-only, reviewed
+  // before save). New grad = a current/just-finished student whose roles are all
+  // internships / TA-type work.
+  const gradYearM = (endOfRange((resume.education || [])[0]?.date) || '').match(/(20\d{2})/);
+  const gradYear = gradYearM ? parseInt(gradYearM[1], 10) : 0;
+  const onlyEarlyRoles = exp.length > 0 && exp.every((e) => /intern|co-?op|tutor|teaching|\bta\b/i.test(e.title || ''));
+  if (gradYear >= new Date().getFullYear() || onlyEarlyRoles) fillIfEmpty('years_experience', '0', 'Years of experience (New Grad)');
+  fillIfEmpty('is_adult', true, '18 or older');
+
+  const langGroup = (resume.skills || []).find((s) => /languages?/i.test(s.category || '')) || (resume.skills || [])[0];
+  fillFactIfEmpty('coding_language', langGroup?.items?.[0] || null, 'Preferred coding language');
+  fillFactIfEmpty('recent_job_title', exp[0]?.title || null, 'Current/most recent job title');
+  const internCount = exp.filter((e) => /intern|co-?op/i.test(e.title || '')).length;
+  if (internCount > 0) fillFactIfEmpty('internship_count', String(internCount), 'Number of internships');
+
+  if (Object.keys(factAdds).length) {
+    updates.custom_answers = { ...(existing.custom_answers || {}), ...factAdds };
   }
 
   const missing = MANUAL_FIELDS.filter((m) => isEmpty(existing[m.field]) && isEmpty(updates[m.field]));
