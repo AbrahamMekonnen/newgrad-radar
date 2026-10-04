@@ -91,7 +91,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Result of auto-filling from a resume: which fields we filled (to review) and
   // which important ones a resume can't provide (to prompt the user for).
-  const [autofill, setAutofill] = useState<{ filled: { field: string; label: string }[]; missing: { field: string; label: string }[] } | null>(null);
+  const [autofill, setAutofill] = useState<{ filled: { field: string; label: string }[]; updated: { field: string; label: string }[]; missing: { field: string; label: string }[] } | null>(null);
   // On-demand "does this sound like me?" preview of the captured writing voice.
   // One LLM call, only when the user clicks, so there's no token-burning chatbot.
   const [voicePreview, setVoicePreview] = useState<{ loading: boolean; answer?: string; error?: string } | null>(null);
@@ -191,16 +191,17 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         const res = await fetch('/api/parse-resume', { method: 'POST', body: fd });
         if (res.ok) {
           const resume = (await res.json()) as ResumeData;
-          const { updates, filled, missing } = mapResumeToProfile(resume, updatedProfile);
-          if (filled.length > 0) {
+          const { updates, filled, updated, missing } = mapResumeToProfile(resume, updatedProfile);
+          if (filled.length > 0 || updated.length > 0) {
             batchFormUpdate(updates);
             flushFormUpdates();
           }
-          setAutofill({ filled, missing });
+          setAutofill({ filled, updated, missing });
+          const changed = filled.length + updated.length;
           setMessage(
-            filled.length > 0
-              ? { type: 'success', text: `Filled ${filled.length} field${filled.length === 1 ? '' : 's'} from your resume — review below and click Save.` }
-              : { type: 'success', text: 'Resume uploaded. Add the remaining details below.' },
+            changed > 0
+              ? { type: 'success', text: `Filled ${filled.length}${updated.length > 0 ? `, updated ${updated.length}` : ''} field${changed === 1 ? '' : 's'} from your resume — review below and click Save.` }
+              : { type: 'success', text: 'Resume uploaded. Nothing new to change — add any remaining details below.' },
           );
         }
       } catch (parseErr) {
@@ -447,7 +448,7 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
         </div>
 
         {/* Auto-fill review: what we pulled from the resume + what's still needed */}
-        {autofill && (autofill.filled.length > 0 || autofill.missing.length > 0) && (
+        {autofill && (autofill.filled.length > 0 || autofill.updated.length > 0 || autofill.missing.length > 0) && (
           <div className="mt-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-4">
             {autofill.filled.length > 0 && (
               <div>
@@ -459,8 +460,18 @@ export function ProfileForm({ profile, onSave, onResumeUpload }: ProfileFormProp
                 </p>
               </div>
             )}
-            {autofill.missing.length > 0 && (
+            {autofill.updated.length > 0 && (
               <div className={autofill.filled.length > 0 ? 'mt-3' : ''}>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                  Updated {autofill.updated.length} field{autofill.updated.length === 1 ? '' : 's'} from your newer resume
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                  {autofill.updated.map((f) => f.label).join(', ')}. Review the changes below before saving.
+                </p>
+              </div>
+            )}
+            {autofill.missing.length > 0 && (
+              <div className={(autofill.filled.length > 0 || autofill.updated.length > 0) ? 'mt-3' : ''}>
                 <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">
                   Still needed (a resume can&apos;t tell us these)
                 </p>

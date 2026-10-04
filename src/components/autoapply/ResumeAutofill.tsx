@@ -18,7 +18,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
   const supabase = createClient();
   const [busy, setBusy] = useState<'idle' | 'uploading' | 'reading' | 'saving'>('idle');
   const [result, setResult] = useState<
-    | { ok: true; filled: { field: string; label: string }[]; missing: { field: string; label: string }[]; filename: string }
+    | { ok: true; filled: { field: string; label: string }[]; updated: { field: string; label: string }[]; missing: { field: string; label: string }[]; filename: string }
     | { ok: false; error: string }
     | null
   >(null);
@@ -76,7 +76,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
         throw new Error(reason);
       }
       const resume = payload as ResumeData;
-      const { updates, filled, missing } = mapResumeToProfile(resume, base);
+      const { updates, filled, updated, missing } = mapResumeToProfile(resume, base);
 
       // 4) Save the filled profile on the user's behalf.
       setBusy('saving');
@@ -90,7 +90,7 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
       });
       if (saveErr) throw new Error((saveErr as { message?: string })?.message || 'Could not save your profile');
 
-      setResult({ ok: true, filled, missing, filename: file.name });
+      setResult({ ok: true, filled, updated, missing, filename: file.name });
     } catch (err) {
       setResult({ ok: false, error: err instanceof Error ? err.message : 'Something went wrong' });
     } finally {
@@ -128,11 +128,16 @@ export function ResumeAutofill({ userId, email }: { userId: string; email: strin
           {result?.ok && (
             <div className="mt-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white/70 dark:bg-slate-800/70 p-4">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                ✓ {result.filename} — filled {result.filled.length} field{result.filled.length === 1 ? '' : 's'} and saved.
+                ✓ {result.filename} — filled {result.filled.length}{result.updated.length > 0 ? `, updated ${result.updated.length}` : ''} field{(result.filled.length + result.updated.length) === 1 ? '' : 's'} and saved.
               </p>
               {result.filled.length > 0 && (
                 <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                  {result.filled.map((f) => f.label).join(', ')}.
+                  Filled: {result.filled.map((f) => f.label).join(', ')}.
+                </p>
+              )}
+              {result.updated.length > 0 && (
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
+                  Updated from your résumé: {result.updated.map((f) => f.label).join(', ')}.
                 </p>
               )}
               {result.missing.length > 0 && (

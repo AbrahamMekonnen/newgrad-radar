@@ -15,6 +15,7 @@ import { ResumeData } from '@/lib/resume-templates';
 export interface ResumeMapResult {
   updates: Partial<UserProfile>;
   filled: { field: string; label: string }[];
+  updated: { field: string; label: string }[];
   missing: { field: string; label: string }[];
 }
 
@@ -80,16 +81,34 @@ const MANUAL_FIELDS: { field: keyof UserProfile; label: string }[] = [
 export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): ResumeMapResult {
   const updates: Partial<UserProfile> = {};
   const filled: { field: string; label: string }[] = [];
+  const updated: { field: string; label: string }[] = [];
 
+  // Compare normalized, so cosmetic differences (case/whitespace) aren't "changes".
+  const sameScalar = (a: unknown, b: unknown) =>
+    String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+  const sameDeep = (a: unknown, b: unknown) => {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+  };
+
+  // Fill when empty, UPDATE when the résumé's value genuinely differs (so an
+  // updated résumé actually corrects things), skip when unchanged. The caller
+  // shows these for review before saving, so an update is a suggestion the user
+  // confirms — not a silent overwrite.
   const set = <K extends keyof UserProfile>(field: K, value: UserProfile[K] | null, label: string) => {
     if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return;
-    if (!isEmpty(existing[field])) return; // never overwrite user-entered data
-    updates[field] = value as UserProfile[K];
-    filled.push({ field: field as string, label });
+    const cur = existing[field];
+    if (isEmpty(cur)) { updates[field] = value as UserProfile[K]; filled.push({ field: field as string, label }); }
+    else if (!sameScalar(cur, value)) { updates[field] = value as UserProfile[K]; updated.push({ field: field as string, label }); }
+  };
+  const setArray = <K extends keyof UserProfile>(field: K, value: UserProfile[K], label: string) => {
+    if (!Array.isArray(value) || value.length === 0) return;
+    const cur = existing[field];
+    if (isEmpty(cur)) { updates[field] = value; filled.push({ field: field as string, label }); }
+    else if (!sameDeep(cur, value)) { updates[field] = value; updated.push({ field: field as string, label }); }
   };
 
   // Name -> first / last
-  if (resume.name && (isEmpty(existing.first_name) || isEmpty(existing.last_name))) {
+  if (resume.name) {
     const tokens = resume.name.trim().split(/\s+/);
     if (tokens.length >= 1) set('first_name', tokens[0], 'First name');
     if (tokens.length >= 2) set('last_name', tokens.slice(1).join(' '), 'Last name');
@@ -115,10 +134,7 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     const priors = Array.from(
       new Set(exp.slice(1).map((e) => (e.company || '').trim()).filter(Boolean)),
     );
-    if (priors.length && isEmpty(existing.prior_employers)) {
-      updates.prior_employers = priors;
-      filled.push({ field: 'prior_employers', label: 'Prior employers' });
-    }
+    setArray('prior_employers', priors, 'Prior employers');
   }
 
   // Most-recent education.
@@ -140,35 +156,31 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
       ? { start: parts[0], end: parts.slice(1).join(' - ') }
       : { start: null, end: parts[0] || null };
   };
-  if (isEmpty(existing.work_experience) && exp.length) {
-    updates.work_experience = exp.map((e) => {
+  if (exp.length) {
+    setArray('work_experience', exp.map((e) => {
       const { start, end } = rng(e.date);
       return {
         company: e.company || null, title: e.title || null, location: e.location || null,
         start_date: start, end_date: end, current: /present|current/i.test(e.date || ''),
         bullets: Array.isArray(e.bullets) ? e.bullets : [],
       };
-    });
-    filled.push({ field: 'work_experience', label: `Work experience (${exp.length} role${exp.length === 1 ? '' : 's'})` });
+    }), `Work experience (${exp.length} role${exp.length === 1 ? '' : 's'})`);
   }
   const eduAll = resume.education || [];
-  if (isEmpty(existing.education_history) && eduAll.length) {
-    updates.education_history = eduAll.map((ed) => {
+  if (eduAll.length) {
+    setArray('education_history', eduAll.map((ed) => {
       const { degree: deg, major: maj } = splitDegree(ed.degree);
       const { start, end } = rng(ed.date);
       return { school: ed.school || null, degree: deg, major: maj, location: ed.location || null, start_date: start, end_date: end, gpa: ed.gpa || null };
-    });
-    filled.push({ field: 'education_history', label: `Education (${eduAll.length})` });
+    }), `Education (${eduAll.length})`);
   }
   const projAll = resume.projects || [];
-  if (isEmpty(existing.projects) && projAll.length) {
-    updates.projects = projAll.map((p) => ({ name: p.name || null, technologies: p.technologies || null, date: p.date || null, bullets: Array.isArray(p.bullets) ? p.bullets : [] }));
-    filled.push({ field: 'projects', label: `Projects (${projAll.length})` });
+  if (projAll.length) {
+    setArray('projects', projAll.map((p) => ({ name: p.name || null, technologies: p.technologies || null, date: p.date || null, bullets: Array.isArray(p.bullets) ? p.bullets : [] })), `Projects (${projAll.length})`);
   }
   const skillAll = resume.skills || [];
-  if (isEmpty(existing.skills_list) && skillAll.length) {
-    updates.skills_list = skillAll.map((s) => ({ category: s.category || null, items: Array.isArray(s.items) ? s.items : [] }));
-    filled.push({ field: 'skills_list', label: 'Skills' });
+  if (skillAll.length) {
+    setArray('skills_list', skillAll.map((s) => ({ category: s.category || null, items: Array.isArray(s.items) ? s.items : [] })), 'Skills');
   }
 
   // Sensitive/legal facts ONLY when the résumé explicitly stated them — the parser
@@ -189,19 +201,25 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
     const sponsor = typeof rawSponsor === 'boolean' ? rawSponsor
       : rawSponsor === 'true' ? true
       : rawSponsor === 'false' ? false : null;
-    if (sponsor !== null && isEmpty(existing.require_sponsorship)) {
-      updates.require_sponsorship = sponsor;
-      filled.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
+    if (sponsor !== null) {
+      if (isEmpty(existing.require_sponsorship)) {
+        updates.require_sponsorship = sponsor;
+        filled.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
+      } else if (existing.require_sponsorship !== sponsor) {
+        updates.require_sponsorship = sponsor;
+        updated.push({ field: 'require_sponsorship', label: 'Sponsorship requirement' });
+      }
     }
 
     // Reusable facts live in custom_answers under __fact:<key> (same keys the
-    // resolver reads). Only add a fact the user hasn't already set.
+    // resolver reads). Fill when empty, update when the résumé now states a
+    // different value.
     const factAdds: Record<string, string> = {};
     const addFact = (key: string, value: string | null | undefined, label: string) => {
       if (!value || !value.trim()) return;
-      if (!isEmpty((existing.custom_answers || {})['__fact:' + key])) return;
-      factAdds['__fact:' + key] = value.trim();
-      filled.push({ field: 'fact:' + key, label });
+      const cur = (existing.custom_answers || {})['__fact:' + key];
+      if (isEmpty(cur)) { factAdds['__fact:' + key] = value.trim(); filled.push({ field: 'fact:' + key, label }); }
+      else if (!sameScalar(cur, value)) { factAdds['__fact:' + key] = value.trim(); updated.push({ field: 'fact:' + key, label }); }
     };
     addFact('citizenship_status', sf.citizenship_status && CITIZEN.includes(sf.citizenship_status) ? sf.citizenship_status : null, 'Citizenship status');
     addFact('security_clearance', sf.security_clearance, 'Security clearance');
@@ -215,5 +233,5 @@ export function mapResumeToProfile(resume: ResumeData, existing: UserProfile): R
 
   const missing = MANUAL_FIELDS.filter((m) => isEmpty(existing[m.field]) && isEmpty(updates[m.field]));
 
-  return { updates, filled, missing };
+  return { updates, filled, updated, missing };
 }
