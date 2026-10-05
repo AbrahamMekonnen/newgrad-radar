@@ -27,10 +27,11 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protected routes — require login. Interview Prep is public-with-a-preview
-  // (guests see a teaser; the page gates the depth), so it's intentionally NOT here.
+  // Protected routes — require login. Interview Prep and Recruiters are
+  // public-with-a-preview (guests see a teaser; the page/API gate the payoff —
+  // Recruiters never sends names/emails to a guest), so they're intentionally NOT here.
   const protectedRoutes = ['/my-list', '/applications', '/settings', '/feedback',
-                           '/recruiters', '/analytics', '/auto-apply'];
+                           '/analytics', '/auto-apply'];
   if (!user && protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
     const url = request.nextUrl.clone();
     url.pathname = '/auth/login';

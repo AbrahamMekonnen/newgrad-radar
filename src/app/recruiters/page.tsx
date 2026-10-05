@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Recruiter } from '@/lib/types';
 import { RecruiterList } from '@/components/recruiters/RecruiterList';
@@ -44,6 +45,13 @@ export default function RecruitersPage() {
   const [requested, setRequested] = useState(false);
   const [reqError, setReqError] = useState<string | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Signed-out visitors get a redacted teaser (count + titles only, no names/
+  // emails) so the page entices sign-up without leaking the payoff.
+  const [isGuest, setIsGuest] = useState(false);
+  const [preview, setPreview] = useState<{ id: string; title: string | null; role_focus: string | null; hasEmail: boolean; hasLinkedin: boolean }[]>([]);
+  const [previewCount, setPreviewCount] = useState(0);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setIsGuest(!data.user)); }, [supabase]);
 
   // Live company-name suggestions as the user types.
   const runSuggest = useCallback(async (q: string) => {
@@ -102,6 +110,20 @@ export default function RecruitersPage() {
     setSearched(true);
     setRequested(false);
     setReqError(null);
+    if (isGuest) {
+      // Load the redacted teaser from the server — never the raw rows (emails).
+      setRecruiters([]);
+      try {
+        const res = await fetch(`/api/recruiters?company_slug=${encodeURIComponent(company.slug)}`);
+        const body = await res.json().catch(() => ({}));
+        setPreview(body.preview || []);
+        setPreviewCount(body.count || 0);
+      } catch {
+        setPreview([]); setPreviewCount(0);
+      }
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from('recruiters')
       .select('*')
@@ -109,7 +131,7 @@ export default function RecruitersPage() {
       .order('email_verified', { ascending: false });
     setRecruiters((data as Recruiter[]) || []);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, isGuest]);
 
   const requestCompany = async () => {
     const name = selected?.name || query.trim();
@@ -198,7 +220,7 @@ export default function RecruitersPage() {
       </div>
 
       {/* Focus filter */}
-      {selected && (
+      {selected && !isGuest && (
         <div className="mt-4 flex flex-wrap gap-2">
           {FOCUS_TABS.map((t) => (
             <button
@@ -243,7 +265,46 @@ export default function RecruitersPage() {
           </>
         )}
 
-        {!loading && searched && selected && recruiters.length === 0 && (
+        {/* Guest teaser: real count + blurred rows, contacts gated behind sign-in. */}
+        {isGuest && !loading && selected && previewCount > 0 && (
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              <span className="font-semibold text-gray-900 dark:text-white">{previewCount} recruiter{previewCount === 1 ? '' : 's'}</span> at{' '}
+              <span className="font-medium text-gray-900 dark:text-white">{selected.name}</span> — with likely work emails and LinkedIn.
+            </p>
+            <div className="relative">
+              <ul className="space-y-2" aria-hidden="true">
+                {preview.slice(0, 6).map((r) => (
+                  <li key={r.id} className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-slate-700 p-3">
+                    <div className="min-w-0">
+                      <div className="h-4 w-40 max-w-[50vw] rounded bg-gray-200 dark:bg-slate-700 blur-[2px]" />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">{r.title || 'Recruiter'}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-400">
+                      {r.hasEmail && <span className="text-xs rounded bg-gray-100 dark:bg-slate-700 px-2 py-0.5 blur-[2px]">email</span>}
+                      {r.hasLinkedin && <span className="text-xs rounded bg-gray-100 dark:bg-slate-700 px-2 py-0.5 blur-[2px]">in</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="absolute inset-x-0 bottom-0 top-8 flex flex-col items-center justify-end gap-3 bg-gradient-to-t from-white via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90 rounded-lg p-4">
+                <p className="text-center text-sm font-semibold text-gray-900 dark:text-white">
+                  Sign in to reveal {previewCount} recruiter{previewCount === 1 ? '' : 's'}&apos; names, titles, and verified emails.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Link href="/auth/signup?redirect=/recruiters" className="inline-flex items-center px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm">
+                    Create account to reveal
+                  </Link>
+                  <Link href="/auth/login?redirect=/recruiters" className="text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:underline">
+                    or sign in
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && searched && selected && recruiters.length === 0 && (!isGuest || previewCount === 0) && (
           <div className="rounded-lg border border-gray-200 dark:border-slate-700 p-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-300">
               We don&apos;t have recruiters for{' '}

@@ -1,10 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createServerAuthClient } from '@/lib/supabase/server';
 
 const supabase = createClient(
   (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'),
   process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key')
 );
+
+// GET recruiters for a company. MEMBERS get the full rows (names + emails +
+// LinkedIn). GUESTS get a redacted teaser — the count and each recruiter's title
+// and focus only, with NO name/email/LinkedIn/phone ever sent to the browser —
+// so the preview entices sign-up without leaking the payoff. The page renders
+// blurred placeholder rows from this and a "sign in to reveal" CTA.
+export async function GET(request: NextRequest) {
+  const slug = request.nextUrl.searchParams.get('company_slug');
+  if (!slug) return NextResponse.json({ error: 'company_slug required' }, { status: 400 });
+
+  let user = null;
+  try {
+    const authed = await createServerAuthClient();
+    ({ data: { user } } = await authed.auth.getUser());
+  } catch { /* treat as guest */ }
+
+  const { data } = await supabase
+    .from('recruiters')
+    .select('*')
+    .eq('company_slug', slug)
+    .order('email_verified', { ascending: false });
+  const rows = data || [];
+
+  if (user) {
+    return NextResponse.json({ recruiters: rows, count: rows.length, locked: false });
+  }
+  const preview = rows.map((r) => ({
+    id: r.id,
+    title: r.title || null,
+    role_focus: r.role_focus || null,
+    hasEmail: !!(r.email || (Array.isArray(r.email_variants) && r.email_variants.length)),
+    hasLinkedin: !!r.linkedin_url,
+  }));
+  return NextResponse.json({ recruiters: [], preview, count: rows.length, locked: true });
+}
 
 // Manual community-added recruiter (from the "Add Recruiter" modal). This is
 // how a user drops in a personal email / phone they found elsewhere (e.g. a

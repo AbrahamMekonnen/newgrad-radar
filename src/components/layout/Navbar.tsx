@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { MobileNav } from './MobileNav';
-import { LoginPromptModal } from '@/components/auth/LoginPromptModal';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { useStreak } from '@/hooks';
@@ -31,18 +30,12 @@ const navLinks: { href: string; label: string; protected?: boolean; showcase?: b
   { href: '/analytics', label: 'Analytics', protected: true },
 ];
 
-const LockIcon = () => (
-  <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11v2m-6 8h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4" />
-  </svg>
-);
 
 export function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [lockedFeature, setLockedFeature] = useState<string | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   const { days: streakDays } = useStreak();
@@ -120,23 +113,10 @@ export function Navbar() {
               {/* Desktop navigation */}
               <nav className="hidden xl:flex xl:ml-8 xl:gap-1" aria-label="Main navigation">
                 {navLinks.map((link) => {
-                  const guestLocked = !!link.protected && !user;
-                  if (guestLocked && !link.showcase) return null;
+                  // Hide personal-workspace links from guests; show the showcase
+                  // features (they navigate to a guest preview that gates the payoff).
+                  if (link.protected && !user && !link.showcase) return null;
                   const isActive = pathname === link.href;
-                  if (guestLocked) {
-                    // Advertise the feature to signed-out visitors; clicking prompts sign-in.
-                    return (
-                      <button
-                        key={link.href}
-                        type="button"
-                        onClick={() => setLockedFeature(link.label)}
-                        className="px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all inline-flex items-center gap-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100/70 dark:text-gray-400 dark:hover:text-white dark:hover:bg-slate-800/70 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-inset"
-                      >
-                        {link.label}
-                        <LockIcon />
-                      </button>
-                    );
-                  }
                   return (
                     <Link
                       key={link.href}
@@ -260,13 +240,6 @@ export function Navbar() {
         onClose={() => setMobileMenuOpen(false)}
         user={user}
         onSignOut={handleSignOut}
-      />
-
-      <LoginPromptModal
-        isOpen={!!lockedFeature}
-        onClose={() => setLockedFeature(null)}
-        title={`Sign in to use ${lockedFeature ?? ''}`.trim()}
-        message={`${lockedFeature} is available to members. Create an account or sign in to use it.`}
       />
     </>
   );
