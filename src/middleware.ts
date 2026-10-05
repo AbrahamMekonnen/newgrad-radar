@@ -27,10 +27,10 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protected routes — require login. Interview Prep and Recruiters are now
-  // members-only too.
+  // Protected routes — require login. Interview Prep is public-with-a-preview
+  // (guests see a teaser; the page gates the depth), so it's intentionally NOT here.
   const protectedRoutes = ['/my-list', '/applications', '/settings', '/feedback',
-                           '/interview-prep', '/recruiters', '/analytics', '/auto-apply'];
+                           '/recruiters', '/analytics', '/auto-apply'];
   if (!user && protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
     const url = request.nextUrl.clone();
     url.pathname = '/auth/login';

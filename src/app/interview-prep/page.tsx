@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -429,6 +431,14 @@ function InterviewPrepContent() {
   // Modal
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
+  // Signed-out visitors get a preview: the first page of real questions + the
+  // total count, with deeper access (pagination, submitting) gated behind sign-in.
+  const [isGuest, setIsGuest] = useState(false);
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setIsGuest(!data.user));
+  }, []);
+
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -526,12 +536,14 @@ function InterviewPrepContent() {
               {total.toLocaleString()} questions from recent interviews
             </p>
           </div>
-          <Button onClick={() => setShowSubmitModal(true)}>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Submit Question
-          </Button>
+          {!isGuest && (
+            <Button onClick={() => setShowSubmitModal(true)}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Submit Question
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -703,8 +715,8 @@ function InterviewPrepContent() {
           )}
         </div>
 
-        {/* Pagination */}
-        {!loading && questions.length > 0 && (
+        {/* Pagination (members) */}
+        {!isGuest && !loading && questions.length > 0 && (
           <div className="flex items-center justify-between mt-8">
             <Button
               variant="outline"
@@ -719,6 +731,29 @@ function InterviewPrepContent() {
             <Button variant="outline" onClick={() => setPage((p) => p + 1)} disabled={!hasMore}>
               Next
             </Button>
+          </div>
+        )}
+
+        {/* Guest unlock CTA — the first page is a free taste; the rest is gated. */}
+        {isGuest && !loading && questions.length > 0 && (
+          <div className="relative mt-6">
+            <div className="pointer-events-none absolute -top-24 inset-x-0 h-24 bg-gradient-to-b from-transparent to-slate-50 dark:to-slate-900" />
+            <div className="rounded-2xl border-2 border-indigo-200 dark:border-indigo-800 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-900 p-6 text-center">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                {total > limit ? `${(total - limit).toLocaleString()} more questions behind sign-in` : 'Unlock the full question bank'}
+              </h3>
+              <p className="mt-1 text-gray-600 dark:text-gray-300 text-sm max-w-md mx-auto">
+                You&apos;re seeing {questions.length} of {total.toLocaleString()} real interview questions. Create an account to browse them all, search any company, and filter by role, level, and type.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/auth/signup?redirect=/interview-prep" className="inline-flex items-center px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm">
+                  Create account to unlock
+                </Link>
+                <Link href="/auth/login?redirect=/interview-prep" className="text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:underline">
+                  or sign in
+                </Link>
+              </div>
+            </div>
           </div>
         )}
       </div>
