@@ -265,7 +265,8 @@
           if (element.files?.length) return true;
           const entry = ashbyQuestionContainer(element);
           const text = normalize(entry?.textContent || '');
-          const uploadedByHelper = Boolean(element.getAttribute?.('data-hireradar-uploaded'));
+          const uploadedByHelper = Boolean(element.getAttribute?.('data-hireradar-uploaded')
+            || element.ownerDocument?.documentElement?.getAttribute?.('data-hireradar-resume-uploaded'));
           const busy = Boolean(entry?.querySelector?.('[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=spinner]'));
           const error = /upload failed|could not upload|unsupported file|file too (?:large|small)|try again/.test(text);
           return uploadedByHelper && !busy && !error;
@@ -329,7 +330,8 @@
         // is visible, do not let that stale node block the entire application.
         const busy = Boolean(shell?.querySelector?.('[aria-busy=true], progress, [role=progressbar], [class*=uploading], [class*=spinner]'));
         const error = /upload failed|could not upload|unsupported file|file too (?:large|small)|try again/.test(text);
-        const uploadedByHelper = Boolean(input?.getAttribute?.('data-hireradar-uploaded'));
+        const uploadedByHelper = Boolean(input?.getAttribute?.('data-hireradar-uploaded')
+          || doc.documentElement?.getAttribute?.('data-hireradar-resume-uploaded'));
         return waitedMs >= 8000 && uploadedByHelper && !busy && !error;
       },
       submissionComplete(doc) {

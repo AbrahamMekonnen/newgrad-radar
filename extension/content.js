@@ -454,6 +454,11 @@
         if (assigned) {
           element.setAttribute('data-hireradar-uploaded', file.name);
           element.setAttribute('data-hireradar-uploaded-at', String(Date.now()));
+          // Ashby replaces its file input after ingesting the upload. Keep the
+          // same evidence on the document root so the replacement control can
+          // still be recognized during final validation.
+          document.documentElement.setAttribute('data-hireradar-resume-uploaded', file.name);
+          document.documentElement.setAttribute('data-hireradar-resume-uploaded-at', String(Date.now()));
         }
         return assigned;
       } catch { return false; }

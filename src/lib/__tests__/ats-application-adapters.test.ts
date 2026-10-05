@@ -159,6 +159,15 @@ describe('browser ATS adapters', () => {
     entry.textContent = 'Resume upload failed. Try again.';
     expect(ATS.adapters.ashby.fieldAccepted(input, '')).toBe(false);
   });
+  it('retains Ashby upload evidence when React replaces the original file input', () => {
+    const root = { getAttribute: (name: string) => name === 'data-hireradar-resume-uploaded' ? 'resume.pdf' : null };
+    const entry = { textContent: 'Resume', querySelector: () => null };
+    const input = {
+      type: 'file', files: [], ownerDocument: { documentElement: root },
+      getAttribute: () => null, closest: () => entry,
+    };
+    expect(ATS.adapters.ashby.fieldAccepted(input, '')).toBe(true);
+  });
   it('confirms Ashby only after the form is replaced by a positive receipt', () => {
     const panel = {
       textContent: 'Thank you for your interest. Our team will review your application.',
