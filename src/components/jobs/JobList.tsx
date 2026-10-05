@@ -17,6 +17,7 @@ interface JobListProps {
   onAutoApply?: (jobId: string) => Promise<void>;
   onCancelApplication?: (jobId: string) => Promise<void>;
   recruitersMap?: Map<string, Recruiter[]>;
+  jobsWithRecruiters?: Set<string>;
   onFindRecruiters?: (companySlug: string, companyName: string, jobId: string) => Promise<void>;
   onAddRecruiter?: (data: RecruiterFormData) => Promise<void>;
   isLoggedIn?: boolean;
@@ -35,6 +36,7 @@ export function JobList({
   onAutoApply,
   onCancelApplication,
   recruitersMap = new Map(),
+  jobsWithRecruiters,
   onFindRecruiters,
   onAddRecruiter,
   isLoggedIn = false,
@@ -108,6 +110,7 @@ export function JobList({
             onAutoApply={onAutoApply}
             onCancelApplication={onCancelApplication}
             recruiters={recruitersForJob(recruitersMap.get(job.id) || recruitersMap.get(job.company_slug) || [], job)}
+            hasRecruiters={jobsWithRecruiters?.has(job.id)}
             onFindRecruiters={onFindRecruiters}
             onAddRecruiter={onAddRecruiter}
             isLoggedIn={isLoggedIn}

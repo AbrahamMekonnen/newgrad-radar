@@ -24,6 +24,7 @@ interface JobCardProps {
   isSaved?: boolean;
   onSave?: (jobId: string) => void;
   recruiters?: Recruiter[];
+  hasRecruiters?: boolean;  // guests: whether this job has recruiters (no PII), for the teaser
   isLoggedIn?: boolean;
   onAddRecruiter?: (data: RecruiterFormData) => Promise<void>;
   onVoteRecruiter?: (recruiterId: string, voteType: 'up' | 'down') => Promise<void>;
@@ -42,6 +43,7 @@ export function JobCard({
   isSaved = false,
   onSave,
   recruiters = [],
+  hasRecruiters = false,
   isLoggedIn = false,
   onAddRecruiter,
   onVoteRecruiter,
@@ -740,13 +742,17 @@ export function JobCard({
             <span
               className={cn(
                 'inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold transition-colors',
-                recruiterCount > 0
+                (recruiterCount > 0 || (!isLoggedIn && hasRecruiters))
                   ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400'
                   : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400'
               )}
               aria-hidden="true"
             >
-              {recruiterCount}
+              {!isLoggedIn && hasRecruiters ? (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11v2m-6 8h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4" /></svg>
+              ) : (
+                recruiterCount
+              )}
             </span>
           </button>
           {isLoggedIn && (
@@ -762,15 +768,25 @@ export function JobCard({
 
         {showRecruiters && (
           <div className="mt-3">
-            <RecruiterList
-              recruiters={recruiters}
-              onVote={onVoteRecruiter}
-              maxVisible={3}
-            />
-            {!isLoggedIn && recruiterCount === 0 && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                Sign in to add recruiter contacts
-              </p>
+            {isLoggedIn ? (
+              <RecruiterList
+                recruiters={recruiters}
+                onVote={onVoteRecruiter}
+                maxVisible={3}
+              />
+            ) : hasRecruiters ? (
+              // Guests never receive recruiter names/emails (not fetched for them).
+              // Show the enticing teaser instead.
+              <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30 p-3 text-center">
+                <p className="text-sm text-gray-700 dark:text-gray-200">
+                  Recruiters at this company — with likely work emails & LinkedIn.
+                </p>
+                <a href="/auth/signup?redirect=/" className="mt-2 inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">
+                  Sign in to reveal contacts
+                </a>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-gray-400">No recruiters yet.</p>
             )}
           </div>
         )}

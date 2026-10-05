@@ -606,6 +606,10 @@ export default function HomePage() {
   }, [supabase]);
 
   const fetchRecruiters = useCallback(async (jobIds: string[], companySlugs: string[]) => {
+    // Never pull recruiter records (names/emails) for signed-out visitors — that
+    // would leak the payoff into the job cards' DOM/props. Guests see the count +
+    // a "sign in to reveal" teaser instead (JobCard handles that).
+    if (!isLoggedIn) return;
     if (jobIds.length === 0 && companySlugs.length === 0) return;
     const { data } = await supabase
       .from('recruiters')
@@ -632,7 +636,7 @@ export default function HomePage() {
         return map;
       });
     }
-  }, [supabase]);
+  }, [supabase, isLoggedIn]);
 
   const handleFindRecruiters = async (companySlug: string, companyName: string, jobId: string) => {
     try {
@@ -1280,6 +1284,7 @@ export default function HomePage() {
                 onAutoApply={handleAutoApply}
                 onCancelApplication={handleCancelApplication}
                 recruitersMap={recruitersMap}
+                jobsWithRecruiters={jobsWithRecruiters}
                 onFindRecruiters={handleFindRecruiters}
                 onAddRecruiter={handleAddRecruiter}
                 isLoggedIn={isLoggedIn}
