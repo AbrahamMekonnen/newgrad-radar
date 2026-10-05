@@ -42,7 +42,7 @@ export function LoginPromptModal({
 
         <div className="pt-2 border-t border-gray-100 dark:border-slate-700">
           <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-            Free forever. No credit card required.
+            Unlock interview prep, recruiter contacts, auto-apply, and saved jobs.
           </p>
         </div>
       </div>

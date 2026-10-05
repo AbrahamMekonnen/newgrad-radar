@@ -13,10 +13,10 @@ interface MobileNavProps {
   onSignOut: () => void;
 }
 
-const navLinks = [
+const navLinks: { href: string; label: string; protected?: boolean; showcase?: boolean }[] = [
   { href: '/', label: 'All Jobs' },
-  { href: '/interview-prep', label: 'Interview Prep', protected: true },
-  { href: '/recruiters', label: 'Recruiters', protected: true },
+  { href: '/interview-prep', label: 'Interview Prep', protected: true, showcase: true },
+  { href: '/recruiters', label: 'Recruiters', protected: true, showcase: true },
   { href: '/my-list', label: 'Watchlist', protected: true },
   { href: '/applications', label: 'Applications', protected: true },
   { href: '/analytics', label: 'Analytics', protected: true },
@@ -120,7 +120,11 @@ export function MobileNav({ isOpen, onClose, user, onSignOut }: MobileNavProps) 
 
         <nav className="p-4 space-y-1" aria-label="Main navigation">
           {navLinks.map((link) => {
-            if (link.protected && !user) return null;
+            const guestLocked = link.protected && !user;
+            // Hide personal-workspace links from guests, but still advertise the
+            // showcase features (Interview Prep, Recruiters) with a lock — tapping
+            // navigates and middleware sends them to sign in.
+            if (guestLocked && !link.showcase) return null;
             const isActive = pathname === link.href;
             return (
               <Link
@@ -128,14 +132,19 @@ export function MobileNav({ isOpen, onClose, user, onSignOut }: MobileNavProps) 
                 href={link.href}
                 onClick={onClose}
                 className={cn(
-                  'block px-4 py-3 rounded-lg text-base font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset',
+                  'flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset',
                   isActive
                     ? 'bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-300 dark:hover:text-white dark:hover:bg-slate-700'
                 )}
                 aria-current={isActive ? 'page' : undefined}
               >
-                {link.label}
+                <span>{link.label}</span>
+                {guestLocked && (
+                  <svg className="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11v2m-6 8h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4" />
+                  </svg>
+                )}
               </Link>
             );
           })}

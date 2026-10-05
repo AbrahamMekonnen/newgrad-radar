@@ -169,7 +169,7 @@ export function GuestHero({ totalJobCount, className }: GuestHeroProps) {
             href="/auth/signup"
             className="inline-flex items-center px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-sm"
           >
-            Get Started Free
+            Get Started
             <svg
               className="ml-2 w-4 h-4"
               fill="none"
@@ -184,9 +184,6 @@ export function GuestHero({ totalJobCount, className }: GuestHeroProps) {
               />
             </svg>
           </Link>
-          <span className="hidden sm:flex items-center text-sm text-gray-500 dark:text-gray-400">
-            No credit card required
-          </span>
         </div>
       </div>
     </section>
